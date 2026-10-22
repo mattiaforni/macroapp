@@ -47,8 +47,15 @@ export function startAuth() {
   onAuthStateChanged(auth, async (user) => {
     session.user = user;
     if (user) {
-      session.profile = await loadProfile(user);
-      session.householdId = session.profile.householdId || null;
+      try {
+        session.profile = await loadProfile(user);
+        session.householdId = session.profile.householdId || null;
+      } catch (err) {
+        console.error("Caricamento profilo fallito", err);
+        session.error = `Impossibile leggere il profilo: ${err.code || err.message}`;
+        session.profile = null;
+        session.householdId = null;
+      }
     } else {
       session.profile = null;
       session.householdId = null;

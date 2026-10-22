@@ -76,6 +76,18 @@ function startApp() {
 
 onSession((s) => {
   if (!s.user) { renderLogin(); return; }
+  if (s.error) {
+    clear(nav); clear(actions); title.textContent = "Errore";
+    view.replaceChildren(
+      el("div.card", {},
+        el("h2", {}, "Qualcosa non va"),
+        el("p", {}, s.error),
+        el("p.small.muted", {}, "Controlla che Firestore sia creato nel progetto e che le regole siano pubblicate."),
+        el("button.btn", { onclick: () => location.reload() }, "Riprova"),
+      ),
+    );
+    return;
+  }
   if (!s.householdId) {
     // Utente autenticato ma senza casa: onboarding (crea o unisciti).
     clear(nav); clear(actions); title.textContent = "Benvenuto";
