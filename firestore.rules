@@ -1,0 +1,121 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function uid() { return request.auth.uid; }
+    function isMember(hid) {
+      return hid != null
+        && exists(/databases/$(database)/documents/households/$(hid))
+        && uid() in get(/databases/$(database)/documents/households/$(hid)).data.members;
+    }
+
+    // Profilo utente: solo il proprietario.
+    match /users/{userId} {
+      allow read, write: if signedIn() && uid() == userId;
+    }
+
+    // Casa: creazione con se stessi come unico membro; lettura e modifica ai membri;
+    // un non membro può solo aggiungersi (join con codice), fino a 2 membri.
+    match /households/{hid} {
+      allow create: if signedIn()
+        && request.resource.data.members == [uid()]
+        && request.resource.data.createdBy == uid();
+      allow read: if signedIn() && uid() in resource.data.members;
+      allow update: if signedIn() && (
+        (uid() in resource.data.members)
+        || (
+          request.resource.data.members == resource.data.members.concat([uid()])
+          && request.resource.data.members.size() <= 2
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members'])
+        )
+      );
+      allow delete: if false;
+    }
+
+    // Regole comuni ai documenti di contenuto (modello di visibilità).
+    function canRead() {
+      return resource.data.ownerUid == uid()
+        || (resource.data.visibility == 'shared' && isMember(resource.data.householdId));
+    }
+    function validNew() {
+      return request.resource.data.ownerUid == uid()
+        && request.resource.data.visibility in ['shared', 'private']
+        && isMember(request.resource.data.householdId);
+    }
+    function canWrite() {
+      // Il proprietario modifica tutto; i membri della casa modificano i documenti condivisi
+      // senza cambiarne proprietario, casa o visibilità.
+      return resource.data.ownerUid == uid()
+        || (resource.data.visibility == 'shared'
+            && isMember(resource.data.householdId)
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['ownerUid', 'householdId', 'visibility']));
+    }
+    function canDelete() {
+      return resource.data.ownerUid == uid()
+        || (resource.data.visibility == 'shared' && isMember(resource.data.householdId));
+    }
+
+    match /shopping_items/{id} {
+      allow read: if signedIn() && canRead();
+      allow create: if signedIn() && validNew();
+      allow update: if signedIn() && canWrite();
+      allow delete: if signedIn() && canDelete();
+    }
+    match /manual_entries/{id} {
+      allow read: if signedIn() && canRead();
+      allow create: if signedIn() && validNew();
+      allow update: if signedIn() && canWrite();
+      allow delete: if signedIn() && canDelete();
+    }
+    match /expenses/{id} {
+      allow read: if signedIn() && canRead();
+      allow create: if signedIn() && validNew();
+      allow update: if signedIn() && canWrite();
+      allow delete: if signedIn() && canDelete();
+    }
+    match /tasks/{id} {
+      allow read: if signedIn() && canRead();
+      allow create: if signedIn() && validNew();
+      allow update: if signedIn() && canWrite();
+      allow delete: if signedIn() && canDelete();
+    }
+    match /notes/{id} {
+      allow read: if signedIn() && canRead();
+      allow create: if signedIn() && validNew();
+      allow update: if signedIn() && canWrite();
+      allow delete: if signedIn() && canDelete();
+    }
+    match /proposals/{id} {
+      allow read: if signedIn() && canRead();
+      allow create: if signedIn() && validNew();
+      allow update: if signedIn() && canWrite();
+      allow delete: if signedIn() && canDelete();
+    }
+
+    // Diario: sempre e solo il proprietario, qualunque sia il campo visibility.
+    match /journal_entries/{id} {
+      allow read, update, delete: if signedIn() && resource.data.ownerUid == uid();
+      allow create: if signedIn() && request.resource.data.ownerUid == uid()
+        && request.resource.data.visibility == 'private';
+    }
+
+    // Regole di classificazione delle spese (es. "ESSELUNGA → condivisa, categoria spesa"): per casa.
+    match /expense_rules/{id} {
+      allow read: if signedIn() && canRead();
+      allow create: if signedIn() && validNew();
+      allow update: if signedIn() && canWrite();
+      allow delete: if signedIn() && canDelete();
+    }
+
+    // Collegamenti bancari: scritti solo dalle Cloud Functions (Admin SDK); il client legge solo i propri.
+    match /bank_connections/{id} {
+      allow read: if signedIn() && resource.data.ownerUid == uid();
+      allow write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

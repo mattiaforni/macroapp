@@ -1,0 +1,29 @@
+// Provider Anthropic (Messages API) con output strutturato (output_config.format = json_schema).
+// Riferimento: https://platform.claude.com/docs/en/build-with-claude/structured-outputs
+const MODEL = "claude-haiku-5-5";
+const URL = "https://api.anthropic.com/v1/messages";
+
+export async function reason({ system, user, schema, key }) {
+  const res = await fetch(URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": key,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: 2048,
+      system,
+      messages: [{ role: "user", content: user }],
+      output_config: { format: { type: "json_schema", schema } },
+    }),
+  });
+  if (!res.ok) throw new Error(`Claude ${res.status}: ${await res.text()}`);
+  const data = await res.json();
+  if (data.stop_reason === "refusal") throw new Error("Claude: richiesta rifiutata");
+  if (data.stop_reason === "max_tokens") throw new Error("Claude: output troncato");
+  const text = data.content?.find((c) => c.type === "text")?.text;
+  if (!text) throw new Error("Claude: risposta vuota");
+  return JSON.parse(text);
+}

@@ -1,0 +1,26 @@
+# Deploy su Firebase a ogni push su main: hosting, regole Firestore, indici e functions.
+# Richiede il secret FIREBASE_SERVICE_ACCOUNT (JSON di un service account del progetto,
+# vedi README → Deploy automatico).
+name: Deploy Firebase
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install functions deps
+        run: cd functions && npm ci
+      - name: Deploy
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
+        run: |
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "$GOOGLE_APPLICATION_CREDENTIALS"
+          npx firebase-tools@latest deploy --only hosting,firestore,functions --non-interactive
