@@ -10,7 +10,7 @@ import { analyzeJournalEntry } from "./src/agent.js";
 import { syncAllConnections } from "./src/banking/enable.js";
 
 initializeApp();
-setGlobalOptions({ region: "europe-west1", maxInstances: 5 });
+setGlobalOptions({ region: "europe-west1", maxInstances: 5, memory: "512MiB" });
 
 const ANTHROPIC_API_KEY = defineSecret("ANTHROPIC_API_KEY");
 const GEMINI_API_KEY = defineSecret("GEMINI_API_KEY");
