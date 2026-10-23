@@ -7,7 +7,7 @@
 // Google (sincronizzaDaGoogle); il nome resta quello della rubrica.
 import { watchVisible, create, update, VIS } from "./db.js";
 import { session } from "./auth.js";
-import { contattiCollegati, caricaContatti, contattoUnico } from "./contatti-google.js";
+import { contattiCollegati, caricaContatti, contattoUnico, contattiConNome } from "./contatti-google.js";
 
 const COLL = "manual_entries";
 let voci = [];
@@ -85,7 +85,12 @@ export function risolviPersone(nomi, visibility = VIS.PRIVATE) {
     const google = typeof v === "string" ? null : v.google;
     if (google) return (personaDaGoogle(google.googleId) || {}).id || nuovaPersona(nome, visibility, google);
     const p = trovaPersona(nome);
-    if (p) return p.id;
+    if (p) {
+      // Già in rubrica ma non collegata: si collega al contatto Google con lo stesso nome, se è uno solo.
+      const gemelli = p.googleId ? [] : contattiConNome(p.name).filter((c) => !personaDaGoogle(c.googleId));
+      if (gemelli.length === 1) collegaAGoogle(p.id, gemelli[0]);
+      return p.id;
+    }
     const unico = v.nuova ? null : contattoUnico(nome);
     const giàCollegata = unico && personaDaGoogle(unico.googleId);
     if (giàCollegata) return giàCollegata.id;
@@ -110,6 +115,15 @@ export async function sincronizzaDaGoogle() {
     if (Object.keys(diff).length) { update(COLL, p.id, diff); n++; }
   }
   return n;
+}
+
+/** Collega a un contatto Google una voce già in rubrica: prende i suoi recapiti, tiene il nome. */
+export function collegaAGoogle(id, c) {
+  const p = personaDaId(id);
+  if (!p || p.googleId) return;
+  const dati = { googleId: c.googleId, ...differenzeDaGoogle(p, c) };
+  update(COLL, id, dati);
+  Object.assign(p, dati); // subito valido in memoria (scorciatoie del task appena salvato)
 }
 
 /** Campi da aggiornare su una voce collegata: { phone?, email?, address? }. */

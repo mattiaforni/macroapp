@@ -175,7 +175,7 @@ with sync_playwright() as p:
             assert r.request.headers.get("authorization") == "Bearer token-finto", r.request.headers
             r.fulfill(status=200, content_type="application/json", body=json.dumps({"connections": [
                 {"resourceName": "people/c1", "names": [{"displayName": "Giulia Bianchi"}], "phoneNumbers": [{"value": google["giulia"]}], "organizations": [{"name": "Circolo"}]},
-                {"resourceName": "people/c2", "names": [{"displayName": "Marco"}], "emailAddresses": [{"value": "marco@example.com"}]},
+                {"resourceName": "people/c2", "names": [{"displayName": "Marco"}], "emailAddresses": [{"value": "marco@example.com"}], "phoneNumbers": [{"value": "333 5550000"}]},
                 {"resourceName": "people/c3", "names": [{"displayName": "Giuseppe Verdi"}], "nicknames": [{"value": "Beppe"}], "phoneNumbers": [{"value": "+39 347 0000000"}]},
             ]}))
         pg.route("https://people.googleapis.com/**", people)
@@ -240,7 +240,6 @@ with sync_playwright() as p:
         pg.wait_for_selector("#foglio >> text=Task con questa persona")
         assert pg.locator("#foglio .riga").count() == 2, "due task aperti con Marco"
         pg.fill("#foglio input[type='email']", "marco@example.com")
-        pg.fill("#foglio input[type='tel']", "333 1112233")
         pg.wait_for_timeout(300)
         shot(pg, "6-persona")
         conferma(pg)
@@ -248,16 +247,22 @@ with sync_playwright() as p:
         pg.click(".schede a[href='#/task']")
         pg.click("button.fab")
         pg.fill("#foglio input[placeholder=\"Cosa c'è da fare\"]", "Chiamare Marco per la sala")
+        # Marco è in rubrica senza numero e in Google con il numero: un solo suggerimento, che lo collega
         pg.fill("#foglio input[placeholder='Scrivi un nome']", "marco")
+        pg.wait_for_selector("#foglio button.pillola:not(.on) >> text=Marco")
+        assert pg.locator("#foglio button.pillola:not(.on):not(.pillola--accento)", has_text="Marco").count() == 1, "Marco una volta sola"
         pg.keyboard.press("Enter")
         pg.keyboard.press("Enter")
         pg.wait_for_selector(".riga >> text=Chiamare Marco per la sala")
         tel = pg.locator(".riga", has_text="Chiamare Marco per la sala").locator("a.tondo")
-        assert tel.get_attribute("href") == "tel:3331112233", tel.get_attribute("href")
+        assert tel.get_attribute("href") == "tel:3335550000", tel.get_attribute("href")
+        rubrica = pg.evaluate("""() => JSON.parse(sessionStorage.getItem('finto.firestore')).store.find(([c]) => c === 'manual_entries')[1].map(([, d]) => d)""")
+        marchi = [d for d in rubrica if d.get("name") == "Marco"]
+        assert len(marchi) == 1 and marchi[0].get("googleId") == "people/c2", marchi
         assert pg.locator(".riga", has_text="Chiedere le chiavi").locator("a.tondo").count() == 0
         pg.click(".riga >> text=Chiamare Marco per la sala")
         wa = pg.locator("#foglio a.pillola", has_text="WhatsApp").get_attribute("href")
-        assert wa == "https://wa.me/393331112233", wa
+        assert wa == "https://wa.me/393335550000", wa
         pg.wait_for_timeout(250)
         shot(pg, "6b-task-contatti")
         pg.click("#foglio button[aria-label='Indietro']")

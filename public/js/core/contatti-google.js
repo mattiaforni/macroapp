@@ -230,6 +230,12 @@ export function contattoUnico(nome) {
 
 export const contattoDaId = (googleId) => letti.find((c) => c.googleId === googleId) || null;
 
+/** Contatti che si chiamano esattamente così (nome completo o soprannome). */
+export function contattiConNome(nome) {
+  const t = norm(nome);
+  return t ? letti.filter((c) => norm(c.name) === t || norm(c.nickname) === t) : [];
+}
+
 /** La scheda del contatto su contacts.google.com, dove si modifica. */
 export const linkGoogle = (googleId) => `https://contacts.google.com/person/${String(googleId).replace(/^people\//, "")}`;
 
