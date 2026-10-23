@@ -13,6 +13,10 @@ on:
       ore:
         description: "Errori delle ultime N ore"
         default: "3"
+      ripara:
+        description: "Rendi la funzione chiamabile dall'app (invocatore pubblico; l'accesso lo controlla Firebase Auth nel codice)"
+        type: boolean
+        default: false
 
 jobs:
   diagnosi:
@@ -24,6 +28,31 @@ jobs:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
 
       - uses: google-github-actions/setup-gcloud@v2
+
+      # Le funzioni chiamate dall'app (onCall) devono essere invocabili da chiunque a livello di
+      # Cloud Run: chi è davvero autorizzato lo decide il codice (req.auth, proprietario della nota).
+      # Senza, il browser riceve 403 già al preflight CORS e l'app vede solo «internal».
+      - name: Riparazione
+        if: ${{ inputs.ripara }}
+        env:
+          F: ${{ inputs.funzione }}
+        run: |
+          P=macroapp-b9bd0
+          R=europe-west1
+          S=$(echo "$F" | tr '[:upper:]' '[:lower:]')
+          ann() { echo "::$1 title=$2::$(sed -e 's/%/%25/g' -e 's/\r//g' | head -c 8000 | awk '{printf "%s%%0A", $0}')"; }
+          if gcloud run services add-iam-policy-binding "$S" --region "$R" --project "$P" \
+              --member=allUsers --role=roles/run.invoker > out.txt 2>&1; then
+            echo "allUsers ha roles/run.invoker su $S" | ann notice "Riparazione riuscita"
+          else
+            ann warning "Invocatore pubblico non impostato" < out.txt
+            # Ripiego (es. criterio dell'organizzazione che vieta allUsers): niente controllo IAM all'ingresso.
+            if gcloud run services update "$S" --region "$R" --project "$P" --no-invoker-iam-check > out2.txt 2>&1; then
+              echo "Controllo IAM all'ingresso disattivato su $S" | ann notice "Riparazione riuscita (ripiego)"
+            else
+              ann error "Riparazione non riuscita" < out2.txt
+            fi
+          fi
 
       - name: Raccolta
         env:
