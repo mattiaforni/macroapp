@@ -33,9 +33,16 @@ Dettagli in [docs/ARCHITETTURA.md](docs/ARCHITETTURA.md) e [docs/MODELLO-DATI.md
 
 ## Deploy automatico
 
-1. Console Google Cloud → IAM → Service account → crea `github-deploy` con i ruoli *Firebase Admin* e *Cloud Functions Admin*, più *Service Account User*.
-2. Crea una chiave JSON e incollala nel secret GitHub `FIREBASE_SERVICE_ACCOUNT` (Settings → Secrets → Actions).
-3. Da quel momento ogni push su `main` pubblica hosting, regole, indici e functions.
+1. Console Google Cloud → IAM e amministrazione → Account di servizio → crea `github-deploy` con i ruoli *Editor*, *Amministratore Firebase*, *Utente account di servizio*, *Amministratore Secret Manager*.
+2. Crea una chiave JSON e incollane il contenuto nel secret GitHub `FIREBASE_SERVICE_ACCOUNT` (Settings → Secrets and variables → Actions). Poi cancella il file scaricato.
+3. Da quel momento ogni push su `main` pubblica hosting, regole, indici e functions. Per rilanciare a mano: Actions → Deploy Firebase → Run workflow.
+
+La chiave dà accesso quasi completo al progetto: deve stare solo nei secret di GitHub, mai nel repository o in una chat.
+
+## Segreti senza terminale
+
+- **Aggiornare un segreto esistente**: Console Google Cloud → Secret Manager → nome del segreto → *Nuova versione* → incolla il valore. Poi Actions → Deploy Firebase → Run workflow (le functions leggono la versione attiva al momento del deploy).
+- **Nuovo segreto**: crealo prima in Secret Manager (*Crea secret*), poi va dichiarato nel codice con `defineSecret`.
 
 ## Sviluppo locale
 

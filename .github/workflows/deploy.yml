@@ -1,6 +1,9 @@
-# Deploy su Firebase a ogni push su main: hosting, regole Firestore, indici e functions.
-# Richiede il secret FIREBASE_SERVICE_ACCOUNT (JSON di un service account del progetto,
-# vedi README → Deploy automatico).
+# Deploy su Firebase a ogni push su main (hosting, regole e indici Firestore, functions).
+# Si può anche lanciare a mano: Actions → Deploy Firebase → Run workflow
+# (serve per esempio dopo aver aggiornato un segreto in Secret Manager).
+#
+# Richiede il secret di repository FIREBASE_SERVICE_ACCOUNT: il JSON della chiave
+# dell'account di servizio github-deploy (vedi README → Deploy automatico).
 name: Deploy Firebase
 
 on:
@@ -8,19 +11,28 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: deploy-firebase
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Install functions deps
+
+      - name: Dipendenze functions
         run: cd functions && npm ci
+
+      - name: Autenticazione Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
       - name: Deploy
-        env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
-        run: |
-          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "$GOOGLE_APPLICATION_CREDENTIALS"
-          npx firebase-tools@latest deploy --only hosting,firestore,functions --non-interactive
+        # --force: niente domande interattive; le functions tolte dal codice vengono rimosse anche dal progetto.
+        run: npx firebase-tools@15 deploy --only hosting,firestore,functions --non-interactive --force
