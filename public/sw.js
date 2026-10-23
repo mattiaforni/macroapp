@@ -1,5 +1,5 @@
 // Service worker minimo: cache dei file statici dell'app (network-first), nessuna cache delle API Firebase.
-const CACHE = "macroapp-v1";
+const CACHE = "macroapp-v2";
 const STATIC = ["/", "/index.html", "/manifest.json", "/css/base.css", "/icons/icon.svg"];
 
 self.addEventListener("install", (e) => {
@@ -16,8 +16,12 @@ self.addEventListener("activate", (e) => {
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== "GET" || url.origin !== location.origin) return;
+  // Pagine riservate di Firebase (login, configurazione): sempre dalla rete, mai toccate dal service worker.
+  if (url.pathname.startsWith("/__/")) return;
+  // File dell'app: sempre riconvalidati col server, così un aggiornamento arriva subito.
+  const req = e.request.mode === "navigate" ? e.request : new Request(e.request, { cache: "no-cache" });
   e.respondWith(
-    fetch(e.request)
+    fetch(req)
       .then((res) => {
         const copy = res.clone();
         caches.open(CACHE).then((c) => c.put(e.request, copy));
