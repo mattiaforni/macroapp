@@ -38,4 +38,13 @@ jobs:
 
       - name: Deploy
         # --force: niente domande interattive; le functions tolte dal codice vengono rimosse anche dal progetto.
-        run: npx firebase-tools@15 deploy --only hosting,firestore,functions --non-interactive --force
+        # Se fallisce, la coda del registro va in un'annotazione: le sessioni di Claude non leggono i log
+        # delle esecuzioni, le annotazioni sì.
+        run: |
+          set -o pipefail
+          if ! npx firebase-tools@15 deploy --only hosting,firestore,functions --non-interactive --force 2>&1 | tee deploy.log; then
+            coda=$(grep -v '^\s*$' deploy.log | tail -45 | sed -e 's/%/%25/g' -e 's/\r//g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=Deploy non riuscito::${coda}"
+            [ -f firebase-debug.log ] && echo "::error title=firebase-debug.log::$(grep -iE 'error|denied|fail' firebase-debug.log | tail -25 | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
+            exit 1
+          fi
