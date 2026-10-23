@@ -6,7 +6,3 @@ functions/node_modules/
 .env.*
 *.local
 .DS_Store
-probe-cjs/node_modules/
-probe-esm/node_modules/
-probe-admin/node_modules/
-probe-call/node_modules/

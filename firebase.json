@@ -48,46 +48,6 @@
         ".git",
         "*.local"
       ]
-    },
-    {
-      "source": "probe-cjs",
-      "codebase": "probe-cjs",
-      "runtime": "nodejs24",
-      "ignore": [
-        "node_modules",
-        ".git",
-        "*.local"
-      ]
-    },
-    {
-      "source": "probe-esm",
-      "codebase": "probe-esm",
-      "runtime": "nodejs24",
-      "ignore": [
-        "node_modules",
-        ".git",
-        "*.local"
-      ]
-    },
-    {
-      "source": "probe-admin",
-      "codebase": "probe-admin",
-      "runtime": "nodejs24",
-      "ignore": [
-        "node_modules",
-        ".git",
-        "*.local"
-      ]
-    },
-    {
-      "source": "probe-call",
-      "codebase": "probe-call",
-      "runtime": "nodejs24",
-      "ignore": [
-        "node_modules",
-        ".git",
-        "*.local"
-      ]
     }
   ],
   "emulators": {
