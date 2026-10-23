@@ -33,6 +33,8 @@ jobs:
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
 
+      - uses: google-github-actions/setup-gcloud@v2
+
       - name: Numero di versione nell'app
         run: echo "export const VERSION = \"${GITHUB_SHA::7}\";" > public/js/version.js
 
@@ -48,3 +50,13 @@ jobs:
             [ -f firebase-debug.log ] && echo "::error title=firebase-debug.log::$(grep -iE 'error|denied|fail' firebase-debug.log | tail -25 | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
             exit 1
           fi
+
+      # Le funzioni chiamate dall'app devono essere invocabili da chiunque a livello di Cloud Run
+      # (chi è autorizzato lo decide il codice con Firebase Auth). Firebase lo imposta solo alla
+      # creazione e una volta non c'era: senza, l'app vede «internal». Ripeterlo è innocuo.
+      - name: Funzioni chiamate dall'app invocabili
+        run: |
+          for S in analyzeentry; do
+            gcloud run services add-iam-policy-binding "$S" --region europe-west1 --project macroapp-b9bd0 \
+              --member=allUsers --role=roles/run.invoker --quiet > /dev/null
+          done

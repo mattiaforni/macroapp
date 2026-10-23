@@ -52,6 +52,19 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 4. Niente entra nei moduli dall'AI senza conferma: l'agente scrive solo `proposals`.
 5. Mai nel repo chiavi o dati personali.
 
+## Diagnosi delle functions
+
+Le sessioni non leggono i log di GitHub né di Google Cloud. Il flusso «Diagnosi»
+(`.github/workflows/diagnosi.yml`, da lanciare con `gh workflow run diagnosi.yml -f funzione=analyzeEntry`)
+mette nelle annotazioni del job la risposta della funzione a una chiamata senza accesso, gli
+invocatori del servizio Cloud Run e gli ultimi errori; con `-f ripara=true` rende la funzione
+invocabile dall'app. Si leggono con `gh api repos/mattiaforni/macroapp/check-runs/<id del job>/annotations`.
+Anche il deploy, se fallisce, scrive la coda del registro in un'annotazione.
+
+Se l'app riceve «internal» da una funzione chiamata con `httpsCallable`, la prima cosa da
+guardare sono gli invocatori: senza `allUsers` il preflight CORS prende 403. Il deploy lo reimposta
+per le funzioni elencate nell'ultimo passo di `deploy.yml`: una nuova funzione onCall va aggiunta lì.
+
 ## Prove
 
 ```
