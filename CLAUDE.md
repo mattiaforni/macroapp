@@ -129,12 +129,14 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
       - Il riepilogo è un testo della nota (`summary`), mostrato sopra la trascrizione ripiegata. Non
         è un'azione: eccezione alla regola 5 **da confermare con Mattia**. Le azioni ricavate (task,
         spese) restano proposte.
-      - Ingresso: prima testo incollato o condiviso (trascrizioni lunghe, da misurare tempi e limite
-        di 120 s); audio dopo, caricato su Storage perché un'ora di registrazione non passa da onCall.
+      - Ingresso: Mattia detta da solo, dopo la lezione, ciò che il maestro gli ha insegnato (oggi con
+        la dettatura di Claude in chat). Prima versione: testo incollato o condiviso nel diario (lo
+        Share Target c'è già). Poi registrazione nel diario con `transcribe()` (Gemini): un parlato di
+        pochi minuti passa da una chiamata onCall, senza Storage.
       - Storico: le chat del progetto Claude si possono importare dall'esportazione dei dati di claude.ai.
-      - Da chiarire: lezioni che Mattia prende o che dà? Se le dà, la nota si collega anche alla
-        persona (storico per allievo) e la pagina privacy va aggiornata (voci di terzi inviate all'AI).
-        Come ottiene oggi la trascrizione?
+      - Lezioni che Mattia **prende**; nelle trascrizioni c'è solo la sua voce: nessun dato di terzi,
+        niente da aggiungere alla pagina privacy. Il riepilogo serve a ricordare ciò che il maestro
+        insegna; il contesto delle note precedenti serve a seguire correzioni ricorrenti e progressi.
       - Vale anche per altri progetti (es. Circolo: verbali delle riunioni).
 - [ ] Pagina per appunti e bozze: le proposte `note` e `draft` confermate finiscono in `notes`,
       che oggi nessuna pagina mostra
