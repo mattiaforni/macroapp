@@ -134,3 +134,14 @@ if (params.get("share")) {
   sessionStorage.setItem("macroapp.share", text);
   history.replaceState(null, "", "/#/diario");
 }
+
+// Ritorno dalla banca (Enable Banking rimanda su /banca?code=…&state=…, o ?error=…): l'esito si mette
+// da parte e si va alla pagina Banca, che conclude il collegamento appena c'è la sessione.
+if (location.pathname === "/banca") {
+  try {
+    sessionStorage.setItem("macroapp.banca.ritorno", JSON.stringify({
+      code: params.get("code"), state: params.get("state"), error: params.get("error"), description: params.get("error_description"),
+    }));
+  } catch (e) {}
+  history.replaceState(null, "", "/#/banca");
+}

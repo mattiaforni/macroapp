@@ -83,14 +83,15 @@ export function openSheet({ title, body, onConfirm, confirmLabel = "Salva", azio
   function onPop() { close({ fromHistory: true }); }
   function onKey(e) { if (e.key === "Escape") close(); }
 
-  host.replaceChildren(
+  // Senza barra non si passa null a replaceChildren: lo scriverebbe come testo in fondo al foglio.
+  host.replaceChildren(...[
     el("div.foglio__testa", {},
       el("button.tondo.tondo--piatto", { type: "button", "aria-label": "Indietro", onclick: () => close() }, icon("indietro")),
       el("h2", {}, title || ""),
     ),
     corpo,
     barra,
-  );
+  ].filter(Boolean));
   host.hidden = false;
   smettiTastiera = seguiTastiera(host);
   if (!(sostituisce && history.state && history.state.foglio)) {

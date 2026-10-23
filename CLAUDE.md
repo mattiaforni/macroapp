@@ -12,8 +12,9 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 - **Dati** su Firestore, progetto `macroapp-b9bd0`. Ogni documento di contenuto ha
   `ownerUid`, `householdId`, `visibility` (`shared` | `private`): vedi `docs/MODELLO-DATI.md`.
 - **Functions** in `functions/` (Node 24, europe-west1): `analyzeEntry` (agente del diario,
-  provider AI intercambiabile in `src/ai/`), `syncBank` (Enable Banking, non ancora attivo).
-  firebase-admin, agente e banca si importano dentro i gestori, non all'avvio.
+  provider AI intercambiabile in `src/ai/`), `bank` (onCall con `azione`: elenco banche, avvio e
+  conclusione del consenso, scollega, lettura a richiesta; `src/banking/enable.js`), `syncBank`
+  (lettura quotidiana alle 7:15). firebase-admin, agente e banca si importano dentro i gestori, non all'avvio.
 - **Pubblicazione**: push su `main` → `.github/workflows/deploy.yml` pubblica hosting,
   regole, indici e functions (secret `FIREBASE_SERVICE_ACCOUNT`). Si può rilanciare a mano.
 - **Segreti** in Secret Manager (ANTHROPIC_API_KEY, GEMINI_API_KEY, ENABLE_BANKING_*):
@@ -35,6 +36,7 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 | `components/proposals.js` | azioni proposte: `APPLICA` per tipo, `renderAzione` |
 | `components/persone.js` | scelta delle persone di un task dalla rubrica (pillole, suggerimenti, persone nuove) |
 | `modules/*/index.js` | un modulo = `{ id, title, nav, icon, mount(container) → smonta }`, in `modules/registry.js` |
+| `modules/banca/index.js` | stato del collegamento (`bank_connections/{uid}` in tempo reale), scelta della banca, conclusione al ritorno da `/banca?code=…` (messo da parte in `app.js`), «Leggi ora», rinnovo, scollega |
 
 ## Regole di lavoro
 
@@ -81,7 +83,7 @@ python3 prove/prova.py            # flusso completo in Chromium, schermate in pr
 ```
 Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggiorna `prove/finto/firebase.js`.
 
-## Stato (23 ottobre 2026) e prossimi passi
+## Stato (23 ottobre 2026, sera) e prossimi passi
 
 - [x] Pubblicazione automatica, accesso Google (anche da app installata), service worker
 - [x] Lista (stile Bring), Spese (stile Splitwise, ricorrenti, pareggio), Diario con agente, Task per
@@ -90,12 +92,19 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
 - [x] Fogli con la barra in basso, menu a sinistra, apertura sul Diario, scorciatoie Chiama/WhatsApp/
       Telegram sui task con una persona che ha il numero (`modiDiContatto`, `canaleDa` in rubrica.js)
 - [x] Pagine pubbliche `/privacy` e `/termini` (richieste da Enable Banking)
-- [ ] **Banca (Enable Banking)**: Mattia registra l'app in produzione (modalità ristretta, conti propri),
-      redirect `https://macroapp-b9bd0.web.app/banca`, e mette ENABLE_BANKING_APP_ID e
-      ENABLE_BANKING_PRIVATE_KEY (il .pem intero) in Secret Manager. Da costruire: due onCall
-      (avvio: `POST /auth` → URL della banca; chiusura: `POST /sessions` col `code` → conti in
-      `bank_connections`), la pagina `/banca` di ritorno, la voce «Banca» del menu (ora «in arrivo»),
-      poi la prova di `syncBank`. Le nuove onCall vanno aggiunte all'ultimo passo di `deploy.yml`.
+- [x] **Banca, codice**: function `bank` (banche → avvia `POST /auth` → ritorno su `/banca?code=…` →
+      concludi `POST /sessions` → conti in `bank_connections/{uid}`; scollega; sincronizza), pagina
+      Banca dal menu, proposte di spesa **personali** dai movimenti (la spesa confermata nasce condivisa).
+      Il flusso è coperto dalle prove con una function finta (`prove/finto/firebase.js`).
+- [ ] **Banca, messa in funzione** (Mattia, dal Control Panel di Enable Banking): app in **produzione**,
+      modalità ristretta (gratuita, conti propri); «Allowed Redirect URLs» =
+      `https://macroapp-b9bd0.web.app/banca`; **Link accounts** per ogni conto da leggere (senza questo
+      passo `/sessions` torna senza conti); ENABLE_BANKING_APP_ID e ENABLE_BANKING_PRIVATE_KEY (il
+      .pem intero) in Secret Manager, poi un deploy. Prima prova dal telefono: menu → Banca → + →
+      banca → consenso → ritorno → «Leggi ora». Da verificare coi dati veri: formato di
+      `entry_reference` (deduplica), descrizioni dei movimenti (`descrizioneDi` in enable.js), MCC,
+      quali conti espone la banca. La compagna, per collegare il suo conto, lo aggiunge con «Link
+      accounts» nello stesso Control Panel (una sola app per la casa).
 - [ ] **Google Contatti, integrazione vera** (scelta di Mattia): permesso dato una volta e refresh token
       conservato dal server (serve il client OAuth web: ID e secret in Secret Manager), ricerca nei
       contatti mentre si scrive un nome (People API `searchContacts`), in rubrica solo le persone

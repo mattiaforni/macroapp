@@ -53,8 +53,9 @@ non si salva: si costruisce da nome e indirizzo. `googleId` = `resourceName` del
 Cosa fa la conferma, tipo per tipo: `APPLICA` in `public/js/components/proposals.js`. Le proposte dell'agente compaiono sotto la nota del diario da cui nascono; rianalizzare una nota sostituisce quelle ancora in attesa.
 
 ## `bank_connections/{uid}`
-`ownerUid, householdId, active, appId, privateKey, sessionId, accountIds, consentExpiresAt, lastSyncAt, lastSyncCreated, lastError`
-Scritta solo dalle Functions. Il client legge solo la propria.
+`ownerUid, householdId, active, aspsp: { name, country }, sessionId, accounts: [{ uid, name, product, currency, type, ibanMask }], accountIds, consentExpiresAt, linkedAt, unlinkedAt, lastSyncAt, lastSyncCreated, lastError, pending?: { state, authorizationId, aspsp, startedAt }`
+Scritta solo dalla function `bank` e da `syncBank`. Il client legge solo la propria (la pagina Banca la segue in tempo reale). `pending` c'è tra l'avvio del consenso e il ritorno dalla banca: lo `state` serve a riconoscere il ritorno. `ibanMask` = prime due e ultime quattro cifre. `appId`/`privateKey` (credenziali proprie del collegamento) sono previsti ma non usati.
+Le proposte create dalla banca hanno id `eb_<entry_reference>`, `source: "bank"`, `visibility: "private"` e in `payload` anche `account` (nome del conto), `merchantCategory` (MCC) e `bankTxId`.
 
 ## Regole in sintesi (`firestore.rules`)
 

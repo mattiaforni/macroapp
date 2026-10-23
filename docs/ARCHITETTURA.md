@@ -31,23 +31,24 @@ Scelte: nessun framework né bundler (coerente con i progetti precedenti, deploy
 ## Backend (`functions/`)
 
 - `analyzeEntry` (callable): legge una nota del diario del chiamante, chiama `reason()` con uno schema JSON e scrive proposte. Non modifica mai i moduli.
-- `syncBank` (schedulata, 07:15 Europe/Rome): per ogni `bank_connections` attiva scarica i movimenti degli ultimi 7 giorni e crea proposte di spesa. Deduplica con id deterministico della proposta (`eb_<id banca>`).
+- `bank` (callable, `{ azione }`): `banche` (elenco per paese), `avvia` (`POST /auth` → url del consenso, `state` salvato in `bank_connections/{uid}.pending`), `concludi` (`POST /sessions` col `code`, controlla lo `state`, chiude la sessione precedente, salva conti e scadenza), `scollega` (`DELETE /sessions/{id}`), `sincronizza` (la lettura di `syncBank`, a richiesta). Scrive solo nel documento del chiamante.
+- `syncBank` (schedulata, 07:15 Europe/Rome): per ogni `bank_connections` attiva scarica i movimenti contabilizzati degli ultimi 7 giorni e crea una proposta di spesa **personale** per ogni uscita (la spesa confermata nasce condivisa). Deduplica con id deterministico della proposta (`eb_<entry_reference>`).
 - Segreti in Secret Manager, mai nel repository.
 
 ## Banca (Enable Banking)
 
-Stato: struttura scritta, chiamate reali da completare dopo il test con l'API. Da verificare al primo collegamento:
+Stato: codice completo, da provare coi dati veri (serve l'app registrata in produzione e i segreti). Da verificare al primo collegamento:
 - quali conti espone ciascuna banca (Crédit Agricole non espone le carte di credito senza IBAN);
-- formato di `entry_reference` / `transaction_id` per la deduplica;
-- presenza del codice categoria esercente (MCC);
-- durata del consenso e flusso di rinnovo (molte banche italiane tengono un solo consenso attivo per utente: crearne uno nuovo invalida il precedente).
+- formato di `entry_reference` / `transaction_id` per la deduplica, e come viene la descrizione (`descrizioneDi`: nome del creditore, altrimenti causale);
+- presenza del codice categoria esercente (MCC, salvato in `payload.merchantCategory`);
+- durata del consenso e flusso di rinnovo (molte banche italiane tengono un solo consenso attivo per utente: crearne uno nuovo invalida il precedente; `concludi` chiude comunque la sessione precedente).
 
-Ogni utente registra la propria app Enable Banking (modalità ristretta, uso personale non commerciale): il backend gestisce due coppie appId/chiave.
+Una sola app Enable Banking per la casa, in **produzione in modalità ristretta** (gratuita, uso personale): vede solo i conti collegati prima nel Control Panel («Link accounts»); appId e chiave stanno in Secret Manager. Un collegamento può avere credenziali proprie (`appId`/`privateKey` nel documento), ma oggi non le scrive nessuno: starebbero in un documento che il proprietario legge dal telefono.
 
-Flusso di collegamento (da implementare come callable + pagina di ritorno):
-1. `startBankLink` → JWT → `POST /auth` → URL della banca → redirect dell'utente
-2. ritorno su `/?bank=callback&code=…` → `finishBankLink` → `POST /sessions` → salva `accountIds` in `bank_connections/{uid}`
-3. `syncBank` quotidiana; notifica push quando il consenso sta per scadere.
+Flusso di collegamento:
+1. menu → Banca → + → elenco banche (`bank banche`) → tocco → `bank avvia`: JWT → `POST /auth` → l'app manda l'utente all'url della banca
+2. la banca rimanda su `https://macroapp-b9bd0.web.app/banca?code=…&state=…` (o `?error=access_denied`): `app.js` mette l'esito in `sessionStorage` e va a `#/banca`, che chiama `bank concludi` → `POST /sessions` → conti e scadenza in `bank_connections/{uid}`
+3. `syncBank` ogni mattina, o «Leggi ora» (`bank sincronizza`); la pagina avvisa quando il consenso scade entro 14 giorni (notifica push: in futuro).
 
 ## Spese: regole e saldo
 
@@ -68,6 +69,6 @@ Flusso di collegamento (da implementare come callable + pagina di ritorno):
 
 1. Shell, login, casa, lista, manuale — *fatto (base)*
 2. Diario + agente + coda proposte — *fatto (base), da affinare il prompt sui casi reali*
-3. Spese: inserimento manuale — *fatto (base)*; collegamento bancario — *da fare dopo il test con Enable Banking*
+3. Spese: inserimento manuale — *fatto (base)*; collegamento bancario — *codice fatto, da provare con l'app registrata in produzione*
 4. Task — *base minima, da estendere se serve*
 5. Identità visiva — *da definire*

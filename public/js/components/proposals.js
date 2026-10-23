@@ -10,7 +10,7 @@
 //   sourceEntryId  la nota del diario da cui nasce (se viene dall'agente)
 //   visibility  "shared" se riguarda la casa/coppia, "private" se è solo tua
 
-import { el, icon, toast } from "../core/ui.js";
+import { el, icon, toast, toDate, giornoRelativo } from "../core/ui.js";
 import { create, update, watchVisible, readVisible, VIS, where } from "../core/db.js";
 import { session } from "../core/auth.js";
 import { aggiungiVoci } from "../modules/lista/index.js";
@@ -136,10 +136,17 @@ export function renderAzione(p) {
     const extra = [x.project && `progetto ${x.project}`, x.due && `entro ${x.due.split("-").reverse().join("/")}`, x.people].filter(Boolean).join(" · ");
     if (extra) dettagli.push(el("span.meta", { style: "display:block" }, extra));
   }
+  if (p.source === "bank") {
+    // Dalla banca: giorno del movimento e conto, per riconoscerlo.
+    const x = p.payload || {};
+    const d = toDate(x.date);
+    const extra = [d && giornoRelativo(d), x.account].filter(Boolean).join(" · ");
+    if (extra) dettagli.push(el("span.meta", { style: "display:block" }, extra));
+  }
   return el("div.azione", {},
     icon(tipo.icona),
     el("div.testo", {},
-      el("small", {}, tipo.nome, p.visibility === VIS.SHARED ? " · condiviso" : ""),
+      el("small", {}, tipo.nome, p.source === "bank" ? " · dalla banca" : "", p.visibility === VIS.SHARED ? " · condiviso" : ""),
       p.summary,
       ...dettagli,
       p.kind === "draft" ? bozza(p.payload || {}) : null,

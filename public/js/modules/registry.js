@@ -8,8 +8,9 @@ import * as diario from "./diario/index.js";
 import * as task from "./task/index.js";
 import * as manuale from "./manuale/index.js";
 import * as proposte from "./proposte/index.js";
+import * as banca from "./banca/index.js";
 import * as impostazioni from "./impostazioni/index.js";
 
-export const modules = [diario, lista, spese, task, manuale, proposte, impostazioni];
+export const modules = [diario, lista, spese, task, manuale, proposte, banca, impostazioni];
 export const navModules = modules.filter((m) => m.nav);
 export const DEFAULT_ROUTE = "diario";

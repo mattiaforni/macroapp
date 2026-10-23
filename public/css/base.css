@@ -196,6 +196,8 @@ a.pillola { text-decoration: none; }
 }
 .riga.fatta .testo b { text-decoration: line-through; color: var(--inchiostro-3); }
 .riga .testo span.tardi { color: var(--frutto); }
+/* Freccia a destra nelle righe che aprono qualcosa (es. scelta della banca). */
+.freccia-riga { width: 18px; height: 18px; flex: none; color: var(--inchiostro-3); }
 /* Progetto di un task, leggero e piccolo davanti alle altre informazioni. */
 .progetto { font-size: 10.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--accento); }
 

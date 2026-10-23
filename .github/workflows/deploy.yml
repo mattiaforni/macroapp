@@ -56,7 +56,7 @@ jobs:
       # creazione e una volta non c'era: senza, l'app vede «internal». Ripeterlo è innocuo.
       - name: Funzioni chiamate dall'app invocabili
         run: |
-          for S in analyzeentry; do
+          for S in analyzeentry bank; do
             gcloud run services add-iam-policy-binding "$S" --region europe-west1 --project macroapp-b9bd0 \
               --member=allUsers --role=roles/run.invoker --quiet > /dev/null
           done

@@ -31,6 +31,14 @@ Dettagli in [docs/ARCHITETTURA.md](docs/ARCHITETTURA.md) e [docs/MODELLO-DATI.md
    Quelli non ancora disponibili possono avere un valore fittizio: la funzione fallisce solo quando li usa.
 7. **Primo deploy**: `firebase deploy`.
 
+## Banca (Enable Banking)
+
+1. Account su [enablebanking.com](https://enablebanking.com) → Control Panel → nuova applicazione in **Production** (non Sandbox). La modalità ristretta è gratuita e legge solo i conti propri.
+2. Alla creazione scarica la chiave privata (`.pem`): è l'unica copia. In «Allowed Redirect URLs» metti `https://macroapp-b9bd0.web.app/banca`.
+3. **Link accounts**: collega nel Control Panel ogni conto che l'app dovrà leggere (anche quello dell'altra persona). Senza questo passo la banca autorizza ma non restituisce conti.
+4. Secret Manager: `ENABLE_BANKING_APP_ID` = application id, `ENABLE_BANKING_PRIVATE_KEY` = il contenuto intero del `.pem` (con le righe BEGIN/END). Poi un deploy (Actions → Deploy Firebase → Run workflow).
+5. Dal telefono: menu → Banca → + → scegli la banca → consenso sul sito della banca → ritorno nell'app → «Leggi ora». Le uscite compaiono in «Azioni da confermare», visibili solo a chi possiede il conto.
+
 ## Deploy automatico
 
 1. Console Google Cloud → IAM e amministrazione → Account di servizio → crea `github-deploy` con i ruoli *Editor*, *Amministratore Firebase*, *Utente account di servizio*, *Amministratore Secret Manager*.

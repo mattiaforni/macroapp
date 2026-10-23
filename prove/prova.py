@@ -10,6 +10,12 @@ class Quiet(http.server.SimpleHTTPRequestHandler):
     def log_message(self, *a): pass
     def end_headers(self):
         self.send_header("Cache-Control", "no-store"); super().end_headers()
+    def translate_path(self, path):
+        # Come il rewrite di Firebase Hosting: una pagina senza file (es. /banca) serve index.html.
+        p = super().translate_path(path)
+        if not os.path.exists(p) and "." not in os.path.basename(p):
+            return os.path.join(SITE, "index.html")
+        return p
 
 srv = http.server.ThreadingHTTPServer(("127.0.0.1", 8766), functools.partial(Quiet, directory=SITE))
 threading.Thread(target=srv.serve_forever, daemon=True).start()
@@ -291,6 +297,50 @@ with sync_playwright() as p:
         pg.click(".schede a[href='#/diario']")
         pg.wait_for_timeout(300)
         shot(pg, "9-diario-scuro")
+        pg.click("button[aria-label='Menu']")
+        pg.click(".menu__voce >> text=Casa, tema e account")
+        pg.click("button.pillola >> text=Chiaro")
+
+        # ── Banca: dal menu, scelta della banca, ritorno con il codice, stato del collegamento, lettura ──
+        step[0] = "banca"
+        menu(pg, "Banca")
+        pg.wait_for_selector("text=Nessuna banca collegata")
+        pg.wait_for_timeout(300)
+        shot(pg, "11-banca-vuota")
+        pg.click("button[aria-label='Collega una banca']")
+        pg.wait_for_selector("#foglio .riga >> text=Banca di Prova")
+        pg.fill("#foglio input", "prova")
+        assert pg.locator("#foglio .riga").count() == 1, "il filtro lascia una banca"
+        assert "null" not in pg.locator("#foglio").inner_text(), "foglio senza barra: niente null in fondo"
+        pg.wait_for_timeout(300)
+        shot(pg, "12-banca-scelta")
+        pg.click("#foglio .riga >> text=Banca di Prova")
+        # Lo stub rimanda subito su /banca?code=…: la pagina si ricarica (l'archivio in memoria si azzera,
+        # quindi di nuovo l'onboarding), poi va su #/banca e conclude il collegamento.
+        pg.wait_for_selector("text=Crea casa", timeout=6000)
+        assert pg.url.endswith("/#/banca"), f"dopo il ritorno l'indirizzo è {pg.url}"
+        pg.click("text=Crea casa")
+        pg.wait_for_selector("text=Consenso valido fino al", timeout=6000)
+        assert pg.locator("button[aria-label='Collega una banca']").is_hidden(), "collegata: niente +"
+        assert "null" not in pg.locator("#view").inner_text(), "nessun null disegnato"
+        pg.wait_for_timeout(3000)  # il toast «Casa creata» se ne va
+        shot(pg, "13-banca-collegata")
+        pg.click("button.pillola >> text=Leggi ora")
+        pg.wait_for_selector("text=2 movimenti nuovi")
+        pg.wait_for_selector("text=2 proposte nuove")
+        pg.click("button.pillola >> text=Azioni da confermare")
+        pg.wait_for_selector(".azione >> text=dalla banca")
+        assert pg.locator(".azione").count() == 2, "due proposte dalla banca"
+        pg.wait_for_timeout(300)
+        shot(pg, "14-banca-proposte")
+        pg.click(".azione >> nth=0 >> button[aria-label='Conferma']")
+        pg.click(".schede a[href='#/spese']")
+        pg.wait_for_selector(".riga >> text=ESSELUNGA FIRENZE")
+        menu(pg, "Banca")
+        pg.click("button.btn--pericolo >> text=Scollega")
+        pg.wait_for_selector("#foglio h2 >> text=Scollega la banca")
+        conferma(pg)
+        pg.wait_for_selector("text=Nessuna banca collegata")
         print("FLUSSO COMPLETO")
     except Exception as e:
         shot(pg, "errore")

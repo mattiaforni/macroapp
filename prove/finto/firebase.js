@@ -23,6 +23,7 @@ export function getFirestore() { return {}; }
 export function enableIndexedDbPersistence() { return Promise.resolve(); }
 export function getFunctions() { return {}; }
 export function httpsCallable(_f, name) {
+  if (name === "bank") return bankFinto;
   return async (data) => {
     if (name !== "analyzeEntry") return { data: {} };
     const hid = coll("users").get(UID)?.householdId || null;
@@ -67,6 +68,46 @@ export function and(...c) { return { and: c }; }
 export function orderBy(f, dir) { return { orderBy: f, dir }; }
 export function limit(n) { return { limit: n }; }
 export function query(c, ...parts) { return { coll: c.coll, parts }; }
+// Function `bank` finta: elenco di banche, consenso che torna subito su /banca?code=…, conti e movimenti inventati.
+async function bankFinto(data = {}) {
+  const B = coll("bank_connections");
+  const hid = coll("users").get(UID)?.householdId || null;
+  if (data.azione === "banche") {
+    return { data: { banche: [
+      { name: "Banca di Prova", country: "IT", beta: false, maxConsentSeconds: 90 * 86400 },
+      { name: "Cassa Rurale Finta", country: "IT", beta: true, maxConsentSeconds: 30 * 86400 },
+    ] } };
+  }
+  if (data.azione === "avvia") {
+    const state = "state-prova";
+    B.set(UID, { ...(B.get(UID) || {}), ownerUid: UID, householdId: hid, pending: { state, aspsp: data.aspsp } });
+    notify();
+    return { data: { url: `/banca?code=codice-prova&state=${state}` } };
+  }
+  if (data.azione === "concludi") {
+    const accounts = [{ uid: "conto-1", name: "Conto corrente", product: "Conto Smart", currency: "EUR", type: "CACC", ibanMask: "IT…1234" }];
+    B.set(UID, { ownerUid: UID, householdId: hid, active: true, aspsp: { name: "Banca di Prova", country: "IT" }, sessionId: "sessione-prova",
+      accounts, accountIds: ["conto-1"], consentExpiresAt: new Date(Date.now() + 85 * 86400e3), linkedAt: new Date(), lastError: null });
+    notify();
+    return { data: { accounts } };
+  }
+  if (data.azione === "scollega") {
+    B.set(UID, { ...(B.get(UID) || {}), active: false, sessionId: null, accounts: [], accountIds: [], consentExpiresAt: null });
+    notify();
+    return { data: { ok: true } };
+  }
+  if (data.azione === "sincronizza") {
+    const P = coll("proposals");
+    const base = { ownerUid: UID, householdId: hid, visibility: "private", kind: "expense", source: "bank", status: "pending", createdAt: new Date() };
+    const ieri = new Date(Date.now() - 86400e3);
+    P.set("eb_prova_1", { ...base, summary: "ESSELUNGA FIRENZE · 42,10 €", payload: { amount: 42.1, description: "ESSELUNGA FIRENZE", paidBy: UID, split: "equal", date: ieri, source: "bank", bankTxId: "eb_prova_1", account: "Conto corrente" } });
+    P.set("eb_prova_2", { ...base, summary: "Enel Energia · 61,30 €", payload: { amount: 61.3, description: "Enel Energia", paidBy: UID, split: "equal", date: ieri, source: "bank", bankTxId: "eb_prova_2", account: "Conto corrente" } });
+    B.set(UID, { ...(B.get(UID) || {}), lastSyncAt: new Date(), lastSyncCreated: 2, lastError: null });
+    notify();
+    return { data: { created: 2 } };
+  }
+  return { data: {} };
+}
 function matches(d, cond) {
   if (!cond) return true;
   if (cond.or) return cond.or.some((c) => matches(d, c));
@@ -75,6 +116,12 @@ function matches(d, cond) {
   return true;
 }
 export function onSnapshot(q, cb) {
+  // Su un singolo documento (es. bank_connections/{uid}): snapshot con exists() e data().
+  if (!q.parts && q.coll && q.id) {
+    const run = () => { const d = coll(q.coll).get(q.id); cb({ id: q.id, exists: () => !!d, data: () => d }); };
+    listeners.add(run); run();
+    return () => listeners.delete(run);
+  }
   const run = () => {
     const cond = q.parts.find((p) => p.or || p.and || p.f);
     const ord = q.parts.find((p) => p.orderBy);
