@@ -1,0 +1,59 @@
+# Diagnosi delle functions, da lanciare a mano (Actions → Diagnosi → Run workflow) o da una
+# sessione di Claude. Le sessioni non leggono i log delle esecuzioni né quelli di Google Cloud:
+# qui le risposte della funzione, i permessi di invocazione e gli ultimi errori finiscono
+# nelle annotazioni del job, che invece si leggono.
+name: Diagnosi
+
+on:
+  workflow_dispatch:
+    inputs:
+      funzione:
+        description: "Nome della function (come nel codice)"
+        default: analyzeEntry
+      ore:
+        description: "Errori delle ultime N ore"
+        default: "3"
+
+jobs:
+  diagnosi:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Autenticazione Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Raccolta
+        env:
+          F: ${{ inputs.funzione }}
+          ORE: ${{ inputs.ore }}
+        run: |
+          P=macroapp-b9bd0
+          R=europe-west1
+          S=$(echo "$F" | tr '[:upper:]' '[:lower:]')
+          URL="https://$R-$P.cloudfunctions.net/$F"
+          ann() { echo "::notice title=$1::$(sed -e 's/%/%25/g' -e 's/\r//g' | head -c 12000 | awk '{printf "%s%%0A", $0}')"; }
+
+          # 1. Come risponde la funzione a un browser senza accesso (deve dire «Accesso richiesto» in JSON).
+          {
+            echo "--- OPTIONS (preflight CORS)"
+            curl -s -o /dev/null -D - -X OPTIONS "$URL" -H "Origin: https://$P.web.app" \
+              -H "Access-Control-Request-Method: POST" -H "Access-Control-Request-Headers: content-type,authorization" | grep -iE "^HTTP|access-control" || true
+            echo "--- POST senza accesso"
+            curl -s -D - -X POST "$URL" -H "Origin: https://$P.web.app" -H "content-type: application/json" -d '{"data":{}}' | head -c 600 || true
+          } 2>&1 | ann "Risposta di $F"
+
+          # 2. Chi può invocare il servizio Cloud Run (serve allUsers per le funzioni chiamate dall'app).
+          gcloud run services get-iam-policy "$S" --region "$R" --project "$P" --format=yaml 2>&1 | ann "Invocatori di $S"
+
+          # 3. Ultimi errori e avvisi della funzione.
+          gcloud logging read "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"$S\" AND severity>=WARNING" \
+            --project "$P" --freshness "${ORE}h" --limit 25 \
+            --format='value(timestamp,severity,textPayload,jsonPayload.message,httpRequest.status)' 2>&1 | ann "Errori di $S (ultime $ORE ore)"
+
+          # 4. Ultime richieste HTTP (stato e latenza).
+          gcloud logging read "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"$S\" AND httpRequest.status>0" \
+            --project "$P" --freshness "${ORE}h" --limit 15 \
+            --format='value(timestamp,httpRequest.requestMethod,httpRequest.status,httpRequest.latency)' 2>&1 | ann "Richieste a $S"
