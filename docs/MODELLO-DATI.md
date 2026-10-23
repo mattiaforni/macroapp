@@ -10,7 +10,12 @@ Campi comuni a tutte le collezioni di contenuto, compilati da `core/db.js`:
 | `createdAt`, `updatedAt` | timestamp | server |
 
 ## `users/{uid}`
-`displayName, email, photoURL, householdId, createdAt`
+`displayName, email, photoURL, householdId, createdAt, contattiGoogle?: { collegato, scaduto, email, dal }`
+`contattiGoogle` lo scrive la funzione `contatti`: dice all'app se Google Contatti è collegato e con quale account.
+
+## `google_tokens/{uid}`
+`ownerUid, refreshToken, accessToken, scade, email, collegatoIl, state?, stateAt?` — solo Cloud Functions
+(le regole negano ogni accesso dall'app). `state` vale per un solo ritorno dalla pagina di Google.
 
 ## `households/{id}`
 `name, members: [uid, uid], memberNames: { uid: "Nome Cognome" }, manualCategories: [nomi], createdBy, createdAt` — l'id è il codice di invito.
@@ -23,7 +28,9 @@ Campi comuni a tutte le collezioni di contenuto, compilati da `core/db.js`:
 `type: "shop"|"person"|"info", name, category, address, phone, email, url, notes, googleId?`
 Manuale e rubrica insieme: le persone dei task sono voci `person` (private se non dici altrimenti).
 `category` è facoltativa (vuota = nessuna; il vecchio "Altro" vale come nessuna). Il link a Google Maps
-non si salva: si costruisce da nome e indirizzo. `googleId` = `resourceName` del contatto Google da cui è stata presa.
+non si salva: si costruisce da nome e indirizzo. `googleId` = `resourceName` del contatto Google collegato
+(`people/c…`): per quelle voci telefono, mail e indirizzo arrivano da Google (un campo vuoto in Google non
+cancella quello della rubrica); il nome resta quello della rubrica. Senza collegamento: `null` o assente.
 
 ## `expenses`
 `amount, description, paidBy, split: "equal"|"full", date, category, source: "manual"|"recurring"|"agent"|"bank", type?: "settlement", recurringId?, bankTxId?`

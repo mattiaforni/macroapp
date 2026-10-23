@@ -1,5 +1,6 @@
 // Cloud Functions (2ª generazione), regione europe-west1.
 // Segreti (Secret Manager): firebase functions:secrets:set ANTHROPIC_API_KEY, GEMINI_API_KEY, ENABLE_BANKING_APP_ID, ENABLE_BANKING_PRIVATE_KEY
+// GOOGLE_OAUTH_CLIENT ({"id","secret"} del client web dell'accesso con Google) lo scrive il deploy.
 //
 // Funzioni: analyzeEntry (agente del diario), bank (collegamento e lettura della banca), syncBank (lettura quotidiana).
 // All'avvio del container si caricano solo le dichiarazioni delle funzioni.
@@ -16,6 +17,7 @@ const ANTHROPIC_API_KEY = defineSecret("ANTHROPIC_API_KEY");
 const GEMINI_API_KEY = defineSecret("GEMINI_API_KEY");
 const ENABLE_BANKING_APP_ID = defineSecret("ENABLE_BANKING_APP_ID");
 const ENABLE_BANKING_PRIVATE_KEY = defineSecret("ENABLE_BANKING_PRIVATE_KEY");
+const GOOGLE_OAUTH_CLIENT = defineSecret("GOOGLE_OAUTH_CLIENT");
 
 let dbPromise = null;
 /** Firestore (Admin SDK), inizializzato alla prima chiamata. */
@@ -210,6 +212,28 @@ export const bank = onCall(
       console.error("bank", azione, err);
       const [codice, testo] = err instanceof eb.EnableBankingError ? spiegaErroreBanca(err) : ["internal", `Operazione non riuscita (${(err.message || "").slice(0, 160)})`];
       throw new HttpsError(codice, testo);
+    }
+  },
+);
+
+/**
+ * Google Contatti: collegamento una tantum e permessi di un'ora per leggere i contatti.
+ * Il refresh token resta in google_tokens/{uid}, che l'app non legge. Vedi src/google/contatti.js.
+ */
+export const contatti = onCall(
+  { secrets: [GOOGLE_OAUTH_CLIENT], timeoutSeconds: 30 },
+  async (req) => {
+    if (!req.auth) throw new HttpsError("unauthenticated", "Accesso richiesto");
+    let client = null;
+    try { client = JSON.parse(GOOGLE_OAUTH_CLIENT.value() || "{}"); } catch (e) { client = null; }
+    try {
+      const db = await getDb();
+      const { gestisci } = await import("./src/google/contatti.js");
+      return await gestisci(db, { uid: req.auth.uid, email: req.auth.token?.email || "" }, req.data || {}, client);
+    } catch (err) {
+      if (err instanceof HttpsError) throw err;
+      console.error("contatti", err);
+      throw new HttpsError("internal", `Contatti non raggiungibili (${String(err.message).slice(0, 160)})`);
     }
   },
 );

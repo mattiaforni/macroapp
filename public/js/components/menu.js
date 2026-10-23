@@ -15,7 +15,7 @@ const GRUPPI = [
     { icona: "scintilla", testo: "Azioni da confermare", vai: ["proposte"] },
   ]],
   ["Collegamenti", [
-    { icona: "persone", testo: "Google Contatti", vai: ["manuale", "contatti"] },
+    { icona: "contatto", testo: "Google Contatti", vai: ["manuale", "contatti"] },
     { icona: "banca", testo: "Banca", vai: ["banca"] },
   ]],
   ["Account", [

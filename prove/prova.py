@@ -1,4 +1,4 @@
-import http.server, threading, functools, os, sys
+import http.server, threading, functools, os, sys, json
 from playwright.sync_api import sync_playwright
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -167,9 +167,18 @@ with sync_playwright() as p:
 
         # ── Manuale: categorie della casa, mappa automatica, persone, Google Contatti ──
         step[0] = "manuale"
-        pg.route("https://people.googleapis.com/**", lambda r: r.fulfill(status=200, content_type="application/json",
-            body='{"connections":[{"resourceName":"people/c1","names":[{"displayName":"Giulia Bianchi"}],"phoneNumbers":[{"value":"333 1234567"}]},'
-                 '{"resourceName":"people/c2","names":[{"displayName":"Marco"}],"emailAddresses":[{"value":"marco@example.com"}]}]}'))
+        # Google Contatti finto: il numero di Giulia si cambia a metà prova per vedere l'aggiornamento.
+        google = {"giulia": "333 1234567"}
+        letture = [0]
+        def people(r):
+            letture[0] += 1
+            assert r.request.headers.get("authorization") == "Bearer token-finto", r.request.headers
+            r.fulfill(status=200, content_type="application/json", body=json.dumps({"connections": [
+                {"resourceName": "people/c1", "names": [{"displayName": "Giulia Bianchi"}], "phoneNumbers": [{"value": google["giulia"]}], "organizations": [{"name": "Circolo"}]},
+                {"resourceName": "people/c2", "names": [{"displayName": "Marco"}], "emailAddresses": [{"value": "marco@example.com"}]},
+                {"resourceName": "people/c3", "names": [{"displayName": "Giuseppe Verdi"}], "nicknames": [{"value": "Beppe"}], "phoneNumbers": [{"value": "+39 347 0000000"}]},
+            ]}))
+        pg.route("https://people.googleapis.com/**", people)
         menu(pg, "Manuale e rubrica")
         pg.wait_for_selector("h1 >> text=Manuale")
         pg.click("button.fab")
@@ -204,13 +213,28 @@ with sync_playwright() as p:
         pg.click("button.pillola >> text=Persone")
         pg.wait_for_selector(".riga >> text=Marco")
         assert pg.locator(".riga", has_text="Marco").count() == 1, "Marco una volta sola"
-        pg.click("text=Prendi da Google Contatti")
+        # Google Contatti: si collega una volta, passando dalla pagina di Google, e si torna sul Manuale
+        step[0] = "collega google contatti"
+        assert letture[0] == 0, "nessuna lettura prima del collegamento"
+        pg.click("text=Collega Google Contatti")
+        pg.wait_for_selector("#foglio .btn--conferma >> text=Collega")
+        pg.wait_for_timeout(200)
+        shot(pg, "5b-contatti-da-collegare")
+        conferma(pg)
+        pg.wait_for_selector("#foglio >> text=Collegato come mattia@example.com", timeout=8000)
+        assert pg.url.endswith("/#/manuale"), pg.url
         pg.wait_for_selector("#foglio .riga >> text=Giulia Bianchi")
-        assert "già in rubrica" in pg.locator("#foglio .riga", has_text="Marco").inner_text(), "Marco riconosciuto"
-        pg.click("#foglio .riga >> text=Giulia Bianchi")
-        pg.wait_for_selector("#foglio .riga >> text=già in rubrica")
+        assert "non collegata" in pg.locator("#foglio .riga", has_text="Marco").inner_text(), "Marco riconosciuto per nome"
+        pg.fill("#foglio input[placeholder='Cerca tra i contatti']", "beppe")
+        pg.wait_for_selector("#foglio .riga >> text=Giuseppe Verdi")
+        assert pg.locator("#foglio .riga").count() == 1, "ricerca per soprannome"
+        pg.fill("#foglio input[placeholder='Cerca tra i contatti']", "")
+        pg.wait_for_timeout(200)
+        shot(pg, "5c-contatti")
         pg.click("#foglio button[aria-label='Indietro']")
-        pg.wait_for_selector(".riga >> text=Giulia Bianchi")
+        pg.wait_for_timeout(200)
+        assert pg.locator(".riga", has_text="Giulia").count() == 0, "in rubrica solo chi colleghi"
+        step[0] = "manuale persone"
         # Scheda di Marco: i suoi task, e la mail per le bozze (prima un numero per le scorciatoie)
         pg.click(".riga >> text=Marco")
         pg.wait_for_selector("#foglio >> text=Task con questa persona")
@@ -237,6 +261,47 @@ with sync_playwright() as p:
         pg.wait_for_timeout(250)
         shot(pg, "6b-task-contatti")
         pg.click("#foglio button[aria-label='Indietro']")
+        pg.wait_for_timeout(200)
+
+        # Una persona da Google mentre scrivi il nome: entra in rubrica collegata, col numero di Google
+        step[0] = "task con contatto google"
+        pg.click("button.fab")
+        pg.fill("#foglio input[placeholder=\"Cosa c'è da fare\"]", "Chiamare Giulia per le chiavi")
+        pg.fill("#foglio input[placeholder='Scrivi un nome']", "giu")
+        pg.wait_for_selector("#foglio button.pillola:not(.on) >> text=Giulia Bianchi")
+        assert pg.locator("#foglio button.pillola:not(.on)", has_text="Giuseppe Verdi").count() == 1
+        pg.wait_for_timeout(150)
+        shot(pg, "6c-task-google")
+        pg.click("#foglio button.pillola:not(.on) >> text=Giulia Bianchi")
+        pg.keyboard.press("Enter")  # campo vuoto: salva
+        pg.wait_for_selector(".riga >> text=Chiamare Giulia per le chiavi")
+        tel = pg.locator(".riga", has_text="Chiamare Giulia per le chiavi").locator("a.tondo")
+        assert tel.get_attribute("href") == "tel:3331234567", tel.get_attribute("href")
+
+        # Nel manuale: Giulia collegata, recapiti in sola lettura; un numero cambiato in Google arriva da solo
+        step[0] = "persona collegata"
+        menu(pg, "Manuale e rubrica")
+        pg.wait_for_selector(".riga >> text=Giulia Bianchi")
+        pg.click(".riga >> text=Giulia Bianchi")
+        pg.wait_for_selector("#foglio .nota-campo >> text=Da Google Contatti")
+        assert pg.locator("#foglio input[type='tel']").get_attribute("readonly") is not None, "numero in sola lettura"
+        assert pg.input_value("#foglio input[type='tel']") == "333 1234567"
+        assert pg.input_value("#foglio textarea") == "Circolo", "azienda nelle note"
+        pg.wait_for_timeout(200)
+        shot(pg, "6d-persona-google")
+        pg.click("#foglio button[aria-label='Indietro']")
+        google["giulia"] = "333 7654321"
+        pg.reload()
+        pg.wait_for_selector(".riga >> text=333 7654321", timeout=8000)
+        # Persona nuova dal manuale: il nome cerca tra i contatti
+        pg.click("button.fab")
+        pg.fill("#foglio input[placeholder='Nome']", "bep")
+        pg.wait_for_selector("#foglio button.pillola >> text=Giuseppe Verdi")
+        pg.click("#foglio button.pillola >> text=Giuseppe Verdi")
+        assert pg.input_value("#foglio input[placeholder='Nome']") == "Giuseppe Verdi"
+        assert pg.input_value("#foglio input[type='tel']") == "+39 347 0000000"
+        conferma(pg)
+        pg.wait_for_selector(".riga >> text=Giuseppe Verdi")
         pg.wait_for_timeout(200)
         shot(pg, "7-manuale-persone")
 
@@ -280,6 +345,16 @@ with sync_playwright() as p:
         pg.click(".schede a[href='#/lista']")
         pg.wait_for_selector(".tessera >> text=Lampadine")
 
+        # ── Scollegare Google Contatti ──
+        step[0] = "scollega"
+        menu(pg, "Google Contatti")
+        pg.wait_for_selector("#foglio >> text=Collegato come")
+        pg.click("#foglio button >> text=Scollega")
+        pg.wait_for_selector("text=Google Contatti scollegato")
+        menu(pg, "Google Contatti")
+        pg.wait_for_selector("#foglio .btn--conferma >> text=Collega")
+        pg.click("#foglio button[aria-label='Indietro']")
+
         # ── Tema scuro ──
         step[0] = "tema"
         pg.click("button[aria-label='Menu']")
@@ -315,25 +390,23 @@ with sync_playwright() as p:
         pg.wait_for_timeout(300)
         shot(pg, "12-banca-scelta")
         pg.click("#foglio .riga >> text=Banca di Prova")
-        # Lo stub rimanda subito su /banca?code=…: la pagina si ricarica (l'archivio in memoria si azzera,
-        # quindi di nuovo l'onboarding), poi va su #/banca e conclude il collegamento.
-        pg.wait_for_selector("text=Crea casa", timeout=6000)
+        # Lo stub rimanda subito su /banca?code=…: la pagina si ricarica (i dati finti restano, come in
+        # Firestore), poi va su #/banca e conclude il collegamento.
+        pg.wait_for_selector("text=Consenso valido fino al", timeout=8000)
         assert pg.url.endswith("/#/banca"), f"dopo il ritorno l'indirizzo è {pg.url}"
-        pg.click("text=Crea casa")
-        pg.wait_for_selector("text=Consenso valido fino al", timeout=6000)
         assert pg.locator("button[aria-label='Collega una banca']").is_hidden(), "collegata: niente +"
         assert "null" not in pg.locator("#view").inner_text(), "nessun null disegnato"
-        pg.wait_for_timeout(3000)  # il toast «Casa creata» se ne va
+        pg.wait_for_timeout(300)
         shot(pg, "13-banca-collegata")
         pg.click("button.pillola >> text=Leggi ora")
         pg.wait_for_selector("text=2 movimenti nuovi")
         pg.wait_for_selector("text=2 proposte nuove")
         pg.click("button.pillola >> text=Azioni da confermare")
         pg.wait_for_selector(".azione >> text=dalla banca")
-        assert pg.locator(".azione").count() == 2, "due proposte dalla banca"
+        assert pg.locator(".azione", has_text="dalla banca").count() == 2, "due proposte dalla banca"
         pg.wait_for_timeout(300)
         shot(pg, "14-banca-proposte")
-        pg.click(".azione >> nth=0 >> button[aria-label='Conferma']")
+        pg.locator(".azione", has_text="dalla banca").first.locator("button[aria-label='Conferma']").click()
         pg.click(".schede a[href='#/spese']")
         pg.wait_for_selector(".riga >> text=ESSELUNGA FIRENZE")
         menu(pg, "Banca")

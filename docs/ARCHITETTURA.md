@@ -32,6 +32,9 @@ Scelte: nessun framework né bundler (coerente con i progetti precedenti, deploy
 
 - `analyzeEntry` (callable): legge una nota del diario del chiamante, chiama `reason()` con uno schema JSON e scrive proposte. Non modifica mai i moduli.
 - `bank` (callable, `{ azione }`): `banche` (elenco per paese), `avvia` (`POST /auth` → url del consenso, `state` salvato in `bank_connections/{uid}.pending`), `concludi` (`POST /sessions` col `code`, controlla lo `state`, chiude la sessione precedente, salva conti e scadenza), `scollega` (`DELETE /sessions/{id}`), `sincronizza` (la lettura di `syncBank`, a richiesta). Scrive solo nel documento del chiamante.
+- `contatti` (callable): Google Contatti. `avvio` → pagina di Google (OAuth con codice, `access_type=offline`);
+  `collega` → scambia il codice, conserva il refresh token in `google_tokens/{uid}`; `token` → permesso di un'ora
+  per la People API, che l'app usa direttamente; `scollega` → revoca e cancella.
 - `syncBank` (schedulata, 07:15 Europe/Rome): per ogni `bank_connections` attiva scarica i movimenti contabilizzati degli ultimi 7 giorni e crea una proposta di spesa **personale** per ogni uscita (la spesa confermata nasce condivisa). Deduplica con id deterministico della proposta (`eb_<entry_reference>`).
 - Segreti in Secret Manager, mai nel repository.
 
@@ -58,9 +61,13 @@ Flusso di collegamento:
 
 ## Integrazioni previste
 
-- **Google Contatti** (People API, sola lettura): il permesso si chiede solo quando tocchi «Prendi da Google Contatti».
-  Nessuna copia in blocco: in rubrica (voci `person` del manuale) entrano solo le persone che scegli, collegate
-  con `googleId`. Le persone dei task stanno nella stessa rubrica. Va attivata una volta la People API nel progetto Google Cloud.
+- **Google Contatti** (People API, sola lettura), collegato una volta sola. Il refresh token resta sul server;
+  l'app riceve permessi di un'ora e legge l'elenco dei contatti, che tiene solo in memoria per cercare mentre
+  scrivi un nome (task, persona nuova del manuale). In rubrica (voci `person` del manuale) entrano solo le
+  persone che colleghi, con `googleId`; all'avvio e all'apertura della scheda i loro recapiti si aggiornano
+  da Google. Un nome proposto dall'AI si collega da solo se corrisponde a un solo contatto.
+  Il deploy attiva la People API e scrive il segreto GOOGLE_OAUTH_CLIENT; l'URI di ritorno
+  `https://macroapp-b9bd0.web.app/google-contatti` va autorizzato a mano nel client OAuth.
 - **Registrazione audio** del diario: `transcribe()` è già prevista (Gemini accetta audio nativo); oggi si usa la dettatura da tastiera.
 - **Notifiche push** (FCM): lista condivisa, consensi bancari in scadenza.
 - **Web Share Target**: già dichiarato nel manifest; il contenuto condiviso diventa una proposta di appunto.

@@ -29,6 +29,10 @@ Dettagli in [docs/ARCHITETTURA.md](docs/ARCHITETTURA.md) e [docs/MODELLO-DATI.md
    firebase functions:secrets:set ENABLE_BANKING_PRIVATE_KEY
    ```
    Quelli non ancora disponibili possono avere un valore fittizio: la funzione fallisce solo quando li usa.
+   GOOGLE_OAUTH_CLIENT non serve impostarlo: lo scrive il deploy automatico (vedi sotto).
+8. **Google Contatti**: Google Cloud → API e servizi → Credenziali → «Web client (auto created by Google Service)»
+   → URI di reindirizzamento autorizzati → aggiungi `https://<dominio>/google-contatti`. La schermata di consenso
+   deve essere «In produzione»: in modalità di test il permesso scade dopo 7 giorni.
 7. **Primo deploy**: `firebase deploy`.
 
 ## Banca (Enable Banking)
@@ -44,6 +48,8 @@ Dettagli in [docs/ARCHITETTURA.md](docs/ARCHITETTURA.md) e [docs/MODELLO-DATI.md
 1. Console Google Cloud → IAM e amministrazione → Account di servizio → crea `github-deploy` con i ruoli *Editor*, *Amministratore Firebase*, *Utente account di servizio*, *Amministratore Secret Manager*.
 2. Crea una chiave JSON e incollane il contenuto nel secret GitHub `FIREBASE_SERVICE_ACCOUNT` (Settings → Secrets and variables → Actions). Poi cancella il file scaricato.
 3. Da quel momento ogni push su `main` pubblica hosting, regole, indici e functions. Per rilanciare a mano: Actions → Deploy Firebase → Run workflow.
+   Il deploy attiva anche la People API e tiene aggiornato il segreto GOOGLE_OAUTH_CLIENT con ID e secret del client
+   OAuth web configurato in Firebase Authentication (provider Google).
 
 La chiave dà accesso quasi completo al progetto: deve stare solo nei secret di GitHub, mai nel repository o in una chat.
 

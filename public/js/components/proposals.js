@@ -16,7 +16,8 @@ import { session } from "../core/auth.js";
 import { aggiungiVoci } from "../modules/lista/index.js";
 import { risolviProgetto } from "../modules/task/index.js";
 import { categoria } from "../modules/spese/index.js";
-import { separaNomi, risolviPersone, nomiDa, trovaPersona, numeroInternazionale } from "../core/rubrica.js";
+import { separaNomi, risolviPersone, nomiDa, trovaPersona, numeroInternazionale, datiDaContatto, personaDaGoogle } from "../core/rubrica.js";
+import { caricaContatti, contattoUnico } from "../core/contatti-google.js";
 
 const COLL = "proposals";
 
@@ -40,6 +41,8 @@ const APPLICA = {
     const v = p.visibility || VIS.PRIVATE;
     const projectId = await risolviProgetto(p.payload.project, v);
     // Le persone nominate diventano voci della rubrica (o si collegano a quelle che ci sono già).
+    // Un nome nuovo che corrisponde a un solo contatto Google entra in rubrica già collegato.
+    await caricaContatti().catch(() => []);
     const nomi = separaNomi(p.payload.people);
     const peopleIds = risolviPersone(nomi, v);
     create("tasks", {
@@ -51,9 +54,14 @@ const APPLICA = {
   async manual_entry(p) {
     const x = p.payload;
     const tipo = ["shop", "person", "info"].includes(x.type) ? x.type : "shop";
+    const name = x.name || x.text || "";
+    // Una persona senza recapiti che corrisponde a un solo contatto Google si collega a quello.
+    const google = tipo === "person" && !x.phone && !x.email && !trovaPersona(name)
+      ? await caricaContatti().then(() => contattoUnico(name), () => null) : null;
     create("manual_entries", {
-      type: tipo, name: x.name || x.text || "", category: x.category && x.category !== "Altro" ? x.category : "",
+      type: tipo, name, category: x.category && x.category !== "Altro" ? x.category : "",
       notes: x.notes || "", address: x.address || "", phone: x.phone || "", email: x.email || "", url: x.url || "",
+      ...(google && !personaDaGoogle(google.googleId) ? datiDaContatto(google) : {}),
     }, tipo === "person" ? VIS.PRIVATE : p.visibility || VIS.SHARED);
     return tipo === "person" ? "Aggiunto alla rubrica" : "Aggiunto al manuale";
   },

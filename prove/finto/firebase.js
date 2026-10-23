@@ -1,11 +1,22 @@
 // Stub in-memory di Firebase per il test del guscio senza rete.
+// I dati restano in sessionStorage: sopravvivono a un ricaricamento della pagina (come Firestore),
+// che serve per provare il passaggio dalla pagina di Google.
+const PERSIST = "finto.firestore";
+const DATA_ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const store = new Map(); // coll -> Map(id -> data)
 const listeners = new Set();
 let seq = 0;
 const UID = "uid-test";
+try {
+  const salvato = JSON.parse(sessionStorage.getItem(PERSIST) || "null", (_k, v) => (typeof v === "string" && DATA_ISO.test(v) ? new Date(v) : v));
+  if (salvato) { seq = salvato.seq; for (const [c, docs] of salvato.store) store.set(c, new Map(docs)); }
+} catch (e) { console.warn("stub: dati non ripresi", e); }
 
 function coll(name) { if (!store.has(name)) store.set(name, new Map()); return store.get(name); }
-function notify() { for (const l of listeners) l(); }
+function notify() {
+  try { sessionStorage.setItem(PERSIST, JSON.stringify({ seq, store: [...store].map(([c, m]) => [c, [...m]]) })); } catch (e) {}
+  for (const l of listeners) l();
+}
 export const serverTimestamp = () => new Date();
 export const arrayUnion = (...v) => ({ __arrayUnion: v });
 export class Timestamp {}
@@ -22,9 +33,27 @@ export function reauthenticateWithRedirect() { return Promise.resolve(); }
 export function getFirestore() { return {}; }
 export function enableIndexedDbPersistence() { return Promise.resolve(); }
 export function getFunctions() { return {}; }
+// Google Contatti: «avvio» rimanda a /google-contatti come farebbe Google dopo il consenso.
+function contatti(data) {
+  const utenti = coll("users");
+  const u = utenti.get(UID) || {};
+  const errore = (motivo) => Object.assign(new Error(motivo), { code: "functions/failed-precondition", details: { motivo } });
+  const token = { email: "mattia@example.com", accessToken: "token-finto", scade: Date.now() + 3600 * 1000 };
+  if (data.azione === "avvio") return { url: `${location.origin}/google-contatti?code=codice-finto&state=s1` };
+  if (data.azione === "collega") {
+    if (data.code !== "codice-finto" || data.state !== "s1") throw errore("state");
+    utenti.set(UID, { ...u, contattiGoogle: { collegato: true, scaduto: false, email: token.email } }); notify();
+    return token;
+  }
+  if (data.azione === "token") { if (!u.contattiGoogle?.collegato) throw errore("non-collegato"); return token; }
+  if (data.azione === "scollega") { const { contattiGoogle, ...resto } = u; utenti.set(UID, resto); notify(); return {}; }
+  throw errore("azione");
+}
+
 export function httpsCallable(_f, name) {
   if (name === "bank") return bankFinto;
   return async (data) => {
+    if (name === "contatti") return { data: contatti(data) };
     if (name !== "analyzeEntry") return { data: {} };
     const hid = coll("users").get(UID)?.householdId || null;
     const base = { ownerUid: UID, householdId: hid, source: "agent", status: "pending", sourceEntryId: data.entryId, createdAt: new Date() };

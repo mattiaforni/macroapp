@@ -1,10 +1,11 @@
 // Shell dell'app: autenticazione, navigazione, montaggio dei moduli.
 import { startAuth, onSession, login, session, checkRedirectResult } from "./core/auth.js";
-import { addRoute, startRouter, navigate, currentRoute } from "./core/router.js";
+import { addRoute, startRouter, navigate, currentRoute, vaiA } from "./core/router.js";
 import { el, clear, icon, toast } from "./core/ui.js";
 import { applicaTema } from "./core/theme.js";
 import { ensureMyName } from "./core/household.js";
-import { avviaRubrica, fermaRubrica } from "./core/rubrica.js";
+import { avviaRubrica, fermaRubrica, sincronizzaDaGoogle } from "./core/rubrica.js";
+import { ritornoDaGoogle } from "./core/contatti-google.js";
 import { modules, navModules, DEFAULT_ROUTE } from "./modules/registry.js";
 import { renderOnboarding } from "./components/onboarding.js";
 import { closeSheet } from "./components/sheet.js";
@@ -55,6 +56,9 @@ title.before(menuBtn);
 
 function startApp() {
   menuBtn.hidden = false;
+  // Ritorno dalla pagina di Google dopo il permesso per i contatti: si va sul Manuale, dove il
+  // foglio di Google Contatti mostra com'è andata.
+  if (ritornoDaGoogle()) vaiA("manuale", "contatti");
   if (!routerStarted) {
     for (const m of modules) addRoute(m.id, m.mount);
     routerStarted = true;
@@ -78,6 +82,11 @@ function startApp() {
   }
   // Lavori di fondo, non bloccanti.
   avviaRubrica(); // persone del manuale, per riconoscerle nei task
+  // Contatti Google (se collegati): elenco pronto per le ricerche e recapiti aggiornati in rubrica.
+  sincronizzaDaGoogle().catch((e) => {
+    if (e.motivo === "scaduto") toast("Google Contatti: il collegamento è scaduto, ricollegalo dal menu", { ms: 5000 });
+    else console.warn("contatti", e);
+  });
   ensureMyName().catch((e) => console.warn("ensureMyName", e));
   materializeRecurring().catch((e) => console.warn("materializeRecurring", e));
 }

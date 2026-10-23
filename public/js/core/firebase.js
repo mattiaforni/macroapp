@@ -11,8 +11,8 @@ export const db = getFirestore(app);
 export const functions = getFunctions(app, functionsRegion);
 
 export const googleProvider = new GoogleAuthProvider();
-// L'accesso chiede solo nome ed email. Il permesso per Google Contatti si chiede a parte,
-// quando serve (core/contatti-google.js).
+// L'accesso chiede solo nome ed email. Il permesso per Google Contatti si dà a parte, una volta
+// sola, e lo conserva il server (core/contatti-google.js).
 
 // Cache offline: la lista della spesa deve funzionare anche al supermercato senza rete.
 enableIndexedDbPersistence(db).catch((err) => {

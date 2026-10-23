@@ -13,12 +13,15 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
   `ownerUid`, `householdId`, `visibility` (`shared` | `private`): vedi `docs/MODELLO-DATI.md`.
 - **Functions** in `functions/` (Node 24, europe-west1): `analyzeEntry` (agente del diario,
   provider AI intercambiabile in `src/ai/`), `bank` (onCall con `azione`: elenco banche, avvio e
-  conclusione del consenso, scollega, lettura a richiesta; `src/banking/enable.js`), `syncBank`
-  (lettura quotidiana alle 7:15). firebase-admin, agente e banca si importano dentro i gestori, non all'avvio.
+  conclusione del consenso, scollega, lettura a richiesta; `src/banking/enable.js`), `contatti` (Google
+  Contatti: collegamento e permessi di un'ora, `src/google/contatti.js`), `syncBank` (lettura
+  quotidiana alle 7:15). firebase-admin, agente e banca si importano dentro i gestori, non all'avvio.
 - **Pubblicazione**: push su `main` → `.github/workflows/deploy.yml` pubblica hosting,
   regole, indici e functions (secret `FIREBASE_SERVICE_ACCOUNT`). Si può rilanciare a mano.
 - **Segreti** in Secret Manager (ANTHROPIC_API_KEY, GEMINI_API_KEY, ENABLE_BANKING_*):
   li gestisce Mattia dalla console; dopo un aggiornamento serve un nuovo deploy.
+  GOOGLE_OAUTH_CLIENT invece lo scrive il deploy, copiando ID e secret del client web dalla
+  configurazione di Firebase Authentication (stesso client dell'accesso con Google).
 
 ## Mappa (public/js)
 
@@ -29,12 +32,12 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 | `core/ui.js` | `el()`, icone disegnate a mano (`D`), date, importi, pillole |
 | `core/db.js` | `create` (non aspetta il server, ritorna `{id, saved}`), `update`, `watchVisible`, `readVisible` |
 | `core/household.js` | casa, nomi dei membri (`memberNames`), `nomeDi`, `updateHousehold` (es. categorie del manuale) |
-| `core/rubrica.js` | voci del manuale in memoria, aggiornate in tempo reale: `trovaPersona`, `risolviPersone` (crea quelle che mancano), `nomiTask` |
-| `core/contatti-google.js` | Google Contatti in sola lettura (People API), permesso chiesto solo al momento dell'uso |
+| `core/rubrica.js` | voci del manuale in memoria, aggiornate in tempo reale: `trovaPersona`, `risolviPersone` (crea quelle che mancano, collegate a Google se il nome è univoco), `nomiTask`, `sincronizzaDaGoogle` (all'avvio) |
+| `core/contatti-google.js` | Google Contatti: collegamento una tantum (ritorno su `/google-contatti`), permesso di un'ora dal server, elenco in memoria per `cercaContatti` / `contattoUnico` |
 | `components/sheet.js` | foglio a tutta altezza: in alto indietro e titolo; in basso barra con le azioni secondarie a sinistra (anche un `div.foglio__piede` nel corpo finisce lì) e il pulsante principale a destra (`confirmLabel`, «Salva»), sopra la tastiera; il tasto indietro lo chiude |
 | `components/menu.js` | menu a sinistra a gruppi (Casa, Collegamenti, Account), come in Leghe Fantacalcio |
 | `components/proposals.js` | azioni proposte: `APPLICA` per tipo, `renderAzione` |
-| `components/persone.js` | scelta delle persone di un task dalla rubrica (pillole, suggerimenti, persone nuove) |
+| `components/persone.js` | scelta delle persone di un task: suggerimenti dalla rubrica e da Google Contatti, persone nuove |
 | `modules/*/index.js` | un modulo = `{ id, title, nav, icon, mount(container) → smonta }`, in `modules/registry.js` |
 | `modules/banca/index.js` | stato del collegamento (`bank_connections/{uid}` in tempo reale), scelta della banca, conclusione al ritorno da `/banca?code=…` (messo da parte in `app.js`), «Leggi ora», rinnovo, scollega |
 
@@ -105,11 +108,14 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
       `entry_reference` (deduplica), descrizioni dei movimenti (`descrizioneDi` in enable.js), MCC,
       quali conti espone la banca. La compagna, per collegare il suo conto, lo aggiunge con «Link
       accounts» nello stesso Control Panel (una sola app per la casa).
-- [ ] **Google Contatti, integrazione vera** (scelta di Mattia): permesso dato una volta e refresh token
-      conservato dal server (serve il client OAuth web: ID e secret in Secret Manager), ricerca nei
-      contatti mentre si scrive un nome (People API `searchContacts`), in rubrica solo le persone
-      collegate, numero aggiornato da `googleId`. Oggi c'è solo l'importazione manuale con un token
-      di un'ora (`core/contatti-google.js`), che Mattia ha trovato poco utile.
+- [x] **Google Contatti, integrazione vera**: permesso dato una volta (refresh token in `google_tokens`,
+      solo server), ricerca nei contatti mentre si scrive un nome (task, persona nuova del manuale),
+      in rubrica solo le persone collegate (`googleId`), telefono/mail/indirizzo aggiornati da Google
+      all'avvio e all'apertura della scheda. L'elenco si legge tutto (`connections`, in memoria) e si
+      filtra sul telefono: niente `searchContacts`, che ha una cache lenta ad aggiornarsi.
+      Da fare una volta (Mattia): aggiungere `https://macroapp-b9bd0.web.app/google-contatti` agli URI
+      di reindirizzamento del client «Web client (auto created by Google Service)». Se il permesso
+      scade dopo 7 giorni, la schermata di consenso OAuth è in modalità di test.
 - [ ] Riga di contesto per pagina, stile Leghe Fantacalcio (Task «2 in ritardo · 3 oggi»,
       Spese «Ottobre · X ti deve…»)
 - [ ] Pagina per appunti e bozze: le proposte `note` e `draft` confermate finiscono in `notes`,

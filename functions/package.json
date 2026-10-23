@@ -10,7 +10,7 @@
     "serve": "firebase emulators:start --only functions",
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log",
-    "lint": "node --check index.js && node --check src/ai/provider.js && node --check src/ai/claude.js && node --check src/ai/gemini.js && node --check src/banking/enable.js && node --check src/agent.js"
+    "lint": "node --check index.js && node --check src/ai/provider.js && node --check src/ai/claude.js && node --check src/ai/gemini.js && node --check src/banking/enable.js && node --check src/agent.js && node --check src/google/contatti.js"
   },
   "dependencies": {
     "firebase-admin": "^14.5.0",

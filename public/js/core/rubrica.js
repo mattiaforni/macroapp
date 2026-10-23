@@ -3,22 +3,32 @@
 // senza rifare query ogni volta.
 //
 // Le persone sono voci del manuale con type "person": un solo posto per i contatti.
-import { watchVisible, create, VIS } from "./db.js";
+// Una persona presa da Google Contatti ha `googleId`: telefono, mail e indirizzo si aggiornano da
+// Google (sincronizzaDaGoogle); il nome resta quello della rubrica.
+import { watchVisible, create, update, VIS } from "./db.js";
+import { session } from "./auth.js";
+import { contattiCollegati, caricaContatti, contattoUnico } from "./contatti-google.js";
 
 const COLL = "manual_entries";
 let voci = [];
 let stop = null;
 const ascoltatori = new Set();
+let segnaPronta;
+let pronta = new Promise((r) => { segnaPronta = r; });
 
 export function avviaRubrica() {
   if (stop) return;
   stop = watchVisible(COLL, { order: ["name", "asc"] }, (docs) => {
     voci = docs;
+    segnaPronta();
     ascoltatori.forEach((fn) => { try { fn(); } catch (e) { console.error(e); } });
   });
 }
 
-export function fermaRubrica() { stop?.(); stop = null; voci = []; }
+export function fermaRubrica() {
+  stop?.(); stop = null; voci = [];
+  pronta = new Promise((r) => { segnaPronta = r; });
+}
 
 /** fn() a ogni cambiamento; ritorna la funzione per smettere. */
 export function suRubrica(fn) { ascoltatori.add(fn); return () => ascoltatori.delete(fn); }
@@ -29,6 +39,7 @@ export const vociRubrica = () => voci;
 const norm = (s) => String(s || "").trim().toLowerCase().replace(/\s+/g, " ");
 
 export function personaDaId(id) { return voci.find((v) => v.id === id) || null; }
+export function personaDaGoogle(googleId) { return googleId ? persone().find((v) => v.googleId === googleId) || null : null; }
 
 /** Nome completo uguale, oppure nome proprio uguale se è l'unica persona con quel nome. */
 export function trovaPersona(nome) {
@@ -46,16 +57,66 @@ export function separaNomi(testo) {
   return String(testo || "").split(/\s*(?:,|;|\be\b|\bed\b)\s*/i).map((s) => s.trim()).filter(Boolean);
 }
 
-/** Id delle persone con quei nomi; quelle che non ci sono vengono aggiunte alla rubrica. */
+/** Campi di una voce della rubrica presi da un contatto Google. */
+export function datiDaContatto(c) {
+  return { name: c.name, phone: c.phone || "", email: c.email || "", address: c.address || "", googleId: c.googleId };
+}
+
+/** Crea una persona in rubrica (collegata a Google se c'è `google`) e ritorna il suo id. */
+function nuovaPersona(nome, visibility, google = null) {
+  const cap = nome.charAt(0).toUpperCase() + nome.slice(1);
+  const dati = { type: "person", name: cap, category: "", notes: "", phone: "", email: "", address: "", url: "",
+    ...(google ? { ...datiDaContatto(google), name: google.name, notes: google.org || "" } : {}) };
+  const nuovo = create(COLL, dati, visibility);
+  voci = [...voci, { id: nuovo.id, ...dati, visibility, ownerUid: session.user?.uid }]; // subito disponibile
+  return nuovo.id;
+}
+
+/**
+ * Id delle persone indicate; quelle che non ci sono vengono aggiunte alla rubrica.
+ * Ogni voce è un nome, oppure { name, google } quando è stato scelto un contatto Google, oppure
+ * { name, nuova: true } quando si è scelto esplicitamente un nome nuovo (niente Google).
+ * Un nome che non è in rubrica si collega a Google se corrisponde a un solo contatto
+ * (serve l'elenco dei contatti già letto: caricaContatti).
+ */
 export function risolviPersone(nomi, visibility = VIS.PRIVATE) {
-  return nomi.map((nome) => {
+  return nomi.map((v) => {
+    const nome = typeof v === "string" ? v : v.name;
+    const google = typeof v === "string" ? null : v.google;
+    if (google) return (personaDaGoogle(google.googleId) || {}).id || nuovaPersona(nome, visibility, google);
     const p = trovaPersona(nome);
     if (p) return p.id;
-    const cap = nome.charAt(0).toUpperCase() + nome.slice(1);
-    const nuovo = create(COLL, { type: "person", name: cap, category: "", notes: "", phone: "", email: "", address: "", url: "" }, visibility);
-    voci = [...voci, { id: nuovo.id, type: "person", name: cap, visibility }]; // subito disponibile
-    return nuovo.id;
+    const unico = v.nuova ? null : contattoUnico(nome);
+    const giàCollegata = unico && personaDaGoogle(unico.googleId);
+    if (giàCollegata) return giàCollegata.id;
+    return nuovaPersona(nome, visibility, unico);
   });
+}
+
+/**
+ * Recapiti delle persone collegate a Google, aggiornati con quelli di Google.
+ * Solo le voci proprie (vengono dal proprio account Google); un campo vuoto in Google non
+ * cancella quello della rubrica. Ritorna quante voci ha aggiornato.
+ */
+export async function sincronizzaDaGoogle() {
+  if (!contattiCollegati()) return 0;
+  const [contatti] = await Promise.all([caricaContatti(), pronta]);
+  const mio = session.user?.uid;
+  let n = 0;
+  for (const p of persone()) {
+    if (!p.googleId || p.ownerUid !== mio) continue;
+    const c = contatti.find((x) => x.googleId === p.googleId);
+    const diff = c ? differenzeDaGoogle(p, c) : {};
+    if (Object.keys(diff).length) { update(COLL, p.id, diff); n++; }
+  }
+  return n;
+}
+
+/** Campi da aggiornare su una voce collegata: { phone?, email?, address? }. */
+export function differenzeDaGoogle(p, c) {
+  const d = {};
+  for (const k of ["phone", "email", "address"]) if (c[k] && c[k] !== (p[k] || "")) d[k] = c[k];
+  return d;
 }
 
 export function nomiDa(ids = []) {
