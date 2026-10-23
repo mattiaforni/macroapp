@@ -9,7 +9,7 @@ import { el, icon, toast, fascia, vuoto, sceltaVisibilita, fmtDate, isoGiorno, t
 import { create, update, remove, watchVisible, readVisible, VIS } from "../../core/db.js";
 import { openSheet, campo } from "../../components/sheet.js";
 import { sceltaPersone } from "../../components/persone.js";
-import { nomiTask, suRubrica } from "../../core/rubrica.js";
+import { nomiTask, suRubrica, personaDaId, modiDiContatto, canaleDa } from "../../core/rubrica.js";
 
 export const id = "task";
 export const title = "Task";
@@ -47,6 +47,30 @@ function quando(t) {
     return { fascia: "Prossimi 7 giorni", testo: t.due === isoGiorno(domani) ? "domani" : GIORNI[d.getDay()] };
   }
   return { fascia: "Più avanti", testo: fmtDate(d) };
+}
+
+/** Link che apre l'app giusta (telefono, WhatsApp, Telegram, mail) senza aprire il task. */
+function linkContatto(m, nome, classe = "a.tondo") {
+  const web = m.href.startsWith("http");
+  return el(classe, {
+    href: m.href, target: web ? "_blank" : null, rel: web ? "noopener" : null,
+    "aria-label": `${m.etichetta} ${nome}`, title: `${m.etichetta} ${nome}`,
+    onclick: (e) => e.stopPropagation(),
+  }, icon(m.icona), classe.startsWith("a.pillola") ? m.etichetta : null);
+}
+
+/** Scorciatoia nella riga: se il task dice di chiamare/scrivere e la persona ha i recapiti. */
+function scorciatoia(t) {
+  if (t.done) return null;
+  const canale = canaleDa(t.text);
+  if (!canale) return null;
+  for (const id of t.peopleIds || []) {
+    const p = personaDaId(id);
+    const modi = modiDiContatto(p);
+    const m = modi.find((x) => x.canale === canale) || modi[0];
+    if (m) return linkContatto(m, p.name);
+  }
+  return null;
 }
 
 /** Foglio del task. prefill: { text, projectId, due, people, peopleIds, note, visibility }
@@ -97,6 +121,11 @@ export async function apriTask(esistente = null, prefill = {}, progettiNoti = nu
       el("div.campo", {}, el("label", {}, "Progetto"), sceltaProgetto),
       el("div.campo", {}, el("label", {}, "Scadenza"), el("div.segmenti", { style: "padding-top:0;position:relative" }, dataBtn, dataInput, togliData)),
       el("div.campo", {}, el("label", {}, "Persone"), persone.node),
+      // Recapiti delle persone già collegate: un tocco per chiamare o scrivere.
+      ...(t.peopleIds || []).map(personaDaId).filter((p) => modiDiContatto(p).length).map((p) =>
+        el("div.segmenti", { style: "padding-top:0;margin:-8px 0 14px;flex-wrap:wrap;align-items:center" },
+          el("span.meta", { style: "margin-right:4px" }, p.name),
+          ...modiDiContatto(p).filter((m) => m.canale !== "sms").map((m) => linkContatto(m, p.name, "a.pillola")))),
       campo("Note", nota),
       el("div.campo", {}, el("label", {}, "Visibilità"), visWrap),
       esistente ? el("div.foglio__piede", {},
@@ -158,6 +187,7 @@ export function rigaTask(t, { progetti = [], conProgetto = true, apri } = {}) {
       el("b", {}, t.text),
       sotto.length ? el("span", { class: q.tardi ? "tardi" : "" }, ...sotto) : null,
     ),
+    scorciatoia(t),
     el("button.spunta", {
       type: "button", "aria-label": t.done ? "Riapri" : "Fatto",
       onclick: (e) => { e.stopPropagation(); update(TASKS, t.id, { done: !t.done, doneAt: t.done ? null : new Date() }); },

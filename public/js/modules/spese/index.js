@@ -16,6 +16,7 @@ import { create, createWithId, update, remove, watchVisible, readVisible, VIS } 
 import { session } from "../../core/auth.js";
 import { getHousehold, nomeDi } from "../../core/household.js";
 import { openSheet } from "../../components/sheet.js";
+import { richiesto } from "../../core/router.js";
 
 export const id = "spese";
 export const title = "Spese";
@@ -211,6 +212,7 @@ function apriPareggio(netto, altro) {
       }, VIS.SHARED);
       toast("Pareggio registrato");
     },
+    confirmLabel: "Registra",
   });
 }
 
@@ -328,6 +330,10 @@ export function mount(container) {
 
   container.append(testa, elenco, piu);
   getHousehold().then((x) => { h = x; render(); });
+  // Dal menu: «Spese ricorrenti» apre subito il foglio.
+  if (richiesto("spese", "ricorrenti")) {
+    Promise.all([readVisible(REC, { order: ["createdAt", "desc"] }), getHousehold()]).then(([m, x]) => apriRicorrenti(m, x));
+  }
   const stop1 = watchVisible(COLL, { order: ["date", "desc"], max: 400 }, (docs) => { spese = docs; render(); });
   const stop2 = watchVisible(REC, { order: ["createdAt", "desc"] }, (docs) => { modelli = docs; render(); });
   return () => { stop1(); stop2(); piu.remove(); };

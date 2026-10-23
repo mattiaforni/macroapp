@@ -8,13 +8,14 @@ import { el, icon, toast, fascia, vuoto, sceltaVisibilita, iconaDa, fab } from "
 import { create, update, remove, watchVisible, readVisible, VIS } from "../../core/db.js";
 import { getHousehold, updateHousehold } from "../../core/household.js";
 import { checkRedirectResult } from "../../core/auth.js";
+import { richiesto } from "../../core/router.js";
 import { permessoContatti, leggiContatti, ritornoDaGoogle } from "../../core/contatti-google.js";
 import { openSheet, campo } from "../../components/sheet.js";
 import { rigaTask } from "../task/index.js";
 
 export const id = "manuale";
 export const title = "Manuale";
-export const nav = true;
+export const nav = false; // dal menu a sinistra
 const navIcon = "manuale";
 export { navIcon as icon };
 
@@ -289,6 +290,9 @@ export function mount(container) {
   let filtro = "";
   let segmento = "tutto";
   try { segmento = localStorage.getItem(CHIAVE_SEGMENTO) || "tutto"; } catch (e) {}
+  // Dal menu: categorie o Google Contatti si aprono subito, sulla sezione giusta.
+  if (richiesto("manuale", "categorie")) { segmento = "negozi"; apriCategorie(); }
+  if (richiesto("manuale", "contatti")) { segmento = "persone"; apriImporta(); }
 
   const cerca = el("input.linea-input", { placeholder: "Cerca: nome, categoria, note", style: "margin-top:14px",
     oninput: (e) => { filtro = e.target.value.toLowerCase(); render(); } });

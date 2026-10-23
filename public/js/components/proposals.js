@@ -16,7 +16,7 @@ import { session } from "../core/auth.js";
 import { aggiungiVoci } from "../modules/lista/index.js";
 import { risolviProgetto } from "../modules/task/index.js";
 import { categoria } from "../modules/spese/index.js";
-import { separaNomi, risolviPersone, nomiDa, trovaPersona } from "../core/rubrica.js";
+import { separaNomi, risolviPersone, nomiDa, trovaPersona, numeroInternazionale } from "../core/rubrica.js";
 
 const COLL = "proposals";
 
@@ -106,21 +106,13 @@ async function copia(testo) {
   catch (e) { toast("Non riesco a copiare da qui"); }
 }
 
-/** Numero per WhatsApp: solo cifre, con il prefisso italiano se manca. */
-function numeroWhatsApp(tel) {
-  let n = String(tel || "").replace(/[^\d+]/g, "");
-  if (n.startsWith("+")) return n.slice(1);
-  if (n.startsWith("00")) return n.slice(2);
-  return n.length === 10 && n.startsWith("3") ? `39${n}` : n;
-}
-
 function bozza(x) {
   const corpo = x.body || "";
   const mail = x.channel === "email";
   // Il destinatario può essere un nome: se è in rubrica, si usano la sua mail o il suo telefono.
   const persona = x.to && !x.to.includes("@") ? trovaPersona(x.to) : null;
   const a = x.to?.includes("@") ? x.to : persona?.email || "";
-  const wa = numeroWhatsApp(persona?.phone);
+  const wa = numeroInternazionale(persona?.phone);
   const href = mail
     ? `mailto:${encodeURIComponent(a)}?subject=${encodeURIComponent(x.subject || "")}&body=${encodeURIComponent(corpo)}`
     : `https://wa.me/${wa}?text=${encodeURIComponent(corpo)}`;

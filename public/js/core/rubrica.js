@@ -70,3 +70,40 @@ export function nomiTask(t) {
   if (ids.length && nomi.length === ids.length) return nomi.join(", ");
   return t.people || nomi.join(", ");
 }
+
+/** Numero per WhatsApp e Telegram: solo cifre, con il prefisso italiano se manca. */
+export function numeroInternazionale(tel) {
+  const n = String(tel || "").replace(/[^\d+]/g, "");
+  if (!n) return "";
+  if (n.startsWith("+")) return n.slice(1);
+  if (n.startsWith("00")) return n.slice(2);
+  return n.length === 10 && n.startsWith("3") ? `39${n}` : n;
+}
+
+/**
+ * Modi di contattare una persona della rubrica: [{ canale, etichetta, icona, href }].
+ * Telegram dal numero funziona solo se la persona si lascia trovare col numero.
+ */
+export function modiDiContatto(p) {
+  if (!p) return [];
+  const n = numeroInternazionale(p.phone);
+  return [
+    p.phone && { canale: "telefono", etichetta: "Chiama", icona: "telefono", href: `tel:${String(p.phone).replace(/\s+/g, "")}` },
+    n && { canale: "whatsapp", etichetta: "WhatsApp", icona: "messaggio", href: `https://wa.me/${n}` },
+    n && { canale: "telegram", etichetta: "Telegram", icona: "telegram", href: `https://t.me/+${n}` },
+    p.phone && { canale: "sms", etichetta: "SMS", icona: "messaggio", href: `sms:${String(p.phone).replace(/\s+/g, "")}` },
+    p.email && { canale: "mail", etichetta: "Mail", icona: "mail", href: `mailto:${p.email}` },
+  ].filter(Boolean);
+}
+
+/** Il canale che il testo di un task suggerisce: «chiama» → telefono, «scrivi su Telegram» → telegram… */
+export function canaleDa(testo) {
+  const t = String(testo || "").toLowerCase();
+  if (/telegram/.test(t)) return "telegram";
+  if (/whats ?app|wa\b/.test(t)) return "whatsapp";
+  if (/\bmail\b|e-?mail|posta/.test(t)) return "mail";
+  if (/\bsms\b/.test(t)) return "sms";
+  if (/messaggi|scriv|rispond|manda/.test(t)) return "whatsapp";
+  if (/chiam|telefon|sentire|senti\b|contatt/.test(t)) return "telefono";
+  return null;
+}

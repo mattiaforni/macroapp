@@ -57,7 +57,7 @@ function apriNota({ esistente = null, testo = "", onSalva }) {
     title: esistente ? "Nota" : "Nuova nota",
     body: [
       el("div.taccuino", {}, area),
-      el("p.meta", { style: "margin-top:6px" }, "Per la voce usa il microfono della tastiera. La spunta salva."),
+      el("p.meta", { style: "margin-top:6px" }, "Per la voce usa il microfono della tastiera."),
       esistente ? null : el("div", { style: "margin-top:16px" },
         el("div.etichetta-campo", {}, "Oppure trasformala subito in"),
         el("div.segmenti", { style: "padding-top:4px;flex-wrap:wrap" },

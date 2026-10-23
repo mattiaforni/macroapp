@@ -38,6 +38,7 @@
   --r: 10px;
   --r-g: 16px;
   --ombra: 0 1px 2px rgba(31,31,28,.05), 0 10px 30px -18px rgba(31,31,28,.4);
+  --velo: rgba(31,31,28,.32);
 
   --ui: "Instrument Sans", system-ui, -apple-system, sans-serif;
   --display: "Instrument Serif", Georgia, serif;
@@ -70,6 +71,7 @@
   --su-tessera: #FFFFFF;
 
   --ombra: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.7);
+  --velo: rgba(0,0,0,.5);
   color-scheme: dark;
 }
 
@@ -164,6 +166,7 @@ svg { flex: none; }
 .pillola svg { width: 15px; height: 15px; }
 .pillola.on { background: var(--inchiostro); border-color: var(--inchiostro); color: var(--carta); }
 .pillola--accento { border-color: var(--accento); color: var(--accento); background: transparent; }
+a.pillola { text-decoration: none; }
 
 .etichetta {
   display: inline-block; font-size: 10.5px; font-weight: 600; padding: 2px 7px; border-radius: 4px;
@@ -256,7 +259,7 @@ svg { flex: none; }
 /* ───────────── Foglio (pannello a tutta altezza) ───────────── */
 
 .foglio {
-  position: fixed; inset: 0; z-index: 700; background: var(--foglio);
+  position: fixed; inset: 0; bottom: var(--tastiera, 0px); z-index: 700; background: var(--foglio);
   display: flex; flex-direction: column; animation: sale .18s ease;
 }
 @keyframes sale { from { transform: translateY(16px); opacity: .7; } to { transform: none; opacity: 1; } }
@@ -268,6 +271,16 @@ svg { flex: none; }
 .foglio__corpo { flex: 1; overflow-y: auto; padding: 8px 20px calc(30px + env(safe-area-inset-bottom)); overscroll-behavior: contain; }
 .foglio__corpo > * { max-width: 640px; margin-left: auto; margin-right: auto; }
 .foglio__piede { display: flex; gap: 10px; justify-content: space-between; align-items: center; margin-top: 26px; }
+/* Barra delle azioni in basso: secondarie a sinistra, la principale a destra sotto il pollice. */
+.foglio__barra {
+  display: flex; align-items: center; gap: 10px; flex: none;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--linea); background: var(--foglio);
+}
+.foglio__secondarie { flex: 1; min-width: 0; display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+.foglio__secondarie .btn { background: none; border-color: transparent; padding: 10px 8px; color: var(--inchiostro-2); }
+.foglio__secondarie .btn--pericolo { color: var(--frutto); }
+.btn--conferma { height: 50px; min-width: 132px; padding: 0 22px; font-size: 16px; flex: none; }
+.btn--conferma svg { width: 19px; height: 19px; }
 @media (min-width: 760px) {
   .foglio { inset: auto; left: 50%; top: 6vh; transform: translateX(-50%); width: 620px; max-height: 88vh;
     border-radius: 20px; box-shadow: var(--ombra); border: 1px solid var(--linea); }
@@ -339,6 +352,30 @@ svg { flex: none; }
 .bozza { margin-top: 6px; padding: 10px 12px; background: var(--foglio); border-radius: 8px; font-size: 14px; white-space: pre-wrap; }
 .bozza__oggetto { font-weight: 600; margin-bottom: 4px; }
 .bozza__azioni { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+
+/* ───────────── Menu a sinistra ───────────── */
+
+.testata__menu { margin-left: -8px; }
+.menu { position: fixed; inset: 0; z-index: 650; background: var(--velo); }
+.menu__pannello {
+  position: absolute; top: 0; bottom: 0; left: 0; width: min(84vw, 330px); overflow-y: auto;
+  background: var(--foglio); box-shadow: var(--ombra); transform: translateX(-100%); transition: transform .18s ease;
+  padding: calc(18px + env(safe-area-inset-top)) 0 calc(20px + env(safe-area-inset-bottom));
+}
+.menu__pannello.aperto { transform: none; }
+.menu__testa { display: flex; flex-direction: column; gap: 1px; padding: 4px 20px 14px; border-bottom: 1px solid var(--linea); }
+.menu__testa b { font-size: 27px; font-weight: 400; line-height: 1.1; margin-bottom: 3px; }
+.menu__testa span { font-size: 13px; color: var(--inchiostro-2); }
+.menu__testa .btn { align-self: flex-start; margin: 8px 0 0 -6px; }
+.menu__gruppo { padding: 8px 0 2px; }
+.menu__titolo { font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--inchiostro-3); padding: 10px 20px 4px; }
+.menu__voce { width: 100%; display: flex; align-items: center; gap: 14px; padding: 12px 20px; font-size: 15.5px; text-align: left; }
+.menu__voce svg { width: 21px; height: 21px; color: var(--accento); }
+.menu__voce:active { background: var(--foglio-2); }
+.menu__voce small { margin-left: auto; font-size: 11.5px; color: var(--inchiostro-3); }
+.menu__voce[disabled] { cursor: default; color: var(--inchiostro-2); }
+.menu__voce[disabled] svg { color: var(--inchiostro-3); }
+.menu__piede { padding: 16px 20px 0; }
 
 /* ───────────── Varie ───────────── */
 

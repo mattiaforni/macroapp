@@ -23,13 +23,15 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 
 | file | cosa fa |
 |---|---|
-| `app.js` | guscio: accesso, barra in basso, router, service worker, ricorrenti all'avvio |
+| `app.js` | guscio: accesso, barra in basso, pulsante del menu, router, service worker, ricorrenti all'avvio |
+| `core/router.js` | router a hash; `vaiA(id, apri)` + `richiesto(id, apri)`: il menu chiede a una pagina di aprire un suo foglio |
 | `core/ui.js` | `el()`, icone disegnate a mano (`D`), date, importi, pillole |
 | `core/db.js` | `create` (non aspetta il server, ritorna `{id, saved}`), `update`, `watchVisible`, `readVisible` |
 | `core/household.js` | casa, nomi dei membri (`memberNames`), `nomeDi`, `updateHousehold` (es. categorie del manuale) |
 | `core/rubrica.js` | voci del manuale in memoria, aggiornate in tempo reale: `trovaPersona`, `risolviPersone` (crea quelle che mancano), `nomiTask` |
 | `core/contatti-google.js` | Google Contatti in sola lettura (People API), permesso chiesto solo al momento dell'uso |
-| `components/sheet.js` | foglio a tutta altezza (indietro, titolo, spunta); il tasto indietro lo chiude |
+| `components/sheet.js` | foglio a tutta altezza: in alto indietro e titolo; in basso barra con le azioni secondarie a sinistra (anche un `div.foglio__piede` nel corpo finisce lì) e il pulsante principale a destra (`confirmLabel`, «Salva»), sopra la tastiera; il tasto indietro lo chiude |
+| `components/menu.js` | menu a sinistra a gruppi (Casa, Collegamenti, Account), come in Leghe Fantacalcio |
 | `components/proposals.js` | azioni proposte: `APPLICA` per tipo, `renderAzione` |
 | `components/persone.js` | scelta delle persone di un task dalla rubrica (pillole, suggerimenti, persone nuove) |
 | `modules/*/index.js` | un modulo = `{ id, title, nav, icon, mount(container) → smonta }`, in `modules/registry.js` |
@@ -44,13 +46,18 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
    per scrivere. Invio salva appena hai scritto tutto ciò che è obbligatorio; se manca un campo
    obbligatorio, Invio ti porta lì. Quindi: spesa = descrizione → importo → salva; task, voce del
    manuale, progetto = Invio sul primo campo salva; lista = Invio aggiunge e resta aperto per la
-   prossima; nota del diario = Invio va a capo, salva la spunta. Nei campi facoltativi a scelta
+   prossima; nota del diario = Invio va a capo, salva il pulsante. Nei campi facoltativi a scelta
    (persone) Invio aggiunge, e a campo vuoto salva.
-3. Nuova collezione: blocco in `firestore.rules` + indici in `firestore.indexes.json`
+   **L'azione principale sta sempre in basso a destra** (zona del pollice destro): il + nelle pagine,
+   «Salva» nella barra dei fogli. In alto solo orientamento (indietro, titolo, menu).
+3. Navigazione: in basso le sezioni di tutti i giorni (Diario, Lista, Spese, Task); tutto il resto nel
+   menu a sinistra. L'app si apre sul Diario. Riferimento di Mattia per struttura ed ergonomia (non per
+   l'aspetto): l'app Leghe Fantacalcio.
+4. Nuova collezione: blocco in `firestore.rules` + indici in `firestore.indexes.json`
    (servono per `householdId+visibility+ordine` e `ownerUid+ordine`). Gli ordinamenti fini
    si fanno nel modulo, per non moltiplicare gli indici.
-4. Niente entra nei moduli dall'AI senza conferma: l'agente scrive solo `proposals`.
-5. Mai nel repo chiavi o dati personali.
+5. Niente entra nei moduli dall'AI senza conferma: l'agente scrive solo `proposals`.
+6. Mai nel repo chiavi o dati personali.
 
 ## Diagnosi delle functions
 
@@ -73,3 +80,29 @@ python3 prove/costruisci.py       # copia public/ con Firebase finto in memoria
 python3 prove/prova.py            # flusso completo in Chromium, schermate in prove/_schermate
 ```
 Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggiorna `prove/finto/firebase.js`.
+
+## Stato (23 ottobre 2026) e prossimi passi
+
+- [x] Pubblicazione automatica, accesso Google (anche da app installata), service worker
+- [x] Lista (stile Bring), Spese (stile Splitwise, ricorrenti, pareggio), Diario con agente, Task per
+      progetti con persone, Manuale con rubrica e categorie della casa
+- [x] Agente del diario funzionante (Sonnet, ~7 s): le proposte entrano nei moduli con la spunta
+- [x] Fogli con la barra in basso, menu a sinistra, apertura sul Diario, scorciatoie Chiama/WhatsApp/
+      Telegram sui task con una persona che ha il numero (`modiDiContatto`, `canaleDa` in rubrica.js)
+- [x] Pagine pubbliche `/privacy` e `/termini` (richieste da Enable Banking)
+- [ ] **Banca (Enable Banking)**: Mattia registra l'app in produzione (modalità ristretta, conti propri),
+      redirect `https://macroapp-b9bd0.web.app/banca`, e mette ENABLE_BANKING_APP_ID e
+      ENABLE_BANKING_PRIVATE_KEY (il .pem intero) in Secret Manager. Da costruire: due onCall
+      (avvio: `POST /auth` → URL della banca; chiusura: `POST /sessions` col `code` → conti in
+      `bank_connections`), la pagina `/banca` di ritorno, la voce «Banca» del menu (ora «in arrivo»),
+      poi la prova di `syncBank`. Le nuove onCall vanno aggiunte all'ultimo passo di `deploy.yml`.
+- [ ] **Google Contatti, integrazione vera** (scelta di Mattia): permesso dato una volta e refresh token
+      conservato dal server (serve il client OAuth web: ID e secret in Secret Manager), ricerca nei
+      contatti mentre si scrive un nome (People API `searchContacts`), in rubrica solo le persone
+      collegate, numero aggiornato da `googleId`. Oggi c'è solo l'importazione manuale con un token
+      di un'ora (`core/contatti-google.js`), che Mattia ha trovato poco utile.
+- [ ] Riga di contesto per pagina, stile Leghe Fantacalcio (Task «2 in ritardo · 3 oggi»,
+      Spese «Ottobre · X ti deve…»)
+- [ ] Pagina per appunti e bozze: le proposte `note` e `draft` confermate finiscono in `notes`,
+      che oggi nessuna pagina mostra
+- [ ] Identità visiva definitiva: da decidere con Mattia

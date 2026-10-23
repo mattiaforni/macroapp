@@ -161,6 +161,7 @@ function apriMiServe(getItems) {
       sugg,
     ],
     onConfirm: () => { aggiungi(); },
+    confirmLabel: "Fatto",
   });
 }
 

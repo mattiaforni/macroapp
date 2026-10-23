@@ -8,6 +8,7 @@ import { avviaRubrica, fermaRubrica } from "./core/rubrica.js";
 import { modules, navModules, DEFAULT_ROUTE } from "./modules/registry.js";
 import { renderOnboarding } from "./components/onboarding.js";
 import { closeSheet } from "./components/sheet.js";
+import { apriMenu, chiudiMenu } from "./components/menu.js";
 import { materializeRecurring } from "./modules/spese/index.js";
 import { VERSION } from "./version.js";
 
@@ -22,6 +23,7 @@ let routerStarted = false;
 let loginError = null; // errore dell'ultimo login con redirect, mostrato sotto il pulsante
 
 function renderLogin() {
+  menuBtn.hidden = true;
   clear(nav);
   clear(actions);
   title.textContent = "";
@@ -42,14 +44,17 @@ function renderNav(active) {
   ));
 }
 
-function renderActions(id) {
+// Azioni in testata per pagina: per ora nessuna (impostazioni e altro stanno nel menu).
+function renderActions() {
   clear(actions);
-  if (id !== "impostazioni") {
-    actions.append(el("a.tondo", { href: "#/impostazioni", "aria-label": "Impostazioni" }, icon("impostazioni")));
-  }
 }
 
+// Pulsante del menu a sinistra, prima del titolo: c'è solo quando si è dentro l'app.
+const menuBtn = el("button.tondo.tondo--piatto.testata__menu", { type: "button", "aria-label": "Menu", hidden: true, onclick: () => apriMenu() }, icon("menu"));
+title.before(menuBtn);
+
 function startApp() {
+  menuBtn.hidden = false;
   if (!routerStarted) {
     for (const m of modules) addRoute(m.id, m.mount);
     routerStarted = true;
@@ -58,6 +63,7 @@ function startApp() {
       fallback: DEFAULT_ROUTE,
       onChange: (id) => {
         closeSheet({ fromHistory: true });
+        chiudiMenu();
         const mod = modules.find((m) => m.id === id);
         title.textContent = mod?.title || "Macroapp";
         renderNav(id);
@@ -79,7 +85,7 @@ function startApp() {
 onSession((s) => {
   if (!s.user) { fermaRubrica(); renderLogin(); return; }
   if (s.error) {
-    clear(nav); clear(actions); title.textContent = "Errore";
+    menuBtn.hidden = true; clear(nav); clear(actions); title.textContent = "Errore";
     view.replaceChildren(
       el("div.vuoto", {},
         el("b", {}, "Qualcosa non va"),
@@ -91,7 +97,7 @@ onSession((s) => {
     return;
   }
   if (!s.householdId) {
-    clear(nav); clear(actions); title.textContent = "Benvenuto";
+    menuBtn.hidden = true; clear(nav); clear(actions); title.textContent = "Benvenuto";
     renderOnboarding(view);
     return;
   }

@@ -17,7 +17,10 @@ threading.Thread(target=srv.serve_forever, daemon=True).start()
 errors = []
 step = ["avvio"]
 def shot(pg, name): pg.screenshot(path=f"{OUT}/{name}.png")
-def conferma(pg): pg.click("#foglio button[aria-label='Conferma']")
+def conferma(pg): pg.click("#foglio .btn--conferma")
+def menu(pg, voce):
+    pg.click("button[aria-label='Menu']")
+    pg.click(f".menu__voce >> text={voce}")
 
 with sync_playwright() as p:
     b = p.chromium.launch()
@@ -32,8 +35,14 @@ with sync_playwright() as p:
         pg.click("text=Crea casa")
         pg.wait_for_selector(".schede a", timeout=6000)
 
+        # ── Si apre sul Diario ──
+        step[0] = "avvio sul diario"
+        pg.wait_for_selector(".schede a[aria-current='page'][href='#/diario']")
+        assert pg.locator(".schede a").count() == 4, "quattro sezioni in basso"
+
         # ── Lista: il + apre «Mi serve», Invio aggiunge e resta aperto ──
         step[0] = "lista"
+        pg.click(".schede a[href='#/lista']")
         pg.click("button.fab")
         inp = "#foglio input[aria-label='Aggiungi alla lista']"
         pg.wait_for_selector(inp)
@@ -101,8 +110,15 @@ with sync_playwright() as p:
         pg.wait_for_timeout(200)
         assert not pg.is_visible("#foglio"), "indietro chiude il foglio"
         pg.click("button.pillola >> text=Pareggia")
+        assert pg.inner_text("#foglio .btn--conferma").strip() == "Registra"
         conferma(pg)
         pg.wait_for_selector("text=siete in pari")
+        # Dal menu: «Spese ricorrenti» apre il foglio, anche stando già su Spese
+        menu(pg, "Spese ricorrenti")
+        pg.wait_for_selector("#foglio h2 >> text=Ricorrenti")
+        pg.click("#foglio button[aria-label='Indietro']")
+        pg.wait_for_timeout(200)
+        assert not pg.is_visible("#foglio")
 
         # ── Task: progetto leggero nella riga, persone dalla rubrica ──
         step[0] = "task"
@@ -148,7 +164,8 @@ with sync_playwright() as p:
         pg.route("https://people.googleapis.com/**", lambda r: r.fulfill(status=200, content_type="application/json",
             body='{"connections":[{"resourceName":"people/c1","names":[{"displayName":"Giulia Bianchi"}],"phoneNumbers":[{"value":"333 1234567"}]},'
                  '{"resourceName":"people/c2","names":[{"displayName":"Marco"}],"emailAddresses":[{"value":"marco@example.com"}]}]}'))
-        pg.click(".schede a[href='#/manuale']")
+        menu(pg, "Manuale e rubrica")
+        pg.wait_for_selector("h1 >> text=Manuale")
         pg.click("button.fab")
         pg.fill("#foglio input[placeholder='Nome']", "Ferramenta Rossi")
         pg.click("#foglio button.pillola >> text=Vernici e ferramenta")
@@ -188,14 +205,32 @@ with sync_playwright() as p:
         pg.wait_for_selector("#foglio .riga >> text=già in rubrica")
         pg.click("#foglio button[aria-label='Indietro']")
         pg.wait_for_selector(".riga >> text=Giulia Bianchi")
-        # Scheda di Marco: i suoi task, e la mail per le bozze
+        # Scheda di Marco: i suoi task, e la mail per le bozze (prima un numero per le scorciatoie)
         pg.click(".riga >> text=Marco")
         pg.wait_for_selector("#foglio >> text=Task con questa persona")
         assert pg.locator("#foglio .riga").count() == 2, "due task aperti con Marco"
         pg.fill("#foglio input[type='email']", "marco@example.com")
+        pg.fill("#foglio input[type='tel']", "333 1112233")
         pg.wait_for_timeout(300)
         shot(pg, "6-persona")
         conferma(pg)
+        # «Chiedere le chiavi» non dice di chiamare: niente scorciatoia; un task «Chiamare Marco» sì
+        pg.click(".schede a[href='#/task']")
+        pg.click("button.fab")
+        pg.fill("#foglio input[placeholder=\"Cosa c'è da fare\"]", "Chiamare Marco per la sala")
+        pg.fill("#foglio input[placeholder='Scrivi un nome']", "marco")
+        pg.keyboard.press("Enter")
+        pg.keyboard.press("Enter")
+        pg.wait_for_selector(".riga >> text=Chiamare Marco per la sala")
+        tel = pg.locator(".riga", has_text="Chiamare Marco per la sala").locator("a.tondo")
+        assert tel.get_attribute("href") == "tel:3331112233", tel.get_attribute("href")
+        assert pg.locator(".riga", has_text="Chiedere le chiavi").locator("a.tondo").count() == 0
+        pg.click(".riga >> text=Chiamare Marco per la sala")
+        wa = pg.locator("#foglio a.pillola", has_text="WhatsApp").get_attribute("href")
+        assert wa == "https://wa.me/393331112233", wa
+        pg.wait_for_timeout(250)
+        shot(pg, "6b-task-contatti")
+        pg.click("#foglio button[aria-label='Indietro']")
         pg.wait_for_timeout(200)
         shot(pg, "7-manuale-persone")
 
@@ -232,7 +267,7 @@ with sync_playwright() as p:
         pg.wait_for_selector(".riga >> text=Chiamare l'idraulico")
         assert pg.locator("button.pillola", has_text="Circolo").count() == 1, "il progetto non deve duplicarsi"
         assert "Marco" in pg.locator(".riga", has_text="Preparare l'assemblea").inner_text()
-        pg.click(".schede a[href='#/manuale']")
+        menu(pg, "Manuale e rubrica")
         pg.click("button.pillola >> text=Persone")
         pg.wait_for_selector(".riga >> text=Giulia Bianchi")
         assert pg.locator(".riga", has_text="Marco").count() == 1, "la proposta non deve duplicare Marco"
@@ -241,7 +276,10 @@ with sync_playwright() as p:
 
         # ── Tema scuro ──
         step[0] = "tema"
-        pg.click("a[aria-label='Impostazioni']")
+        pg.click("button[aria-label='Menu']")
+        pg.wait_for_timeout(250)
+        shot(pg, "10-menu")
+        pg.click(".menu__voce >> text=Casa, tema e account")
         pg.click("button.pillola >> text=Scuro")
         shot(pg, "6-impostazioni")
         pg.click(".schede a[href='#/lista']")
