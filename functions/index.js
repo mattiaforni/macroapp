@@ -34,6 +34,15 @@ function getDb() {
  * Agente: legge una nota del diario (solo del chiamante) e scrive proposte nella coda.
  * Ritorna { proposals: n }.
  */
+/** Errore del provider AI → [codice, messaggio leggibile]. */
+function spiegaErrore(msg = "") {
+  if (/credit balance/i.test(msg)) return ["resource-exhausted", "Credito dell'API Anthropic esaurito: ricaricalo da Billing nella console"];
+  if (/anthropic-workspace-id|not scoped to a workspace/i.test(msg)) return ["failed-precondition", "La chiave non è legata a un workspace: creane una scegliendo il workspace"];
+  if (/usage limits/i.test(msg)) return ["resource-exhausted", "Limite di spesa dell'API raggiunto"];
+  if (/\b(429|529)\b|overloaded|rate_limit/i.test(msg)) return ["unavailable", "AI occupata in questo momento: riprova tra poco"];
+  return ["internal", `Analisi non riuscita (${msg.slice(0, 160)})`];
+}
+
 export const analyzeEntry = onCall(
   { secrets: [ANTHROPIC_API_KEY, GEMINI_API_KEY], timeoutSeconds: 60 },
   async (req) => {
@@ -60,7 +69,9 @@ export const analyzeEntry = onCall(
       if (/\b401\b|authentication|invalid x-api-key/i.test(err.message)) {
         throw new HttpsError("failed-precondition", "Chiave dell'AI non configurata");
       }
-      throw new HttpsError("internal", "Analisi non riuscita");
+      // Gli altri errori arrivano al telefono in chiaro: i log delle funzioni non li legge nessuno.
+      const [codice, testo] = spiegaErrore(err.message);
+      throw new HttpsError(codice, testo);
     }
   },
 );

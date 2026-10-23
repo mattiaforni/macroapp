@@ -110,9 +110,10 @@ export function mount(container) {
       if (!n) toast("Nessuna azione da proporre");
     } catch (err) {
       console.warn("analisi", err);
-      scrivi(CHIAVE_AI, "off");
-      update(COLL, entryId, { analysisError: err.code || err.message || "errore" });
-      toast(err.code === "functions/failed-precondition" ? "AI non ancora collegata: la nota è salvata" : "Analisi non riuscita: la nota è salvata");
+      const chiave = err.code === "functions/failed-precondition" && /non configurata/.test(err.message || "");
+      if (chiave) scrivi(CHIAVE_AI, "off");
+      update(COLL, entryId, { analysisError: err.message || err.code || "errore" });
+      toast(chiave ? "AI non ancora collegata: la nota è salvata" : `${err.message || "Analisi non riuscita"}. La nota è salvata.`, { ms: 7000 });
     } finally {
       inCorso.delete(entryId);
       disegnaStato();
