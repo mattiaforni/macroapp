@@ -57,7 +57,9 @@ Flusso di collegamento (da implementare come callable + pagina di ritorno):
 
 ## Integrazioni previste
 
-- **Google Contatti** (People API): scope aggiuntivo sul provider Google, nessuna rubrica parallela; l'agente può proporre la creazione di un contatto, scritto direttamente in Google.
+- **Google Contatti** (People API, sola lettura): il permesso si chiede solo quando tocchi «Prendi da Google Contatti».
+  Nessuna copia in blocco: in rubrica (voci `person` del manuale) entrano solo le persone che scegli, collegate
+  con `googleId`. Le persone dei task stanno nella stessa rubrica. Va attivata una volta la People API nel progetto Google Cloud.
 - **Registrazione audio** del diario: `transcribe()` è già prevista (Gemini accetta audio nativo); oggi si usa la dettatura da tastiera.
 - **Notifiche push** (FCM): lista condivisa, consensi bancari in scadenza.
 - **Web Share Target**: già dichiarato nel manifest; il contenuto condiviso diventa una proposta di appunto.

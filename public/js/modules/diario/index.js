@@ -6,7 +6,8 @@
 // journal_entries { text, analyzed, analyzedAt, analysisError }
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-functions.js";
 import { functions } from "../../core/firebase.js";
-import { el, icon, toast, fascia, vuoto, toDate, giornoRelativo } from "../../core/ui.js";
+import { el, icon, toast, fascia, vuoto, toDate, giornoRelativo, fab } from "../../core/ui.js";
+import { openSheet } from "../../components/sheet.js";
 import { create, update, remove, watchMine, readVisible, VIS } from "../../core/db.js";
 import { watchPending, renderAzione } from "../../components/proposals.js";
 import { aggiungiVoci } from "../lista/index.js";
@@ -28,17 +29,60 @@ const analyzeEntry = httpsCallable(functions, "analyzeEntry");
 const leggi = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch (e) { return d; } };
 const scrivi = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
 
+/**
+ * Foglio della nota: textarea a tutta larghezza. La spunta salva; le pillole trasformano
+ * subito il testo in task, voce di lista, spesa o voce del manuale, senza passare dall'AI.
+ * Invio va a capo: una nota può avere più paragrafi.
+ */
+function apriNota({ esistente = null, testo = "", onSalva }) {
+  const area = el("textarea", { placeholder: "Scrivi o detta…", rows: 6, autofocus: true });
+  area.value = esistente?.text || testo;
+
+  function trasforma(tipo) {
+    const text = area.value.trim();
+    if (!text) { toast("Scrivi prima qualcosa"); area.focus(); return; }
+    if (tipo === "lista") {
+      readVisible("shopping_items", { order: ["createdAt", "asc"] }).then((voci) => aggiungiVoci(text, voci));
+      toast("Aggiunto alla lista"); sheet.close(); return;
+    }
+    if (tipo === "task") apriTask(null, { text });
+    if (tipo === "spesa") {
+      const m = text.match(/(\d+(?:[.,]\d{1,2})?)\s*(?:€|euro)?/i);
+      apriSpesa(null, { description: text.replace(m?.[0] || "", "").replace(/\s+/g, " ").trim(), amount: m ? m[1] : "" });
+    }
+    if (tipo === "manuale") apriVoceManuale(null, { name: text });
+  }
+
+  const sheet = openSheet({
+    title: esistente ? "Nota" : "Nuova nota",
+    body: [
+      el("div.taccuino", {}, area),
+      el("p.meta", { style: "margin-top:6px" }, "Per la voce usa il microfono della tastiera. La spunta salva."),
+      esistente ? null : el("div", { style: "margin-top:16px" },
+        el("div.etichetta-campo", {}, "Oppure trasformala subito in"),
+        el("div.segmenti", { style: "padding-top:4px;flex-wrap:wrap" },
+          el("button.pillola", { type: "button", onclick: () => trasforma("task") }, icon("task"), "Task"),
+          el("button.pillola", { type: "button", onclick: () => trasforma("lista") }, icon("lista"), "Lista"),
+          el("button.pillola", { type: "button", onclick: () => trasforma("spesa") }, icon("spese"), "Spesa"),
+          el("button.pillola", { type: "button", onclick: () => trasforma("manuale") }, icon("negozio"), "Manuale"),
+        ),
+      ),
+    ],
+    onConfirm: () => {
+      const text = area.value.trim();
+      if (!text) { area.focus(); return false; }
+      onSalva(text);
+    },
+  });
+}
+
 export function mount(container) {
   let note = [];
   let proposte = [];
   const inCorso = new Set(); // note in analisi
   let auto = leggi(CHIAVE_AUTO, "1") === "1";
 
-  const area = el("textarea", { placeholder: "Scrivi o detta…", rows: 4 });
-  const condiviso = sessionStorage.getItem("macroapp.share");
-  if (condiviso) { area.value = condiviso; sessionStorage.removeItem("macroapp.share"); }
-
-  const stato = el("div.stato-ai");
+  const stato = el("div.stato-ai", { style: "margin-top:0" });
   const disegnaStato = () => {
     const ai = leggi(CHIAVE_AI, "");
     stato.className = `stato-ai${ai === "on" ? " on" : ""}`;
@@ -68,7 +112,7 @@ export function mount(container) {
       console.warn("analisi", err);
       scrivi(CHIAVE_AI, "off");
       update(COLL, entryId, { analysisError: err.code || err.message || "errore" });
-      toast("Analisi non riuscita: la nota è salvata");
+      toast(err.code === "functions/failed-precondition" ? "AI non ancora collegata: la nota è salvata" : "Analisi non riuscita: la nota è salvata");
     } finally {
       inCorso.delete(entryId);
       disegnaStato();
@@ -76,38 +120,18 @@ export function mount(container) {
     }
   }
 
-  function salva() {
-    const text = area.value.trim();
-    if (!text) { area.focus(); return; }
-    area.value = "";
-    const { id: entryId, saved } = create(COLL, { text, analyzed: false }, VIS.PRIVATE);
-    if (auto) analizza(entryId, saved);
+  function nuova(testo = "") {
+    apriNota({
+      testo,
+      onSalva: (text) => {
+        const { id: entryId, saved } = create(COLL, { text, analyzed: false }, VIS.PRIVATE);
+        if (auto) analizza(entryId, saved);
+      },
+    });
   }
-
-  // Trasforma a mano il testo scritto in un elemento, senza passare dall'AI.
-  function trasforma(tipo) {
-    const text = area.value.trim();
-    if (!text) { toast("Scrivi prima qualcosa"); area.focus(); return; }
-    if (tipo === "lista") {
-      readVisible("shopping_items", { order: ["createdAt", "asc"] }).then((voci) => aggiungiVoci(text, voci));
-      toast("Aggiunto alla lista"); area.value = ""; return;
-    }
-    if (tipo === "task") apriTask(null, { text });
-    if (tipo === "spesa") {
-      const m = text.match(/(\d+(?:[.,]\d{1,2})?)\s*(?:€|euro)?/i);
-      apriSpesa(null, { description: text.replace(m?.[0] || "", "").replace(/\s+/g, " ").trim(), amount: m ? m[1] : "" });
-    }
-    if (tipo === "manuale") apriVoceManuale(null, { name: text });
-  }
-
-  const azioniVeloci = el("div.segmenti", { style: "padding-top:8px" },
-    el("button.pillola", { type: "button", onclick: () => trasforma("task") }, icon("task"), "Task"),
-    el("button.pillola", { type: "button", onclick: () => trasforma("lista") }, icon("lista"), "Lista"),
-    el("button.pillola", { type: "button", onclick: () => trasforma("spesa") }, icon("spese"), "Spesa"),
-    el("button.pillola", { type: "button", onclick: () => trasforma("manuale") }, icon("negozio"), "Manuale"),
-  );
 
   const elenco = el("div");
+  const piu = fab("Nuova nota", () => nuova());
 
   function nota(n) {
     const d = toDate(n.createdAt) || new Date();
@@ -117,21 +141,21 @@ export function mount(container) {
       el("div.nota__testa", {},
         el("span", {}, d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })),
         n.analyzed && !mie.length ? el("span", {}, "· analizzata") : null,
-        n.analysisError && !n.analyzed ? el("span", { style: "color:var(--frutto)" }, "· analisi non riuscita") : null,
+        n.analysisError && !n.analyzed ? el("span", { style: "color:var(--frutto)" }, "· non analizzata") : null,
         el("span.spazio"),
         el("button.btn.btn--piatto", { disabled: analisi, onclick: () => analizza(n.id) },
           icon("scintilla"), analisi ? "Analizzo…" : n.analyzed ? "Rianalizza" : "Analizza"),
         el("button.tondo.tondo--piatto", { "aria-label": "Elimina nota",
           onclick: () => { remove(COLL, n.id); toast("Nota eliminata"); } }, icon("cestino")),
       ),
-      el("div.nota__testo", {}, n.text),
+      el("div.nota__testo", { onclick: () => apriNota({ esistente: n, onSalva: (text) => update(COLL, n.id, { text }) }) }, n.text),
       mie.length ? el("div.azioni-ai", {}, ...mie.map(renderAzione)) : null,
     );
   }
 
   function render() {
     if (!note.length) {
-      elenco.replaceChildren(vuoto("Il diario è vuoto", "Scrivi o detta qualcosa: un'idea, cosa devi fare, cosa hai speso. Le note sono visibili solo a te."));
+      elenco.replaceChildren(vuoto("Il diario è vuoto", "Tocca + e scrivi o detta: un'idea, cosa devi fare, cosa hai speso. Le note sono visibili solo a te."));
       return;
     }
     const nodi = [];
@@ -145,20 +169,16 @@ export function mount(container) {
   }
 
   container.append(
-    el("div.taccuino", {},
-      area,
-      el("p.meta", { style: "margin-top:6px" }, "Per la voce usa il microfono della tastiera."),
-      el("div.taccuino__azioni", {},
-        autoBtn,
-        el("button.btn.btn--primario", { type: "button", onclick: salva }, "Salva nota"),
-      ),
-      azioniVeloci,
-      stato,
-    ),
+    el("div.segmenti", { style: "align-items:center;justify-content:space-between" }, stato, autoBtn),
     elenco,
+    piu,
   );
+
+  // Testo condiviso da un'altra app: apre subito il foglio con il testo dentro.
+  const condiviso = sessionStorage.getItem("macroapp.share");
+  if (condiviso) { sessionStorage.removeItem("macroapp.share"); setTimeout(() => nuova(condiviso), 0); }
 
   const stop1 = watchMine(COLL, { max: 100 }, (docs) => { note = docs; render(); });
   const stop2 = watchPending((docs) => { proposte = docs; render(); });
-  return () => { stop1(); stop2(); };
+  return () => { stop1(); stop2(); piu.remove(); };
 }

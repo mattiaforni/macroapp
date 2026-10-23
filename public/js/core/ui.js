@@ -99,6 +99,11 @@ export function sceltaVisibilita(value, onChange) {
   return wrap;
 }
 
+/** Il "+" in basso a destra: lo stesso in ogni pagina. */
+export function fab(label, onclick) {
+  return el("button.fab.fab--tondo", { type: "button", "aria-label": label, title: label, onclick }, icon("piu"));
+}
+
 export function fascia(testo, extra) {
   return el("div.fascia", {}, el("span", {}, testo), extra || null);
 }
@@ -128,6 +133,7 @@ const D = {
   giu: '<path d="m6 9 6 6 6-6"/>',
   calendario: '<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
   ripeti: '<path d="M4 11V9.5A3.5 3.5 0 0 1 7.5 6H19l-3-3"/><path d="M20 13v1.5a3.5 3.5 0 0 1-3.5 3.5H5l3 3"/>',
+  persona: '<circle cx="12" cy="8.2" r="3.4"/><path d="M5.5 19.5c.7-3.5 3.3-5.4 6.5-5.4s5.8 1.9 6.5 5.4"/>',
   persone: '<circle cx="9" cy="8.5" r="3"/><path d="M3.5 19c.6-3 2.8-4.8 5.5-4.8s4.9 1.8 5.5 4.8"/><path d="M15.5 5.8a3 3 0 0 1 0 5.4M17.5 14.6c1.6.6 2.7 2.1 3 4.4"/>',
   copia: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>',
   mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3.5 6.5 8.5 7 8.5-7"/>',

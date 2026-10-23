@@ -10,7 +10,7 @@
 // se entrambi i telefoni ci provano, la seconda volta non succede niente.
 import {
   el, icon, iconaDa, toast, fascia, vuoto, toDate, fmtMoney, parseImporto, meseBreve, meseLungo,
-  isoGiorno, stessoGiorno, fmtDate,
+  isoGiorno, stessoGiorno, fmtDate, fab,
 } from "../../core/ui.js";
 import { create, createWithId, update, remove, watchVisible, readVisible, VIS } from "../../core/db.js";
 import { session } from "../../core/auth.js";
@@ -289,7 +289,7 @@ export function mount(container) {
 
   const testa = el("div");
   const elenco = el("div");
-  const fab = el("button.fab", { type: "button", onclick: () => apriSpesa() }, icon("scontrino"), "Aggiungi spesa");
+  const piu = fab("Aggiungi spesa", () => apriSpesa());
 
   function render() {
     const netto = Math.round(saldo(spese, me) * 100) / 100;
@@ -310,7 +310,7 @@ export function mount(container) {
       ),
     );
 
-    if (!spese.length) { elenco.replaceChildren(vuoto("Nessuna spesa", "Tocca «Aggiungi spesa» in basso.")); return; }
+    if (!spese.length) { elenco.replaceChildren(vuoto("Nessuna spesa", "Tocca + per aggiungerne una.")); return; }
     const gruppi = new Map();
     for (const e of spese) {
       const d = toDate(e.date) || toDate(e.createdAt) || new Date();
@@ -326,9 +326,9 @@ export function mount(container) {
     elenco.replaceChildren(...nodi);
   }
 
-  container.append(testa, elenco, fab);
+  container.append(testa, elenco, piu);
   getHousehold().then((x) => { h = x; render(); });
   const stop1 = watchVisible(COLL, { order: ["date", "desc"], max: 400 }, (docs) => { spese = docs; render(); });
   const stop2 = watchVisible(REC, { order: ["createdAt", "desc"] }, (docs) => { modelli = docs; render(); });
-  return () => { stop1(); stop2(); fab.remove(); };
+  return () => { stop1(); stop2(); piu.remove(); };
 }

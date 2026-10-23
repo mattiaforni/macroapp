@@ -11,7 +11,11 @@ let current = null;
  * Ritorna { close }.
  */
 export function openSheet({ title, body, onConfirm, confirmIcon = "spunta" }) {
-  if (current) current.close({ fromHistory: false });
+  // Un foglio che ne sostituisce un altro (es. dalle ricorrenti al singolo modello) riusa la
+  // stessa voce della cronologia: tornare indietro con history.back() farebbe arrivare il
+  // popstate al foglio nuovo, che si chiuderebbe da solo.
+  const sostituisce = !!current;
+  if (current) current.close({ fromHistory: true });
   const host = document.getElementById("foglio");
   let closed = false;
 
@@ -53,7 +57,9 @@ export function openSheet({ title, body, onConfirm, confirmIcon = "spunta" }) {
     el("div.foglio__corpo", {}, ...[].concat(body)),
   );
   host.hidden = false;
-  history.pushState({ ...(history.state || {}), foglio: true }, "");
+  if (!(sostituisce && history.state && history.state.foglio)) {
+    history.pushState({ ...(history.state || {}), foglio: true }, "");
+  }
   window.addEventListener("popstate", onPop);
   document.addEventListener("keydown", onKey);
 

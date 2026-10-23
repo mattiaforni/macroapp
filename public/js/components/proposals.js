@@ -16,6 +16,7 @@ import { session } from "../core/auth.js";
 import { aggiungiVoci } from "../modules/lista/index.js";
 import { risolviProgetto } from "../modules/task/index.js";
 import { categoria } from "../modules/spese/index.js";
+import { separaNomi, risolviPersone, nomiDa, trovaPersona } from "../core/rubrica.js";
 
 const COLL = "proposals";
 
@@ -38,19 +39,23 @@ const APPLICA = {
   async task(p) {
     const v = p.visibility || VIS.PRIVATE;
     const projectId = await risolviProgetto(p.payload.project, v);
+    // Le persone nominate diventano voci della rubrica (o si collegano a quelle che ci sono già).
+    const nomi = separaNomi(p.payload.people);
+    const peopleIds = risolviPersone(nomi, v);
     create("tasks", {
       text: p.payload.text, done: false, due: p.payload.due || null, projectId,
-      people: p.payload.people || "", note: p.payload.note || "",
+      peopleIds, people: nomiDa(peopleIds).join(", ") || nomi.join(", "), note: p.payload.note || "",
     }, v);
     return "Task aggiunto";
   },
   async manual_entry(p) {
     const x = p.payload;
+    const tipo = ["shop", "person", "info"].includes(x.type) ? x.type : "shop";
     create("manual_entries", {
-      type: x.type || "shop", name: x.name || x.text || "", category: x.category || "Altro",
-      notes: x.notes || "", address: x.address || "", phone: x.phone || "", url: x.url || "",
-    }, p.visibility || VIS.SHARED);
-    return "Aggiunto al manuale";
+      type: tipo, name: x.name || x.text || "", category: x.category && x.category !== "Altro" ? x.category : "",
+      notes: x.notes || "", address: x.address || "", phone: x.phone || "", email: x.email || "", url: x.url || "",
+    }, tipo === "person" ? VIS.PRIVATE : p.visibility || VIS.SHARED);
+    return tipo === "person" ? "Aggiunto alla rubrica" : "Aggiunto al manuale";
   },
   async note(p) {
     create("notes", { text: p.payload.text || "" }, p.visibility || VIS.PRIVATE);
@@ -101,12 +106,24 @@ async function copia(testo) {
   catch (e) { toast("Non riesco a copiare da qui"); }
 }
 
+/** Numero per WhatsApp: solo cifre, con il prefisso italiano se manca. */
+function numeroWhatsApp(tel) {
+  let n = String(tel || "").replace(/[^\d+]/g, "");
+  if (n.startsWith("+")) return n.slice(1);
+  if (n.startsWith("00")) return n.slice(2);
+  return n.length === 10 && n.startsWith("3") ? `39${n}` : n;
+}
+
 function bozza(x) {
   const corpo = x.body || "";
   const mail = x.channel === "email";
+  // Il destinatario può essere un nome: se è in rubrica, si usano la sua mail o il suo telefono.
+  const persona = x.to && !x.to.includes("@") ? trovaPersona(x.to) : null;
+  const a = x.to?.includes("@") ? x.to : persona?.email || "";
+  const wa = numeroWhatsApp(persona?.phone);
   const href = mail
-    ? `mailto:${encodeURIComponent(x.to || "")}?subject=${encodeURIComponent(x.subject || "")}&body=${encodeURIComponent(corpo)}`
-    : `https://wa.me/?text=${encodeURIComponent(corpo)}`;
+    ? `mailto:${encodeURIComponent(a)}?subject=${encodeURIComponent(x.subject || "")}&body=${encodeURIComponent(corpo)}`
+    : `https://wa.me/${wa}?text=${encodeURIComponent(corpo)}`;
   return el("div.bozza", {},
     x.subject ? el("div.bozza__oggetto", {}, x.subject) : null,
     el("div", {}, corpo),

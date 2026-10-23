@@ -13,13 +13,17 @@ Campi comuni a tutte le collezioni di contenuto, compilati da `core/db.js`:
 `displayName, email, photoURL, householdId, createdAt`
 
 ## `households/{id}`
-`name, members: [uid, uid], memberNames: { uid: "Nome Cognome" }, createdBy, createdAt` — l'id è il codice di invito.
+`name, members: [uid, uid], memberNames: { uid: "Nome Cognome" }, manualCategories: [nomi], createdBy, createdAt` — l'id è il codice di invito.
+`manualCategories`: categorie del manuale, uguali per tutta la casa; se mancano valgono quelle predefinite (`PREDEFINITE` in `modules/manuale`).
 
 ## `shopping_items`
 `text, detail, done, addedAt, boughtAt, count, doneBy` — sempre `shared`. `done: true` = comprato (resta tra i "usati di recente"), `false` = da comprare. Non si cancella quando lo compri.
 
 ## `manual_entries`
-`type: "shop"|"info", name, category, notes, address, phone, url`
+`type: "shop"|"person"|"info", name, category, address, phone, email, url, notes, googleId?`
+Manuale e rubrica insieme: le persone dei task sono voci `person` (private se non dici altrimenti).
+`category` è facoltativa (vuota = nessuna; il vecchio "Altro" vale come nessuna). Il link a Google Maps
+non si salva: si costruisce da nome e indirizzo. `googleId` = `resourceName` del contatto Google da cui è stata presa.
 
 ## `expenses`
 `amount, description, paidBy, split: "equal"|"full", date, category, source: "manual"|"recurring"|"agent"|"bank", type?: "settlement", recurringId?, bankTxId?`
@@ -35,7 +39,8 @@ Campi comuni a tutte le collezioni di contenuto, compilati da `core/db.js`:
 `match: { description_contains }, set: { visibility, category, split, autoAccept }` — da definire con i dati reali.
 
 ## `tasks`
-`text, done, doneAt, due ("AAAA-MM-GG"), projectId, people, note` — personali per impostazione predefinita, o con la visibilità del progetto.
+`text, done, doneAt, due ("AAAA-MM-GG"), projectId, peopleIds: [id di manual_entries], people, note` — personali per impostazione predefinita, o con la visibilità del progetto.
+`people` è la copia in chiaro dei nomi: serve a chi non vede la voce in rubrica (voce privata dell'altro membro) e ai task vecchi, che avevano solo il testo.
 
 ## `journal_entries`
 `text, analyzed, analyzedAt` — sempre `private`, solo il proprietario (anche nelle regole).

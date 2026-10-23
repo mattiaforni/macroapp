@@ -192,6 +192,9 @@ svg { flex: none; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .riga.fatta .testo b { text-decoration: line-through; color: var(--inchiostro-3); }
+.riga .testo span.tardi { color: var(--frutto); }
+/* Progetto di un task, leggero e piccolo davanti alle altre informazioni. */
+.progetto { font-size: 10.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--accento); }
 
 .pallino {
   width: 38px; height: 38px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center;
@@ -291,19 +294,6 @@ svg { flex: none; }
   align-items: center; justify-content: center; color: var(--su-tessera); opacity: .75; }
 .tessera .altro svg { width: 16px; height: 16px; }
 
-/* Barra "Mi serve…" agganciata sopra la navigazione */
-.mi-serve {
-  position: fixed; left: 0; right: 0; bottom: var(--barra); z-index: 510; background: var(--testata);
-  border-top: 1px solid var(--linea); padding: 10px 16px;
-}
-.mi-serve__riga { max-width: 720px; margin: 0 auto; display: flex; gap: 10px; align-items: center; }
-.mi-serve input { flex: 1; min-width: 0; border: 1px solid var(--linea); background: var(--foglio);
-  border-radius: 999px; padding: 11px 16px; font-size: 16px; outline: none; }
-.mi-serve input:focus { border-color: var(--accento); }
-.mi-serve .tondo { width: 46px; height: 46px; background: var(--accento); color: var(--su-accento); border: none; }
-.suggerimenti { max-width: 720px; margin: 0 auto 8px; display: flex; gap: 6px; flex-wrap: wrap; }
-.suggerimenti:empty { display: none; }
-
 /* ───────────── Spese: saldo ───────────── */
 
 .saldo { padding: 18px 0 4px; }
@@ -321,8 +311,6 @@ svg { flex: none; }
 }
 .taccuino textarea:focus { border-bottom: 2px solid var(--accento); }
 .taccuino textarea::placeholder { color: var(--inchiostro-3); font-family: var(--display); font-size: 19px; font-style: italic; }
-.taccuino__azioni { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
-.taccuino__azioni .btn--primario { margin-left: auto; }
 .stato-ai { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600;
   letter-spacing: .07em; text-transform: uppercase; color: var(--inchiostro-3); margin-top: 12px; }
 .stato-ai i { width: 8px; height: 8px; border-radius: 50%; background: var(--inchiostro-3); }

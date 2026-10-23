@@ -6,7 +6,7 @@
 // Collezione: shopping_items { text, detail, done, addedAt, boughtAt, count }
 //   done = true  → comprato (sta tra i recenti)
 //   done = false → da comprare
-import { el, icon, iconaDa, toast, fascia, vuoto, toDate } from "../../core/ui.js";
+import { el, icon, iconaDa, toast, fascia, vuoto, toDate, fab } from "../../core/ui.js";
 import { create, update, remove, watchVisible, VIS } from "../../core/db.js";
 import { session } from "../../core/auth.js";
 import { openSheet, campo } from "../../components/sheet.js";
@@ -14,8 +14,8 @@ import { openSheet, campo } from "../../components/sheet.js";
 export const id = "lista";
 export const title = "Lista";
 export const nav = true;
-export const icon_ = "lista";
-export { icon_ as icon };
+const navIcon = "lista";
+export { navIcon as icon };
 
 const COLL = "shopping_items";
 const RECENTI_VISIBILI = 18;
@@ -78,7 +78,7 @@ function tessera(it, { verde, onTap, onAltro }) {
     nomeIcona ? icon(nomeIcona) : el("span.iniziale", {}, (it.text || "?").charAt(0).toUpperCase()),
     el("b", {}, it.text),
     it.detail ? el("small", {}, it.detail) : null,
-    el("button.altro", { type: "button", "aria-label": "Modifica", onclick: (e) => { e.stopPropagation(); onAltro(); } }, icon("punti")),
+    onAltro ? el("button.altro", { type: "button", "aria-label": "Modifica", onclick: (e) => { e.stopPropagation(); onAltro(); } }, icon("punti")) : null,
   );
 }
 
@@ -104,6 +104,66 @@ function apriModifica(it) {
   });
 }
 
+/**
+ * Foglio "Mi serve": scrivi e premi Invio per aggiungere (il foglio resta aperto per la voce
+ * dopo); sotto, le cose comprate di solito, da toccare per rimetterle in lista.
+ */
+function apriMiServe(getItems) {
+  const input = el("input.linea-input", { placeholder: "Cosa ti serve?", autofocus: true, enterkeyhint: "enter",
+    autocomplete: "off", "aria-label": "Aggiungi alla lista", style: "font-size:20px" });
+  const aggiunte = el("div.segmenti", { style: "flex-wrap:wrap;padding-top:6px" });
+  const sugg = el("div");
+
+  function aggiungi() {
+    const testo = input.value.trim();
+    if (!testo) return;
+    aggiungiVoci(testo, getItems());
+    testo.split(/[,;\n]+/).map((x) => x.trim()).filter(Boolean)
+      .forEach((x) => aggiunte.append(el("span.pillola.on", {}, icon("spunta"), parseVoce(x).text)));
+    input.value = "";
+    setTimeout(disegna, 60);
+  }
+
+  function disegna() {
+    const items = getItems();
+    const q = norm(input.value);
+    const inLista = new Set(items.filter((i) => !i.done).map((i) => norm(i.text)));
+    const candidati = items.filter((i) => i.done && !inLista.has(norm(i.text)));
+    const scelti = q
+      ? candidati.filter((i) => norm(i.text).includes(q))
+          .sort((a, b) => (norm(b.text).startsWith(q) - norm(a.text).startsWith(q)) || ((b.count || 0) - (a.count || 0)))
+      : candidati.sort((a, b) => (b.count || 0) - (a.count || 0) || quando(b, "boughtAt") - quando(a, "boughtAt"));
+    const mostra = scelti.slice(0, 12);
+    sugg.replaceChildren(...[
+      mostra.length ? fascia(q ? "Già comprati" : "Compri spesso") : null,
+      mostra.length ? el("div.tessere", {}, ...mostra.map((it) => tessera(it, {
+        verde: true,
+        onTap: () => {
+          update(COLL, it.id, { done: false, addedAt: new Date() });
+          aggiunte.append(el("span.pillola.on", {}, icon("spunta"), it.text));
+          input.value = ""; input.focus();
+          setTimeout(disegna, 60);
+        },
+      }))) : null,
+    ].filter(Boolean));
+  }
+
+  input.addEventListener("input", disegna);
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); aggiungi(); } });
+  disegna();
+
+  openSheet({
+    title: "Mi serve",
+    body: [
+      el("div.campo", { style: "margin-top:14px" }, input),
+      el("p.meta", {}, "Invio aggiunge e resta qui per la prossima. Più voci insieme con la virgola; il dettaglio dopo i due punti (pesce: spada)."),
+      aggiunte,
+      sugg,
+    ],
+    onConfirm: () => { aggiungi(); },
+  });
+}
+
 export function mount(container) {
   let items = [];
   let recentiAperti = true;
@@ -112,22 +172,7 @@ export function mount(container) {
 
   const daComprare = el("div");
   const recenti = el("div");
-  const input = el("input", { placeholder: "Mi serve…", enterkeyhint: "done", autocomplete: "off", "aria-label": "Aggiungi alla lista" });
-  const sugg = el("div.suggerimenti");
-  const barra = el("div.mi-serve", {},
-    sugg,
-    el("div.mi-serve__riga", {},
-      input,
-      el("button.tondo", { type: "button", "aria-label": "Aggiungi", onclick: aggiungi }, icon("piu")),
-    ),
-  );
-
-  function aggiungi() {
-    if (!input.value.trim()) return;
-    aggiungiVoci(input.value, items);
-    input.value = "";
-    disegnaSuggerimenti();
-  }
+  const piu = fab("Aggiungi alla lista", () => apriMiServe(() => items));
 
   function compra(it) {
     update(COLL, it.id, { done: true, boughtAt: new Date(), doneBy: session.user.uid, count: (it.count || 0) + 1 });
@@ -138,20 +183,6 @@ export function mount(container) {
     update(COLL, it.id, { done: false, addedAt: new Date() });
   }
 
-  function disegnaSuggerimenti() {
-    const q = norm(input.value);
-    if (!q) { sugg.replaceChildren(); return; }
-    const presenti = new Set(items.filter((i) => !i.done).map((i) => norm(i.text)));
-    const match = items
-      .filter((i) => i.done && !presenti.has(norm(i.text)) && norm(i.text).includes(q))
-      .sort((a, b) => (norm(b.text).startsWith(q) - norm(a.text).startsWith(q)) || ((b.count || 0) - (a.count || 0)))
-      .slice(0, 8);
-    sugg.replaceChildren(...match.map((i) => el("button.pillola", {
-      type: "button",
-      onclick: () => { rimetti(i); input.value = ""; disegnaSuggerimenti(); input.focus(); },
-    }, icon("piu"), i.text)));
-  }
-
   function render() {
     const da = items.filter((i) => !i.done).sort((a, b) => quando(a, "addedAt") - quando(b, "addedAt"));
     const fatti = items.filter((i) => i.done).sort((a, b) => quando(b, "boughtAt") - quando(a, "boughtAt"));
@@ -159,7 +190,7 @@ export function mount(container) {
     daComprare.replaceChildren(
       da.length
         ? el("div.tessere", { style: "margin-top:14px" }, ...da.map((it) => tessera(it, { onTap: () => compra(it), onAltro: () => apriModifica(it) })))
-        : vuoto("Niente da comprare", "Scrivi in basso cosa ti serve, oppure tocca una voce tra quelle usate di recente."),
+        : vuoto("Niente da comprare", "Tocca + per aggiungere, oppure una voce tra quelle usate di recente."),
     );
 
     if (!fatti.length) { recenti.replaceChildren(); return; }
@@ -178,13 +209,9 @@ export function mount(container) {
             el("button.btn.btn--piatto", { onclick: () => { mostraTutti = !mostraTutti; render(); } }, mostraTutti ? "Mostra meno" : `Tutti i ${fatti.length}`))
         : null,
     ].filter(Boolean));
-    disegnaSuggerimenti();
   }
 
-  input.addEventListener("input", disegnaSuggerimenti);
-  input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); aggiungi(); } });
-
-  container.append(daComprare, recenti, barra);
+  container.append(daComprare, recenti, piu);
   const stop = watchVisible(COLL, { order: ["createdAt", "asc"] }, (docs) => { items = docs; render(); });
-  return () => { stop(); barra.remove(); };
+  return () => { stop(); piu.remove(); };
 }

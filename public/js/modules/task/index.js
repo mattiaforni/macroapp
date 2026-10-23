@@ -1,11 +1,15 @@
-// Task organizzati per progetti (es. Circolo, Casa, Volontariato).
-// Personali per impostazione predefinita; un progetto condiviso rende condivisi i suoi task.
+// Task organizzati per progetti (es. Circolo, Casa, Volontariato), con le persone coinvolte
+// prese dalla rubrica del manuale. Personali per impostazione predefinita; un progetto
+// condiviso rende condivisi i suoi task.
 //
 // projects { name, archived }
-// tasks    { text, done, doneAt, due ("AAAA-MM-GG" o null), projectId, people, note }
-import { el, icon, toast, fascia, vuoto, sceltaVisibilita, fmtDate, isoGiorno, toDate } from "../../core/ui.js";
+// tasks    { text, done, doneAt, due ("AAAA-MM-GG" o null), projectId, peopleIds[], people, note }
+//          people = nomi delle persone in chiaro, copia di peopleIds per chi non vede la voce in rubrica
+import { el, icon, toast, fascia, vuoto, sceltaVisibilita, fmtDate, isoGiorno, toDate, fab } from "../../core/ui.js";
 import { create, update, remove, watchVisible, readVisible, VIS } from "../../core/db.js";
 import { openSheet, campo } from "../../components/sheet.js";
+import { sceltaPersone } from "../../components/persone.js";
+import { nomiTask, suRubrica } from "../../core/rubrica.js";
 
 export const id = "task";
 export const title = "Task";
@@ -18,6 +22,7 @@ const PROJ = "projects";
 const CHIAVE_PROGETTO = "macroapp.task.progetto";
 const norm = (s) => String(s || "").trim().toLowerCase();
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+const GIORNI = ["domenica", "lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato"];
 
 /** Id del progetto con quel nome; se non esiste lo crea. Usato dalle proposte dell'AI. */
 export async function risolviProgetto(nome, visibility = VIS.PRIVATE) {
@@ -28,15 +33,24 @@ export async function risolviProgetto(nome, visibility = VIS.PRIVATE) {
   return create(PROJ, { name: cap(nome.trim()), archived: false }, visibility).id;
 }
 
-function scadenza(t) {
-  if (!t.due) return null;
+/** Fascia di tempo di un task aperto, e la data da scrivere nella riga (null se la dice già la fascia). */
+const FASCE = ["In ritardo", "Oggi", "Prossimi 7 giorni", "Più avanti", "Senza scadenza"];
+function quando(t) {
+  if (!t.due) return { fascia: "Senza scadenza", testo: null };
+  const oggi = isoGiorno(new Date());
   const d = new Date(`${t.due}T12:00:00`);
-  const oggi = new Date(); oggi.setHours(0, 0, 0, 0);
-  const tardi = d < oggi && !t.done;
-  return { testo: `${tardi ? "scaduto" : "entro"} ${fmtDate(d)}`, tardi };
+  if (t.due < oggi) return { fascia: "In ritardo", testo: `era per il ${fmtDate(d)}`, tardi: true };
+  if (t.due === oggi) return { fascia: "Oggi", testo: null };
+  const tra7 = new Date(); tra7.setDate(tra7.getDate() + 7);
+  if (t.due <= isoGiorno(tra7)) {
+    const domani = new Date(); domani.setDate(domani.getDate() + 1);
+    return { fascia: "Prossimi 7 giorni", testo: t.due === isoGiorno(domani) ? "domani" : GIORNI[d.getDay()] };
+  }
+  return { fascia: "Più avanti", testo: fmtDate(d) };
 }
 
-/** Foglio del task. prefill: { text, projectId, due, people, note, visibility } */
+/** Foglio del task. prefill: { text, projectId, due, people, peopleIds, note, visibility }
+ *  Invio sul testo salva: è l'unico campo obbligatorio. */
 export async function apriTask(esistente = null, prefill = {}, progettiNoti = null) {
   const progetti = (progettiNoti || await readVisible(PROJ)).filter((p) => !p.archived);
   const t = esistente || prefill;
@@ -54,20 +68,23 @@ export async function apriTask(esistente = null, prefill = {}, progettiNoti = nu
       ...progetti.map((p) => el("button.pillola", {
         type: "button", class: p.id === projectId ? "on" : "",
         onclick: () => { projectId = p.id; visibility = p.visibility; disegnaProgetti(); disegnaVis(); },
-      }, icon("cartella"), p.name)),
+      }, p.name)),
     );
   };
   disegnaProgetti();
 
   const dataInput = el("input", { type: "date", value: due, style: "position:absolute;opacity:0;pointer-events:none;width:1px;height:1px" });
   const dataBtn = el("button.pillola", { type: "button" });
-  const disegnaData = () => dataBtn.replaceChildren(icon("calendario"), due ? fmtDate(new Date(`${due}T12:00:00`)) : "Nessuna scadenza");
+  const togliData = el("button.btn.btn--piatto", { type: "button", onclick: () => { due = ""; dataInput.value = ""; disegnaData(); } }, "Togli");
+  const disegnaData = () => {
+    dataBtn.replaceChildren(icon("calendario"), due ? fmtDate(new Date(`${due}T12:00:00`)) : "Nessuna scadenza");
+    togliData.hidden = !due;
+  };
   dataBtn.addEventListener("click", () => { try { dataInput.showPicker(); } catch (e) { dataInput.style.pointerEvents = "auto"; dataInput.focus(); } });
   dataInput.addEventListener("change", () => { due = dataInput.value; disegnaData(); });
   disegnaData();
-  const togliData = el("button.btn.btn--piatto", { type: "button", onclick: () => { due = ""; dataInput.value = ""; disegnaData(); } }, "Togli");
 
-  const persone = el("input", { value: t.people || "", placeholder: "es. Marco, Giulia del circolo", autocomplete: "off" });
+  const persone = sceltaPersone({ ids: t.peopleIds || [], testo: t.people || "", onInvioVuoto: () => sheet.confirm() });
   const nota = el("textarea", { value: t.note || "", placeholder: "Dettagli, link, cosa serve…" });
   const visWrap = el("div");
   const disegnaVis = () => visWrap.replaceChildren(sceltaVisibilita(visibility, (v) => { visibility = v; }));
@@ -79,7 +96,7 @@ export async function apriTask(esistente = null, prefill = {}, progettiNoti = nu
       el("div.campo", { style: "margin-top:14px" }, testo),
       el("div.campo", {}, el("label", {}, "Progetto"), sceltaProgetto),
       el("div.campo", {}, el("label", {}, "Scadenza"), el("div.segmenti", { style: "padding-top:0;position:relative" }, dataBtn, dataInput, togliData)),
-      campo("Persone", persone),
+      el("div.campo", {}, el("label", {}, "Persone"), persone.node),
       campo("Note", nota),
       el("div.campo", {}, el("label", {}, "Visibilità"), visWrap),
       esistente ? el("div.foglio__piede", {},
@@ -89,7 +106,7 @@ export async function apriTask(esistente = null, prefill = {}, progettiNoti = nu
     onConfirm: () => {
       const text = testo.value.trim();
       if (!text) { testo.focus(); return false; }
-      const dati = { text, projectId, due: due || null, people: persone.value.trim(), note: nota.value.trim() };
+      const dati = { text, projectId, due: due || null, ...persone.valore(visibility), note: nota.value.trim() };
       if (esistente) update(TASKS, esistente.id, { ...dati, visibility });
       else create(TASKS, { ...dati, done: false }, visibility);
     },
@@ -124,6 +141,30 @@ function apriProgetto(esistente = null, onCreato) {
   });
 }
 
+/**
+ * Riga di un task: testo, e sotto in piccolo il progetto (se si guardano tutti i progetti),
+ * la data quando la fascia non basta, le persone. Esportata: la usa anche la scheda di una persona.
+ */
+export function rigaTask(t, { progetti = [], conProgetto = true, apri } = {}) {
+  const q = t.done ? { testo: t.doneAt ? `fatto il ${fmtDate(t.doneAt)}` : null } : quando(t);
+  const p = conProgetto ? progetti.find((x) => x.id === t.projectId && !x.archived) : null;
+  const resto = [q.testo, nomiTask(t), t.visibility === VIS.SHARED && p?.visibility !== VIS.SHARED ? "condiviso" : null].filter(Boolean);
+  const sotto = [];
+  if (p) sotto.push(el("small.progetto", {}, p.name));
+  if (p && resto.length) sotto.push(" · ");
+  if (resto.length) sotto.push(resto.join(" · "));
+  return el("div.riga", { class: t.done ? "fatta" : "", onclick: () => (apri ? apri(t) : apriTask(t, {}, progetti)) },
+    el("div.testo", {},
+      el("b", {}, t.text),
+      sotto.length ? el("span", { class: q.tardi ? "tardi" : "" }, ...sotto) : null,
+    ),
+    el("button.spunta", {
+      type: "button", "aria-label": t.done ? "Riapri" : "Fatto",
+      onclick: (e) => { e.stopPropagation(); update(TASKS, t.id, { done: !t.done, doneAt: t.done ? null : new Date() }); },
+    }, icon("spunta")),
+  );
+}
+
 export function mount(container) {
   let tasks = [];
   let progetti = [];
@@ -133,25 +174,9 @@ export function mount(container) {
 
   const chips = el("div.segmenti");
   const elenco = el("div");
-  const fab = el("button.fab.fab--tondo", { type: "button", "aria-label": "Nuovo task",
-    onclick: () => apriTask(null, { projectId: scelto !== "tutti" ? scelto : null }, progetti) }, icon("piu"));
+  const piu = fab("Nuovo task", () => apriTask(null, { projectId: scelto !== "tutti" ? scelto : null }, progetti));
 
   const scegli = (v) => { scelto = v; try { localStorage.setItem(CHIAVE_PROGETTO, v); } catch (e) {} render(); };
-
-  function rigaTask(t) {
-    const s = scadenza(t);
-    const sotto = [s?.testo, t.people, t.visibility === VIS.SHARED ? "condiviso" : null].filter(Boolean).join(" · ");
-    return el("div.riga", { class: t.done ? "fatta" : "", onclick: () => apriTask(t, {}, progetti) },
-      el("div.testo", {},
-        el("b", {}, t.text),
-        sotto ? el("span", { style: s?.tardi ? "color:var(--frutto)" : null }, sotto) : null,
-      ),
-      el("button.spunta", {
-        type: "button", "aria-label": t.done ? "Riapri" : "Fatto",
-        onclick: (e) => { e.stopPropagation(); update(TASKS, t.id, { done: !t.done, doneAt: t.done ? null : new Date() }); },
-      }, icon("spunta")),
-    );
-  }
 
   const ordina = (a, b) => (a.due || "9999").localeCompare(b.due || "9999")
     || (toDate(a.createdAt)?.getTime() || 0) - (toDate(b.createdAt)?.getTime() || 0);
@@ -169,6 +194,7 @@ export function mount(container) {
     const visibili = scelto === "tutti" ? tasks : tasks.filter((t) => t.projectId === scelto);
     const aperti = visibili.filter((t) => !t.done).sort(ordina);
     const fatti = visibili.filter((t) => t.done).sort((a, b) => (toDate(b.doneAt)?.getTime() || 0) - (toDate(a.doneAt)?.getTime() || 0));
+    const opzioni = { progetti, conProgetto: scelto === "tutti" };
     const nodi = [];
 
     if (scelto !== "tutti") {
@@ -176,32 +202,30 @@ export function mount(container) {
       nodi.push(el("div.segmenti", { style: "padding-top:4px" },
         el("button.btn.btn--piatto", { onclick: () => apriProgetto(p) }, icon("matita"), "Modifica progetto"),
         p.visibility === VIS.SHARED ? el("span.etichetta.etichetta--accento", { style: "align-self:center" }, "condiviso") : null));
-      nodi.push(aperti.length ? el("div", {}, ...aperti.map(rigaTask)) : vuoto("Niente da fare qui", "Tocca + per aggiungere un task."));
-    } else if (!aperti.length) {
-      nodi.push(vuoto("Niente da fare", "Tocca + per aggiungere un task, oppure crea un progetto."));
+    }
+
+    if (!aperti.length) {
+      nodi.push(scelto === "tutti"
+        ? vuoto("Niente da fare", "Tocca + per aggiungere un task.")
+        : vuoto("Niente da fare qui", "Tocca + per aggiungere un task a questo progetto."));
     } else {
-      const perProgetto = new Map();
-      for (const t of aperti) {
-        const k = attivi.some((p) => p.id === t.projectId) ? t.projectId : "";
-        if (!perProgetto.has(k)) perProgetto.set(k, []);
-        perProgetto.get(k).push(t);
+      // Un solo elenco per tutti i progetti, diviso per quando vanno fatte le cose.
+      for (const f of FASCE) {
+        const qui = aperti.filter((t) => quando(t).fascia === f);
+        if (qui.length) nodi.push(fascia(f), el("div", {}, ...qui.map((t) => rigaTask(t, opzioni))));
       }
-      for (const p of attivi) {
-        if (!perProgetto.has(p.id)) continue;
-        nodi.push(fascia(p.name), el("div", {}, ...perProgetto.get(p.id).map(rigaTask)));
-      }
-      if (perProgetto.has("")) nodi.push(fascia("Senza progetto"), el("div", {}, ...perProgetto.get("").map(rigaTask)));
     }
 
     if (fatti.length) {
       nodi.push(fascia(`Completati · ${fatti.length}`, el("button", { onclick: () => { mostraFatti = !mostraFatti; render(); } }, mostraFatti ? "Nascondi" : "Mostra")));
-      if (mostraFatti) nodi.push(el("div", {}, ...fatti.slice(0, 30).map(rigaTask)));
+      if (mostraFatti) nodi.push(el("div", {}, ...fatti.slice(0, 30).map((t) => rigaTask(t, opzioni))));
     }
     elenco.replaceChildren(...nodi);
   }
 
-  container.append(chips, elenco, fab);
+  container.append(chips, elenco, piu);
   const stop1 = watchVisible(PROJ, {}, (docs) => { progetti = docs; render(); });
   const stop2 = watchVisible(TASKS, {}, (docs) => { tasks = docs; render(); });
-  return () => { stop1(); stop2(); fab.remove(); };
+  const stop3 = suRubrica(render); // nomi delle persone aggiornati se cambiano in rubrica
+  return () => { stop1(); stop2(); stop3(); piu.remove(); };
 }

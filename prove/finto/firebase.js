@@ -12,7 +12,13 @@ export class Timestamp {}
 
 export function initializeApp() { return {}; }
 export function getAuth() { return {}; }
-export class GoogleAuthProvider { addScope() {} }
+export class GoogleAuthProvider {
+  addScope() {}
+  setCustomParameters() {}
+  static credentialFromResult() { return { accessToken: "token-finto" }; }
+}
+export function reauthenticateWithPopup(user) { return Promise.resolve({ user, operationType: "reauthenticate" }); }
+export function reauthenticateWithRedirect() { return Promise.resolve(); }
 export function getFirestore() { return {}; }
 export function enableIndexedDbPersistence() { return Promise.resolve(); }
 export function getFunctions() { return {}; }

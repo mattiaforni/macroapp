@@ -6,6 +6,7 @@ import {
   doc, getDoc, setDoc, serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js";
 import { auth, db, googleProvider } from "./firebase.js";
+import { esitoRedirect } from "./contatti-google.js";
 
 export const session = {
   user: null,       // utente Firebase
@@ -33,15 +34,18 @@ export async function login() {
   }
 }
 
-/** Esito di un login con redirect: se fallisce, lo rende visibile invece di tornare in silenzio al login. */
-export async function checkRedirectResult() {
-  try {
-    await getRedirectResult(auth);
-    return null;
-  } catch (err) {
-    console.error("Login con redirect fallito", err);
-    return err.code || err.message;
-  }
+/**
+ * Esito di un passaggio da Google con redirect (accesso, o permesso per i contatti): se fallisce,
+ * lo rende visibile invece di tornare in silenzio al login. Si calcola una volta sola:
+ * chi lo chiede di nuovo riceve lo stesso esito.
+ */
+let esito = null;
+export function checkRedirectResult() {
+  esito ??= getRedirectResult(auth).then(
+    (result) => { esitoRedirect(result); return null; },
+    (err) => { console.error("Redirect di Google fallito", err); return err.code || err.message; },
+  );
+  return esito;
 }
 
 export function logout() { return signOut(auth); }

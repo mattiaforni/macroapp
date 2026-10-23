@@ -69,3 +69,10 @@ export function nomeDi(uid, h) {
   if (uid === session.user.uid) return "tu";
   return nomeProprio(h?.memberNames?.[uid]) || "l'altra persona";
 }
+
+/** Aggiorna campi della casa (i membri possono modificarla). */
+export async function updateHousehold(data) {
+  if (!session.householdId) return;
+  await updateDoc(doc(db, "households", session.householdId), data);
+  cache = null;
+}

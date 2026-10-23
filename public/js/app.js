@@ -4,6 +4,7 @@ import { addRoute, startRouter, navigate, currentRoute } from "./core/router.js"
 import { el, clear, icon, toast } from "./core/ui.js";
 import { applicaTema } from "./core/theme.js";
 import { ensureMyName } from "./core/household.js";
+import { avviaRubrica, fermaRubrica } from "./core/rubrica.js";
 import { modules, navModules, DEFAULT_ROUTE } from "./modules/registry.js";
 import { renderOnboarding } from "./components/onboarding.js";
 import { closeSheet } from "./components/sheet.js";
@@ -70,12 +71,13 @@ function startApp() {
     window.dispatchEvent(new HashChangeEvent("hashchange"));
   }
   // Lavori di fondo, non bloccanti.
+  avviaRubrica(); // persone del manuale, per riconoscerle nei task
   ensureMyName().catch((e) => console.warn("ensureMyName", e));
   materializeRecurring().catch((e) => console.warn("materializeRecurring", e));
 }
 
 onSession((s) => {
-  if (!s.user) { renderLogin(); return; }
+  if (!s.user) { fermaRubrica(); renderLogin(); return; }
   if (s.error) {
     clear(nav); clear(actions); title.textContent = "Errore";
     view.replaceChildren(

@@ -26,9 +26,12 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 | `app.js` | guscio: accesso, barra in basso, router, service worker, ricorrenti all'avvio |
 | `core/ui.js` | `el()`, icone disegnate a mano (`D`), date, importi, pillole |
 | `core/db.js` | `create` (non aspetta il server, ritorna `{id, saved}`), `update`, `watchVisible`, `readVisible` |
-| `core/household.js` | casa, nomi dei membri (`memberNames`), `nomeDi` |
+| `core/household.js` | casa, nomi dei membri (`memberNames`), `nomeDi`, `updateHousehold` (es. categorie del manuale) |
+| `core/rubrica.js` | voci del manuale in memoria, aggiornate in tempo reale: `trovaPersona`, `risolviPersone` (crea quelle che mancano), `nomiTask` |
+| `core/contatti-google.js` | Google Contatti in sola lettura (People API), permesso chiesto solo al momento dell'uso |
 | `components/sheet.js` | foglio a tutta altezza (indietro, titolo, spunta); il tasto indietro lo chiude |
 | `components/proposals.js` | azioni proposte: `APPLICA` per tipo, `renderAzione` |
+| `components/persone.js` | scelta delle persone di un task dalla rubrica (pillole, suggerimenti, persone nuove) |
 | `modules/*/index.js` | un modulo = `{ id, title, nav, icon, mount(container) → smonta }`, in `modules/registry.js` |
 
 ## Regole di lavoro
@@ -37,7 +40,12 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
    icone a linea sottile, righe con filetti invece di riquadri, campi con la sola linea sotto,
    pillole, fogli a tutta altezza. Colori solo dalle variabili in `css/base.css`.
    Identità visiva definitiva ancora da decidere: non inventarla senza che lo chieda.
-2. Inserimenti veloci: Invio passa al campo dopo, Invio sull'ultimo conferma (come Splitwise).
+2. Inserimento uniforme: in ogni pagina un + tondo in basso a destra (`fab()` in ui.js) apre il foglio
+   per scrivere. Invio salva appena hai scritto tutto ciò che è obbligatorio; se manca un campo
+   obbligatorio, Invio ti porta lì. Quindi: spesa = descrizione → importo → salva; task, voce del
+   manuale, progetto = Invio sul primo campo salva; lista = Invio aggiunge e resta aperto per la
+   prossima; nota del diario = Invio va a capo, salva la spunta. Nei campi facoltativi a scelta
+   (persone) Invio aggiunge, e a campo vuoto salva.
 3. Nuova collezione: blocco in `firestore.rules` + indici in `firestore.indexes.json`
    (servono per `householdId+visibility+ordine` e `ownerUid+ordine`). Gli ordinamenti fini
    si fanno nel modulo, per non moltiplicare gli indici.
