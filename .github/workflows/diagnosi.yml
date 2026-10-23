@@ -13,6 +13,10 @@ on:
       ore:
         description: "Errori delle ultime N ore"
         default: "3"
+      provaai:
+        description: "Prova una chiamata minima all'API di Anthropic con la chiave salvata (tempo e risposta)"
+        type: boolean
+        default: false
       ripara:
         description: "Rendi la funzione chiamabile dall'app (invocatore pubblico; l'accesso lo controlla Firebase Auth nel codice)"
         type: boolean
@@ -22,6 +26,8 @@ jobs:
   diagnosi:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - name: Autenticazione Google Cloud
         uses: google-github-actions/auth@v2
         with:
@@ -54,6 +60,22 @@ jobs:
             fi
           fi
 
+      # Chiamata minima con la chiave in Secret Manager: dice se l'API risponde, in quanto tempo,
+      # e con quale errore (credito, workspace, modello). La chiave non viene mai stampata.
+      - name: Prova dell'API di Anthropic
+        if: ${{ inputs.provaai }}
+        run: |
+          ann() { echo "::$1 title=$2::$(sed -e 's/%/%25/g' -e 's/\r//g' | head -c 4000 | awk '{printf "%s%%0A", $0}')"; }
+          if ! K=$(gcloud secrets versions access latest --secret=ANTHROPIC_API_KEY --project macroapp-b9bd0 2>err.txt); then
+            ann warning "Chiave non leggibile da qui" < err.txt; exit 0
+          fi
+          echo "::add-mask::$K"
+          MODELLO=$(grep -oP 'const MODEL = "\K[^"]+' functions/src/ai/claude.js 2>/dev/null || echo claude-sonnet-5-5)
+          curl -s -o risposta.json -w "HTTP %{http_code} in %{time_total} s\n" --max-time 110 https://api.anthropic.com/v1/messages \
+            -H "x-api-key: $K" -H "anthropic-version: 2023-06-01" -H "content-type: application/json" \
+            -d "{\"model\":\"$MODELLO\",\"max_tokens\":200,\"messages\":[{\"role\":\"user\",\"content\":\"Rispondi solo: ok\"}],\"output_config\":{\"format\":{\"type\":\"json_schema\",\"schema\":{\"type\":\"object\",\"properties\":{\"r\":{\"type\":\"string\"}},\"required\":[\"r\"],\"additionalProperties\":false}}}}" > tempo.txt 2>&1 || true
+          { echo "modello: $MODELLO"; echo "lunghezza chiave: ${#K}, inizio: ${K:0:10}…"; cat tempo.txt; head -c 600 risposta.json; } | ann notice "Prova dell'API"
+
       - name: Raccolta
         env:
           F: ${{ inputs.funzione }}
@@ -82,7 +104,12 @@ jobs:
             --project "$P" --freshness "${ORE}h" --limit 25 \
             --format='value(timestamp,severity,textPayload,jsonPayload.message,httpRequest.status)' 2>&1 | ann "Errori di $S (ultime $ORE ore)"
 
-          # 4. Ultime richieste HTTP (stato e latenza).
+          # 4. Registro completo (anche i tempi delle fasi scritti con console.log).
+          gcloud logging read "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"$S\" AND textPayload:*" \
+            --project "$P" --freshness "${ORE}h" --limit 30 \
+            --format='value(timestamp,severity,textPayload)' 2>&1 | ann "Registro di $S"
+
+          # 5. Ultime richieste HTTP (stato e latenza).
           gcloud logging read "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"$S\" AND httpRequest.status>0" \
             --project "$P" --freshness "${ORE}h" --limit 15 \
             --format='value(timestamp,httpRequest.requestMethod,httpRequest.status,httpRequest.latency)' 2>&1 | ann "Richieste a $S"

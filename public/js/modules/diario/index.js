@@ -24,7 +24,7 @@ export { navIcon as icon };
 const COLL = "journal_entries";
 const CHIAVE_AUTO = "macroapp.diario.auto";
 const CHIAVE_AI = "macroapp.diario.ai"; // "on" | "off": esito dell'ultima analisi
-const analyzeEntry = httpsCallable(functions, "analyzeEntry");
+const analyzeEntry = httpsCallable(functions, "analyzeEntry", { timeout: 130000 }); // la funzione ha 120 s
 
 const leggi = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch (e) { return d; } };
 const scrivi = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };

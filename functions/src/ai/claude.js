@@ -5,9 +5,12 @@
 const MODEL = "claude-sonnet-5-5";
 const URL = "https://api.anthropic.com/v1/messages";
 
+const ATTESA_MASSIMA = 100_000; // ms: sotto il tempo massimo della funzione (120 s)
+
 export async function reason({ system, user, schema, key }) {
   const res = await fetch(URL, {
     method: "POST",
+    signal: AbortSignal.timeout(ATTESA_MASSIMA),
     headers: {
       "content-type": "application/json",
       "x-api-key": key,
@@ -20,6 +23,9 @@ export async function reason({ system, user, schema, key }) {
       messages: [{ role: "user", content: user }],
       output_config: { format: { type: "json_schema", schema } },
     }),
+  }).catch((err) => {
+    if (err.name === "TimeoutError") throw new Error(`Claude: nessuna risposta in ${ATTESA_MASSIMA / 1000} s`);
+    throw err;
   });
   if (!res.ok) throw new Error(`Claude ${res.status}: ${await res.text()}`);
   const data = await res.json();

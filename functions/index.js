@@ -46,22 +46,28 @@ function spiegaErrore(msg = "") {
 }
 
 export const analyzeEntry = onCall(
-  { secrets: [ANTHROPIC_API_KEY, GEMINI_API_KEY], timeoutSeconds: 60 },
+  { secrets: [ANTHROPIC_API_KEY, GEMINI_API_KEY], timeoutSeconds: 120 },
   async (req) => {
     if (!req.auth) throw new HttpsError("unauthenticated", "Accesso richiesto");
     const { entryId } = req.data || {};
     if (!entryId) throw new HttpsError("invalid-argument", "entryId mancante");
 
+    // Tempi delle fasi nel registro (si leggono col flusso «Diagnosi»).
+    const t0 = Date.now();
+    const passo = (s) => console.log(`analyzeEntry ${entryId}: ${s} dopo ${Date.now() - t0} ms`);
     try {
+      passo("inizio");
       const db = await getDb();
       const snap = await db.collection("journal_entries").doc(entryId).get();
       if (!snap.exists || snap.data().ownerUid !== req.auth.uid) {
         throw new HttpsError("permission-denied", "Nota non trovata");
       }
       const entry = { id: snap.id, ...snap.data() };
+      passo("nota letta");
       const { analyzeJournalEntry } = await import("./src/agent.js");
       const n = await analyzeJournalEntry(db, entry, {
         uid: req.auth.uid,
+        passo,
         keys: { anthropic: ANTHROPIC_API_KEY.value().trim(), gemini: GEMINI_API_KEY.value().trim() },
       });
       return { proposals: n };

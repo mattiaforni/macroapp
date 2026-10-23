@@ -133,9 +133,11 @@ function visibilita(a) {
 }
 
 /** Ritorna il numero di proposte create. */
-export async function analyzeJournalEntry(db, entry, { uid, keys, provider }) {
+export async function analyzeJournalEntry(db, entry, { uid, keys, provider, passo = () => {} }) {
   const ctx = await contesto(db, entry, uid);
+  passo(`contesto pronto (${ctx.progetti.length} progetti, ${ctx.persone.length} persone)`);
   const out = await reason({ system: system(ctx), user: entry.text, schema: SCHEMA, keys, provider });
+  passo(`risposta dell'AI (${Array.isArray(out.actions) ? out.actions.length : 0} azioni)`);
   const actions = (Array.isArray(out.actions) ? out.actions : []).filter((a) => SCHEMA.properties.actions.items.properties.kind.enum.includes(a.kind));
 
   // Rianalisi: le proposte ancora in attesa della stessa nota vengono sostituite.
@@ -161,5 +163,6 @@ export async function analyzeJournalEntry(db, entry, { uid, keys, provider }) {
     });
   }
   await batch.commit();
+  passo("proposte scritte");
   return actions.length;
 }
