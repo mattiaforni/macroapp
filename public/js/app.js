@@ -5,6 +5,7 @@ import { el, clear, icon, toast } from "./core/ui.js";
 import { modules, navModules, DEFAULT_ROUTE } from "./modules/registry.js";
 import { renderOnboarding } from "./components/onboarding.js";
 import { watchPendingCount } from "./components/proposals.js";
+import { VERSION } from "./version.js";
 
 const view = document.getElementById("view");
 const nav = document.getElementById("nav");
@@ -25,6 +26,7 @@ function renderLogin() {
       el("p.muted", {}, "Spese, lista, manuale di casa, diario e task. Accesso riservato."),
       el("button.btn.btn--primary", { onclick: () => login().catch((e) => toast(e.code || e.message)) }, "Accedi con Google"),
       loginError ? el("p.small", { style: "color:var(--danger)" }, `Accesso non riuscito: ${loginError}`) : null,
+      el("p.small.muted", {}, `versione ${VERSION}`),
     ),
   );
 }
@@ -107,8 +109,19 @@ checkRedirectResult().then((err) => {
 });
 
 // Service worker per installazione e cache dei file statici.
+// Quando è pubblicata una versione nuova, il nuovo service worker prende il controllo
+// e la pagina si ricarica una volta: l'app installata non resta ferma sul codice vecchio.
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(console.warn));
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!hadController || reloaded) return;
+    reloaded = true;
+    location.reload();
+  });
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").then((r) => r.update()).catch(console.warn);
+  });
 }
 
 // Contenuto condiviso da altre app (Web Share Target): per ora lo mettiamo in coda come proposta.

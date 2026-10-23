@@ -33,6 +33,9 @@ jobs:
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
 
+      - name: Numero di versione nell'app
+        run: echo "export const VERSION = \"${GITHUB_SHA::7}\";" > public/js/version.js
+
       - name: Deploy
         # --force: niente domande interattive; le functions tolte dal codice vengono rimosse anche dal progetto.
         run: npx firebase-tools@15 deploy --only hosting,firestore,functions --non-interactive --force

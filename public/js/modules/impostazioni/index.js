@@ -2,6 +2,7 @@
 import { el, toast } from "../../core/ui.js";
 import { session, logout } from "../../core/auth.js";
 import { getHousehold } from "../../core/household.js";
+import { VERSION } from "../../version.js";
 
 export const id = "impostazioni";
 export const title = "Impostazioni";
@@ -36,7 +37,7 @@ export async function mount(container) {
       el("h2", {}, "Integrazioni"),
       el("p.small.muted", {}, "Banca (Enable Banking), Google Contatti e agente: si attivano quando le Cloud Functions relative sono configurate. Vedi README."),
     ),
-    el("p.small.muted", { style: "text-align:center" }, "Macroapp · identità visiva provvisoria"),
+    el("p.small.muted", { style: "text-align:center" }, `Macroapp · versione ${VERSION} · identità visiva provvisoria`),
   );
   return () => {};
 }
