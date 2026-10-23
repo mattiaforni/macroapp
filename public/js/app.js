@@ -1,5 +1,5 @@
 // Shell dell'app: autenticazione, navigazione, montaggio dei moduli.
-import { startAuth, onSession, login, session } from "./core/auth.js";
+import { startAuth, onSession, login, session, checkRedirectResult } from "./core/auth.js";
 import { addRoute, startRouter, navigate, currentRoute } from "./core/router.js";
 import { el, clear, icon, toast } from "./core/ui.js";
 import { modules, navModules, DEFAULT_ROUTE } from "./modules/registry.js";
@@ -13,6 +13,7 @@ const actions = document.getElementById("topbar-actions");
 
 let routerStarted = false;
 let unwatchBadge = null;
+let loginError = null; // errore dell'ultimo login con redirect, mostrato sotto il pulsante
 
 function renderLogin() {
   clear(nav);
@@ -22,7 +23,8 @@ function renderLogin() {
     el("div.login", {},
       el("h2", {}, "Macroapp"),
       el("p.muted", {}, "Spese, lista, manuale di casa, diario e task. Accesso riservato."),
-      el("button.btn.btn--primary", { onclick: () => login().catch((e) => toast(e.message)) }, "Accedi con Google"),
+      el("button.btn.btn--primary", { onclick: () => login().catch((e) => toast(e.code || e.message)) }, "Accedi con Google"),
+      loginError ? el("p.small", { style: "color:var(--danger)" }, `Accesso non riuscito: ${loginError}`) : null,
     ),
   );
 }
@@ -98,6 +100,11 @@ onSession((s) => {
 });
 
 startAuth();
+checkRedirectResult().then((err) => {
+  if (!err) return;
+  loginError = err;
+  if (!session.user) renderLogin();
+});
 
 // Service worker per installazione e cache dei file statici.
 if ("serviceWorker" in navigator) {

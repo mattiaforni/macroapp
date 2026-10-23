@@ -1,6 +1,6 @@
 // Autenticazione Google e profilo utente.
 import {
-  signInWithPopup, signInWithRedirect, signOut, onAuthStateChanged,
+  signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-auth.js";
 import {
   doc, getDoc, setDoc, serverTimestamp,
@@ -18,10 +18,30 @@ export function onSession(fn) { listeners.add(fn); return () => listeners.delete
 function emit() { for (const fn of listeners) fn(session); }
 
 export async function login() {
-  // Su mobile installato (standalone) il popup può essere bloccato: si usa il redirect.
+  // Su telefono (browser o app installata) si usa il redirect; su computer il popup,
+  // con ripiego sul redirect se il browser blocca la finestra.
   const standalone = window.matchMedia("(display-mode: standalone)").matches;
-  if (standalone) return signInWithRedirect(auth, googleProvider);
-  return signInWithPopup(auth, googleProvider);
+  const touch = window.matchMedia("(pointer: coarse)").matches;
+  if (standalone || touch) return signInWithRedirect(auth, googleProvider);
+  try {
+    return await signInWithPopup(auth, googleProvider);
+  } catch (err) {
+    if (err.code === "auth/popup-blocked" || err.code === "auth/operation-not-supported-in-this-environment") {
+      return signInWithRedirect(auth, googleProvider);
+    }
+    throw err;
+  }
+}
+
+/** Esito di un login con redirect: se fallisce, lo rende visibile invece di tornare in silenzio al login. */
+export async function checkRedirectResult() {
+  try {
+    await getRedirectResult(auth);
+    return null;
+  } catch (err) {
+    console.error("Login con redirect fallito", err);
+    return err.code || err.message;
+  }
 }
 
 export function logout() { return signOut(auth); }
