@@ -13,32 +13,39 @@ Campi comuni a tutte le collezioni di contenuto, compilati da `core/db.js`:
 `displayName, email, photoURL, householdId, createdAt`
 
 ## `households/{id}`
-`name, members: [uid, uid], createdBy, createdAt` — l'id è il codice di invito.
+`name, members: [uid, uid], memberNames: { uid: "Nome Cognome" }, createdBy, createdAt` — l'id è il codice di invito.
 
 ## `shopping_items`
-`text, done, doneBy` — sempre `shared`. Futuro: `section` (reparto), `qty`.
+`text, detail, done, addedAt, boughtAt, count, doneBy` — sempre `shared`. `done: true` = comprato (resta tra i "usati di recente"), `false` = da comprare. Non si cancella quando lo compri.
 
 ## `manual_entries`
 `type: "shop"|"info", name, category, notes, address, phone, url`
 
 ## `expenses`
-`amount, description, paidBy, split: "equal"|"full", date, category, source: "manual"|"bank", bankTxId`
+`amount, description, paidBy, split: "equal"|"full", date, category, source: "manual"|"recurring"|"agent"|"bank", type?: "settlement", recurringId?, bankTxId?`
+`split: "full"` = tutta a carico di chi non ha pagato. Il pareggio è una spesa `type: "settlement"` pagata da chi deve, tutta a carico dell'altro.
+
+## `recurring_expenses`
+`description, amount, paidBy, split, every: "week"|"month"|"year", nextDate, active` — all'avvio l'app genera le spese scadute con id `rec_<id>_<AAAA-MM-GG>` (nessun doppione se lo fanno entrambi i telefoni).
+
+## `projects`
+`name, archived` — personali o condivisi.
 
 ## `expense_rules`
 `match: { description_contains }, set: { visibility, category, split, autoAccept }` — da definire con i dati reali.
 
 ## `tasks`
-`text, done, due, area` — personali per impostazione predefinita.
+`text, done, doneAt, due ("AAAA-MM-GG"), projectId, people, note` — personali per impostazione predefinita, o con la visibilità del progetto.
 
 ## `journal_entries`
 `text, analyzed, analyzedAt` — sempre `private`, solo il proprietario (anche nelle regole).
 
 ## `notes`
-`text` — appunti generici (dall'agente o da contenuti condivisi).
+`text`, e per le bozze `type: "draft", channel, to, subject` — appunti e bozze salvate dalle azioni proposte.
 
 ## `proposals`
-`kind, source: "agent"|"bank"|"share"|"rule", status: "pending"|"accepted"|"rejected", target, payload, summary, explain, decidedBy, sourceEntryId`
-Accettare = creare `target` con `payload` e la stessa `visibility`. Le proposte bancarie hanno id deterministico `eb_<id transazione>` per la deduplica.
+`kind: "task"|"shopping_item"|"expense"|"manual_entry"|"note"|"draft", source: "agent"|"bank"|"share", status: "pending"|"accepted"|"rejected", payload, summary, decidedBy, sourceEntryId`
+Cosa fa la conferma, tipo per tipo: `APPLICA` in `public/js/components/proposals.js`. Le proposte dell'agente compaiono sotto la nota del diario da cui nascono; rianalizzare una nota sostituisce quelle ancora in attesa.
 
 ## `bank_connections/{uid}`
 `ownerUid, householdId, active, appId, privateKey, sessionId, accountIds, consentExpiresAt, lastSyncAt, lastSyncCreated, lastError`

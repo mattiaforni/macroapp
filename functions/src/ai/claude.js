@@ -1,6 +1,8 @@
 // Provider Anthropic (Messages API) con output strutturato (output_config.format = json_schema).
 // Riferimento: https://platform.claude.com/docs/en/build-with-claude/structured-outputs
-const MODEL = "claude-haiku-5-5";
+// Sonnet: estrazione più accurata e bozze scritte meglio. Circa 1 centesimo per nota.
+// Per risparmiare si può passare a "claude-haiku-5-5" (circa un ventesimo del costo).
+const MODEL = "claude-sonnet-5-5";
 const URL = "https://api.anthropic.com/v1/messages";
 
 export async function reason({ system, user, schema, key }) {
@@ -13,7 +15,7 @@ export async function reason({ system, user, schema, key }) {
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: 2048,
+      max_tokens: 4096,
       system,
       messages: [{ role: "user", content: user }],
       output_config: { format: { type: "json_schema", schema } },

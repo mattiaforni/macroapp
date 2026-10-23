@@ -27,7 +27,7 @@ service cloud.firestore {
         || (
           request.resource.data.members == resource.data.members.concat([uid()])
           && request.resource.data.members.size() <= 2
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members'])
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'memberNames'])
         )
       );
       allow delete: if false;
@@ -87,6 +87,19 @@ service cloud.firestore {
       allow delete: if signedIn() && canDelete();
     }
     match /proposals/{id} {
+      allow read: if signedIn() && canRead();
+      allow create: if signedIn() && validNew();
+      allow update: if signedIn() && canWrite();
+      allow delete: if signedIn() && canDelete();
+    }
+
+    match /projects/{id} {
+      allow read: if signedIn() && canRead();
+      allow create: if signedIn() && validNew();
+      allow update: if signedIn() && canWrite();
+      allow delete: if signedIn() && canDelete();
+    }
+    match /recurring_expenses/{id} {
       allow read: if signedIn() && canRead();
       allow create: if signedIn() && validNew();
       allow update: if signedIn() && canWrite();

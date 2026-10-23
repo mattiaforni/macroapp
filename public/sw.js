@@ -1,5 +1,5 @@
 // Service worker minimo: cache dei file statici dell'app (network-first), nessuna cache delle API Firebase.
-const CACHE = "macroapp-v2";
+const CACHE = "macroapp-v3";
 const STATIC = ["/", "/index.html", "/manifest.json", "/css/base.css", "/icons/icon.svg"];
 
 self.addEventListener("install", (e) => {

@@ -2,10 +2,15 @@
 import { startAuth, onSession, login, session, checkRedirectResult } from "./core/auth.js";
 import { addRoute, startRouter, navigate, currentRoute } from "./core/router.js";
 import { el, clear, icon, toast } from "./core/ui.js";
+import { applicaTema } from "./core/theme.js";
+import { ensureMyName } from "./core/household.js";
 import { modules, navModules, DEFAULT_ROUTE } from "./modules/registry.js";
 import { renderOnboarding } from "./components/onboarding.js";
-import { watchPendingCount } from "./components/proposals.js";
+import { closeSheet } from "./components/sheet.js";
+import { materializeRecurring } from "./modules/spese/index.js";
 import { VERSION } from "./version.js";
+
+applicaTema();
 
 const view = document.getElementById("view");
 const nav = document.getElementById("nav");
@@ -13,41 +18,34 @@ const title = document.getElementById("page-title");
 const actions = document.getElementById("topbar-actions");
 
 let routerStarted = false;
-let unwatchBadge = null;
 let loginError = null; // errore dell'ultimo login con redirect, mostrato sotto il pulsante
 
 function renderLogin() {
   clear(nav);
   clear(actions);
-  title.textContent = "Macroapp";
+  title.textContent = "";
   view.replaceChildren(
-    el("div.login", {},
+    el("div.accesso", {},
       el("h2", {}, "Macroapp"),
-      el("p.muted", {}, "Spese, lista, manuale di casa, diario e task. Accesso riservato."),
-      el("button.btn.btn--primary", { onclick: () => login().catch((e) => toast(e.code || e.message)) }, "Accedi con Google"),
-      loginError ? el("p.small", { style: "color:var(--danger)" }, `Accesso non riuscito: ${loginError}`) : null,
-      el("p.small.muted", {}, `versione ${VERSION}`),
+      el("p.muted", {}, "Lista, spese, diario, task e manuale di casa."),
+      el("button.btn.btn--primario", { onclick: () => login().catch((e) => toast(e.code || e.message)) }, "Accedi con Google"),
+      loginError ? el("p.errore", {}, `Accesso non riuscito: ${loginError}`) : null,
+      el("p.meta", {}, `versione ${VERSION}`),
     ),
   );
 }
 
-function renderNav() {
-  clear(nav);
-  const active = currentRoute() || DEFAULT_ROUTE;
-  for (const m of navModules) {
-    const item = el("a.nav__item", { href: `#/${m.id}`, "aria-current": m.id === active ? "page" : null },
-      icon(m.icon || m.id), m.title,
-    );
-    if (m.id === "proposte") item.append(el("span.nav__badge", { id: "badge-proposte", hidden: true }, "0"));
-    nav.append(item);
-  }
+function renderNav(active) {
+  nav.replaceChildren(...navModules.map((m) =>
+    el("a", { href: `#/${m.id}`, "aria-current": m.id === active ? "page" : null }, icon(m.icon || m.id), m.title),
+  ));
 }
 
-function renderActions(mod) {
+function renderActions(id) {
   clear(actions);
-  actions.append(
-    el("a.btn.btn--ghost.btn--icon", { href: "#/impostazioni", "aria-label": "Impostazioni" }, icon("impostazioni")),
-  );
+  if (id !== "impostazioni") {
+    actions.append(el("a.tondo", { href: "#/impostazioni", "aria-label": "Impostazioni" }, icon("impostazioni")));
+  }
 }
 
 function startApp() {
@@ -58,10 +56,12 @@ function startApp() {
       container: view,
       fallback: DEFAULT_ROUTE,
       onChange: (id) => {
+        closeSheet({ fromHistory: true });
         const mod = modules.find((m) => m.id === id);
         title.textContent = mod?.title || "Macroapp";
-        renderNav();
-        renderActions(mod);
+        renderNav(id);
+        renderActions(id);
+        window.scrollTo(0, 0);
       },
     });
   } else {
@@ -69,13 +69,9 @@ function startApp() {
     navigate(currentRoute() || DEFAULT_ROUTE);
     window.dispatchEvent(new HashChangeEvent("hashchange"));
   }
-  unwatchBadge?.();
-  unwatchBadge = watchPendingCount((n) => {
-    const b = document.getElementById("badge-proposte");
-    if (!b) return;
-    b.textContent = String(n);
-    b.hidden = n === 0;
-  });
+  // Lavori di fondo, non bloccanti.
+  ensureMyName().catch((e) => console.warn("ensureMyName", e));
+  materializeRecurring().catch((e) => console.warn("materializeRecurring", e));
 }
 
 onSession((s) => {
@@ -83,17 +79,16 @@ onSession((s) => {
   if (s.error) {
     clear(nav); clear(actions); title.textContent = "Errore";
     view.replaceChildren(
-      el("div.card", {},
-        el("h2", {}, "Qualcosa non va"),
+      el("div.vuoto", {},
+        el("b", {}, "Qualcosa non va"),
         el("p", {}, s.error),
-        el("p.small.muted", {}, "Controlla che Firestore sia creato nel progetto e che le regole siano pubblicate."),
-        el("button.btn", { onclick: () => location.reload() }, "Riprova"),
+        el("p.small", {}, "Controlla che Firestore sia creato e che le regole siano pubblicate."),
+        el("button.btn", { onclick: () => location.reload(), style: "margin-top:14px" }, "Riprova"),
       ),
     );
     return;
   }
   if (!s.householdId) {
-    // Utente autenticato ma senza casa: onboarding (crea o unisciti).
     clear(nav); clear(actions); title.textContent = "Benvenuto";
     renderOnboarding(view);
     return;
@@ -108,27 +103,26 @@ checkRedirectResult().then((err) => {
   if (!session.user) renderLogin();
 });
 
-// Service worker per installazione e cache dei file statici.
-// Quando è pubblicata una versione nuova, il nuovo service worker prende il controllo
-// e la pagina si ricarica una volta: l'app installata non resta ferma sul codice vecchio.
+// Service worker. Quando è pubblicata una versione nuova, il nuovo service worker prende
+// il controllo e la pagina si ricarica una volta; se un foglio è aperto, chiede prima.
 if ("serviceWorker" in navigator) {
   const hadController = !!navigator.serviceWorker.controller;
   let reloaded = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
     if (!hadController || reloaded) return;
     reloaded = true;
-    location.reload();
+    if (document.getElementById("foglio").hidden) location.reload();
+    else toast("C'è una versione nuova", { azione: { label: "Ricarica", fn: () => location.reload() } });
   });
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("/sw.js").then((r) => r.update()).catch(console.warn);
   });
 }
 
-// Contenuto condiviso da altre app (Web Share Target): per ora lo mettiamo in coda come proposta.
+// Testo condiviso da altre app (Web Share Target): finisce nel diario, pronto da salvare.
 const params = new URLSearchParams(location.search);
 if (params.get("share")) {
-  sessionStorage.setItem("macroapp.share", JSON.stringify({
-    title: params.get("title"), text: params.get("text"), url: params.get("url"),
-  }));
-  history.replaceState(null, "", "/#/proposte");
+  const text = [params.get("title"), params.get("text"), params.get("url")].filter(Boolean).join("\n");
+  sessionStorage.setItem("macroapp.share", text);
+  history.replaceState(null, "", "/#/diario");
 }

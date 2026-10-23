@@ -1,233 +1,374 @@
-/* Identità visiva provvisoria: neutra, un solo accento. Da sostituire quando sarà definita. */
+/* ==========================================================================
+   MACROAPP — foglio di stile
+   --------------------------------------------------------------------------
+   Identità provvisoria. La grammatica viene dall'app della cura del verde:
+   Instrument Sans per l'interfaccia, Instrument Serif per i titoli, icone a
+   linea sottile, righe separate da filetti invece che chiuse in riquadri,
+   spunte tonde, pillole, pannelli che salgono dal basso. La tavolozza è
+   neutra (carta calda, inchiostro, un accento verde acqua) in attesa
+   dell'identità definitiva: per cambiarla bastano le variabili qui sotto.
+   ========================================================================== */
 
 :root {
-  --bg: #f6f6f4;
-  --surface: #ffffff;
-  --surface-2: #efefec;
-  --text: #1c1c1c;
-  --text-2: #6b6b6b;
-  --line: #e1e1dd;
-  --accent: #2b6cb0;
-  --accent-text: #ffffff;
-  --danger: #b03030;
-  --ok: #2f7d4e;
-  --radius: 10px;
-  --nav-h: 56px;
-  --topbar-h: 52px;
-  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --carta: #F4F3EF;
+  --testata: #EEEDE8;
+  --foglio: #FFFFFF;
+  --foglio-2: #F8F7F4;
+
+  --inchiostro: #1F1F1C;
+  --inchiostro-2: #5E5D57;
+  --inchiostro-3: #8F8D86;
+  --linea: #E2E0DA;
+  --linea-forte: #C9C6BE;
+
+  --accento: #2F6F6A;
+  --accento-tinta: #E1EEEC;
+  --su-accento: #FFFFFF;
+
+  --verde: #2F7A55;          /* hai prestato, preso, fatto */
+  --verde-tinta: #E2F0E8;
+  --frutto: #C0582E;         /* devi restituire, in ritardo */
+  --frutto-tinta: #F8E7DF;
+
+  /* Lista della spesa: rossino da comprare, verdolino usati di recente */
+  --tessera-rossa: #E06F69;
+  --tessera-verde: #6FAE9F;
+  --su-tessera: #FFFFFF;
+
+  --r: 10px;
+  --r-g: 16px;
+  --ombra: 0 1px 2px rgba(31,31,28,.05), 0 10px 30px -18px rgba(31,31,28,.4);
+
+  --ui: "Instrument Sans", system-ui, -apple-system, sans-serif;
+  --display: "Instrument Serif", Georgia, serif;
+  --barra: calc(58px + env(safe-area-inset-bottom));
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #161616;
-    --surface: #1f1f1f;
-    --surface-2: #2a2a2a;
-    --text: #ececec;
-    --text-2: #a0a0a0;
-    --line: #333333;
-    --accent: #6fa8e0;
-    --accent-text: #101010;
-  }
+:root[data-tema="notte"] {
+  --carta: #161615;
+  --testata: #1B1A19;
+  --foglio: #201F1D;
+  --foglio-2: #2A2927;
+
+  --inchiostro: #ECEAE5;
+  --inchiostro-2: #AAA79F;
+  --inchiostro-3: #86837C;
+  --linea: #34322F;
+  --linea-forte: #4A4743;
+
+  --accento: #6CC3B5;
+  --accento-tinta: #1F3532;
+  --su-accento: #10201E;
+
+  --verde: #5BB98A;
+  --verde-tinta: #1E3A2C;
+  --frutto: #E8875C;
+  --frutto-tinta: #3D261C;
+
+  --tessera-rossa: #B9585A;
+  --tessera-verde: #4B8E80;
+  --su-tessera: #FFFFFF;
+
+  --ombra: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.7);
+  color-scheme: dark;
 }
 
-* { box-sizing: border-box; }
-
-html, body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--font);
-  font-size: 16px;
-  line-height: 1.4;
-  -webkit-font-smoothing: antialiased;
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { min-height: 100%; }
+body {
+  font-family: var(--ui); background: var(--carta); color: var(--inchiostro);
+  font-size: 15px; line-height: 1.5; -webkit-font-smoothing: antialiased; overscroll-behavior-y: none;
 }
-
-#app {
-  min-height: 100dvh;
-  display: flex;
-  flex-direction: column;
-}
-
-/* Barra superiore */
-.topbar {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  height: calc(var(--topbar-h) + env(safe-area-inset-top));
-  padding-top: env(safe-area-inset-top);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-inline: 16px;
-  background: var(--bg);
-  border-bottom: 1px solid var(--line);
-}
-.topbar__title { font-size: 17px; font-weight: 600; margin: 0; }
-.topbar__actions { display: flex; gap: 8px; align-items: center; }
-
-/* Vista principale */
-.view {
-  flex: 1;
-  padding: 16px 16px calc(var(--nav-h) + env(safe-area-inset-bottom) + 24px);
-  max-width: 720px;
-  width: 100%;
-  margin: 0 auto;
-}
-
-/* Navigazione inferiore */
-.nav {
-  position: fixed;
-  bottom: 0; left: 0; right: 0;
-  z-index: 10;
-  height: calc(var(--nav-h) + env(safe-area-inset-bottom));
-  padding-bottom: env(safe-area-inset-bottom);
-  display: flex;
-  background: var(--surface);
-  border-top: 1px solid var(--line);
-}
-.nav__item {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  font-size: 11px;
-  color: var(--text-2);
-  text-decoration: none;
-  border: 0;
-  background: none;
-  cursor: pointer;
-  padding: 0;
-}
-.nav__item[aria-current="page"] { color: var(--accent); font-weight: 600; }
-.nav__item svg { width: 22px; height: 22px; }
-.nav__badge {
-  position: absolute;
-  transform: translate(12px, -14px);
-  min-width: 16px; height: 16px;
-  border-radius: 8px;
-  background: var(--accent);
-  color: var(--accent-text);
-  font-size: 10px;
-  line-height: 16px;
-  text-align: center;
-  padding-inline: 4px;
-}
-
-/* Elementi di base */
-h2 { font-size: 20px; margin: 0 0 12px; }
-h3 { font-size: 15px; margin: 16px 0 8px; color: var(--text-2); font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
-p { margin: 0 0 12px; }
-.muted { color: var(--text-2); }
+button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+input, select, textarea { font: inherit; color: inherit; }
+a { color: var(--accento); }
+:focus-visible { outline: 2px solid var(--accento); outline-offset: 2px; border-radius: 4px; }
+[hidden] { display: none !important; }
+.display { font-family: var(--display); font-weight: 400; letter-spacing: -.01em; }
+.meta { font-size: 12.5px; color: var(--inchiostro-2); }
+.muted { color: var(--inchiostro-2); }
 .small { font-size: 13px; }
+svg { flex: none; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 
-.card {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 14px;
-  margin-bottom: 12px;
+/* ───────────── Struttura ───────────── */
+
+#app { min-height: 100dvh; display: flex; flex-direction: column; }
+
+.testata {
+  position: sticky; top: 0; z-index: 400; background: var(--testata);
+  padding: calc(12px + env(safe-area-inset-top)) 16px 10px; border-bottom: 1px solid var(--linea);
+  display: flex; align-items: center; gap: 12px;
 }
+.testata__titolo { flex: 1; min-width: 0; font-size: 28px; line-height: 1.15; }
+.testata__azioni { display: flex; gap: 8px; flex: none; }
+
+.vista { flex: 1; width: 100%; max-width: 720px; margin: 0 auto;
+  padding: 0 16px calc(var(--barra) + 110px); }
+
+.schede {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 500; background: var(--foglio);
+  border-top: 1px solid var(--linea); display: flex; justify-content: space-around;
+  padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+}
+.schede a {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 5px 2px; font-size: 10.5px; color: var(--inchiostro-3); text-decoration: none;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.schede a svg { width: 21px; height: 21px; }
+.schede a[aria-current="page"] { color: var(--accento); font-weight: 600; }
+
+/* ───────────── Bottoni ───────────── */
 
 .btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 40px;
-  padding: 8px 14px;
-  border-radius: var(--radius);
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--text);
-  font: inherit;
-  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 9px 16px;
+  border-radius: 999px; font-size: 14px; font-weight: 500;
+  border: 1px solid var(--linea-forte); background: var(--foglio); white-space: nowrap;
 }
-.btn--primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
-.btn--ghost { background: transparent; border-color: transparent; }
-.btn--danger { color: var(--danger); }
-.btn:disabled { opacity: .5; cursor: default; }
-.btn--icon { width: 40px; padding: 0; justify-content: center; }
+.btn:active { transform: scale(.98); }
+.btn svg { width: 17px; height: 17px; }
+.btn--primario { background: var(--inchiostro); border-color: var(--inchiostro); color: var(--carta); }
+.btn--accento { background: var(--accento); border-color: var(--accento); color: var(--su-accento); }
+.btn--piatto { border-color: transparent; background: none; color: var(--inchiostro-2); padding: 8px 6px; }
+.btn--pericolo { border-color: transparent; color: var(--frutto); background: var(--frutto-tinta); }
+.btn[disabled] { opacity: .5; pointer-events: none; }
 
-input, textarea, select {
-  width: 100%;
-  font: inherit;
-  color: var(--text);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 10px 12px;
-  min-height: 42px;
+.tondo {
+  width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--linea); background: var(--foglio); color: var(--inchiostro-2); text-decoration: none;
 }
-textarea { min-height: 96px; resize: vertical; }
-label { display: block; font-size: 13px; color: var(--text-2); margin-bottom: 4px; }
-.field { margin-bottom: 12px; }
-.row { display: flex; gap: 8px; align-items: center; }
-.row > * { min-width: 0; }
-.row > .btn { flex: none; }
-.row .grow { flex: 1; }
+.tondo svg { width: 18px; height: 18px; }
+.tondo--piatto { border-color: transparent; background: none; }
 
-/* Liste */
-.list { list-style: none; margin: 0; padding: 0; }
-.list__item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--line);
+/* Pulsante flottante: tondo col +, oppure esteso con testo (Aggiungi spesa). */
+.fab {
+  position: fixed; right: 16px; bottom: calc(var(--barra) + 14px); z-index: 520;
+  height: 54px; min-width: 54px; padding: 0 18px; border-radius: 999px;
+  background: var(--accento); color: var(--su-accento);
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  font-size: 15.5px; font-weight: 500; box-shadow: 0 8px 22px -6px rgba(31,31,28,.45);
 }
-.list__item:last-child { border-bottom: 0; }
-.list__item--done .list__text { text-decoration: line-through; color: var(--text-2); }
-.list__text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.list__meta { font-size: 12px; color: var(--text-2); }
-.check {
-  width: 22px; height: 22px;
-  border-radius: 50%;
-  border: 2px solid var(--line);
-  background: none;
-  cursor: pointer;
-  flex: none;
-  padding: 0;
-}
-.check[aria-checked="true"] { background: var(--ok); border-color: var(--ok); }
+.fab svg { width: 22px; height: 22px; }
+.fab--tondo { padding: 0; width: 54px; }
+.fab:active { transform: scale(.96); }
 
-/* Etichette */
-.tag {
-  display: inline-block;
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--surface-2);
-  color: var(--text-2);
-}
-.tag--private { background: transparent; border: 1px dashed var(--line); }
+/* ───────────── Pillole e segmenti ───────────── */
 
-/* Stati */
-.empty { text-align: center; color: var(--text-2); padding: 32px 8px; }
+.segmenti { display: flex; gap: 6px; overflow-x: auto; padding: 14px 0 4px; scrollbar-width: none; }
+.segmenti::-webkit-scrollbar { display: none; }
+.pillola {
+  flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 999px;
+  font-size: 13px; font-weight: 500; border: 1px solid var(--linea); background: var(--foglio); color: var(--inchiostro-2);
+}
+.pillola svg { width: 15px; height: 15px; }
+.pillola.on { background: var(--inchiostro); border-color: var(--inchiostro); color: var(--carta); }
+.pillola--accento { border-color: var(--accento); color: var(--accento); background: transparent; }
+
+.etichetta {
+  display: inline-block; font-size: 10.5px; font-weight: 600; padding: 2px 7px; border-radius: 4px;
+  background: var(--foglio-2); color: var(--inchiostro-2); border: 1px solid var(--linea); vertical-align: 1px;
+}
+.etichetta--accento { background: var(--accento-tinta); color: var(--accento); border-color: transparent; }
+
+/* ───────────── Fasce e righe ───────────── */
+
+.fascia {
+  font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--inchiostro-3); margin: 22px 0 6px; display: flex; align-items: center; gap: 10px;
+}
+.fascia::after { content: ""; flex: 1; height: 1px; background: var(--linea); }
+.fascia button { font-size: 11px; letter-spacing: .06em; color: var(--accento); font-weight: 600; text-transform: uppercase; }
+
+.riga {
+  display: flex; align-items: center; gap: 12px; padding: 11px 0;
+  border-bottom: 1px solid var(--linea); cursor: pointer;
+}
+.riga:last-child { border-bottom: none; }
+.riga .testo { flex: 1; min-width: 0; }
+.riga .testo b { display: block; font-weight: 500; font-size: 15px; line-height: 1.3; overflow-wrap: anywhere; }
+.riga .testo span {
+  display: block; font-size: 12.5px; color: var(--inchiostro-2); margin-top: 1px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.riga.fatta .testo b { text-decoration: line-through; color: var(--inchiostro-3); }
+
+.pallino {
+  width: 38px; height: 38px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center;
+  background: var(--foglio-2); border: 1px solid var(--linea); color: var(--inchiostro-2);
+}
+.pallino svg { width: 19px; height: 19px; }
+.pallino--accento { background: var(--accento-tinta); color: var(--accento); border-color: transparent; }
+
+.spunta {
+  width: 34px; height: 34px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--linea-forte); color: transparent;
+}
+.spunta svg { width: 16px; height: 16px; }
+.riga.fatta .spunta { background: var(--verde); border-color: var(--verde); color: #fff; }
+
+/* Data a colonna, come in Splitwise: mese sopra, giorno sotto. */
+.data-col { width: 34px; flex: none; text-align: center; line-height: 1.1; color: var(--inchiostro-2); }
+.data-col small { display: block; font-size: 11px; }
+.data-col b { display: block; font-size: 19px; font-weight: 400; font-family: var(--display); color: var(--inchiostro); }
+
+.importo { text-align: right; flex: none; line-height: 1.2; }
+.importo small { display: block; font-size: 11.5px; }
+.importo b { font-weight: 500; font-size: 15px; }
+.importo.credito { color: var(--verde); }
+.importo.debito { color: var(--frutto); }
+.importo.neutro { color: var(--inchiostro-3); }
+
+.vuoto { padding: 46px 18px; text-align: center; color: var(--inchiostro-2); }
+.vuoto b { display: block; font-family: var(--display); font-size: 21px; color: var(--inchiostro); margin-bottom: 5px; font-weight: 400; }
+.vuoto p { font-size: 13.5px; }
+
+/* ───────────── Campi: niente riquadri, solo una linea sotto ───────────── */
+
+.campo { margin-bottom: 18px; }
+.campo > label, .etichetta-campo {
+  display: block; font-size: 11px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--inchiostro-3); margin-bottom: 4px;
+}
+.linea-input, .campo input, .campo select, .campo textarea {
+  width: 100%; border: none; border-bottom: 1px solid var(--linea-forte); border-radius: 0;
+  padding: 8px 0; background: transparent; outline: none; font-size: 16px;
+}
+.campo textarea { min-height: 70px; resize: vertical; line-height: 1.45; }
+.linea-input:focus, .campo input:focus, .campo select:focus, .campo textarea:focus { border-bottom: 2px solid var(--accento); padding-bottom: 7px; }
+.campo select { appearance: none; -webkit-appearance: none; }
+
+/* Riga grande del foglio Spese: icona quadrata a sinistra, testo grande a destra. */
+.campo-grande { display: flex; align-items: center; gap: 14px; margin: 18px 0; }
+.campo-grande .riquadro {
+  width: 50px; height: 50px; border-radius: 12px; flex: none; display: flex; align-items: center; justify-content: center;
+  background: var(--foglio-2); border: 1px solid var(--linea); color: var(--inchiostro-2); font-size: 22px;
+}
+.campo-grande .riquadro svg { width: 24px; height: 24px; }
+.campo-grande input { flex: 1; min-width: 0; font-size: 18px; }
+.campo-grande input.enorme { font-size: 30px; font-family: var(--display); }
+
+.due { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+
+/* ───────────── Foglio (pannello a tutta altezza) ───────────── */
+
+.foglio {
+  position: fixed; inset: 0; z-index: 700; background: var(--foglio);
+  display: flex; flex-direction: column; animation: sale .18s ease;
+}
+@keyframes sale { from { transform: translateY(16px); opacity: .7; } to { transform: none; opacity: 1; } }
+.foglio__testa {
+  display: flex; align-items: center; gap: 8px;
+  padding: calc(10px + env(safe-area-inset-top)) 10px 10px; border-bottom: 1px solid var(--linea);
+}
+.foglio__testa h2 { flex: 1; min-width: 0; font-family: var(--display); font-weight: 400; font-size: 24px; line-height: 1.15; }
+.foglio__corpo { flex: 1; overflow-y: auto; padding: 8px 20px calc(30px + env(safe-area-inset-bottom)); overscroll-behavior: contain; }
+.foglio__corpo > * { max-width: 640px; margin-left: auto; margin-right: auto; }
+.foglio__piede { display: flex; gap: 10px; justify-content: space-between; align-items: center; margin-top: 26px; }
+@media (min-width: 760px) {
+  .foglio { inset: auto; left: 50%; top: 6vh; transform: translateX(-50%); width: 620px; max-height: 88vh;
+    border-radius: 20px; box-shadow: var(--ombra); border: 1px solid var(--linea); }
+}
+
+/* ───────────── Lista della spesa (tessere) ───────────── */
+
+.tessere { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+@media (min-width: 560px) { .tessere { grid-template-columns: repeat(4, 1fr); } }
+.tessera {
+  position: relative; aspect-ratio: 1 / .92; border-radius: 12px; padding: 10px 8px 9px;
+  background: var(--tessera-rossa); color: var(--su-tessera);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-align: center;
+  cursor: pointer; user-select: none; -webkit-user-select: none; transition: transform .08s;
+}
+.tessera:active { transform: scale(.96); }
+.tessera--verde { background: var(--tessera-verde); }
+.tessera svg { width: 34px; height: 34px; stroke-width: 1.4; }
+.tessera .iniziale { font-family: var(--display); font-size: 34px; line-height: 1; }
+.tessera b { font-weight: 500; font-size: 13.5px; line-height: 1.15; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tessera small { font-size: 11px; opacity: .9; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.tessera .altro { position: absolute; top: 2px; right: 2px; width: 30px; height: 30px; display: flex;
+  align-items: center; justify-content: center; color: var(--su-tessera); opacity: .75; }
+.tessera .altro svg { width: 16px; height: 16px; }
+
+/* Barra "Mi serve…" agganciata sopra la navigazione */
+.mi-serve {
+  position: fixed; left: 0; right: 0; bottom: var(--barra); z-index: 510; background: var(--testata);
+  border-top: 1px solid var(--linea); padding: 10px 16px;
+}
+.mi-serve__riga { max-width: 720px; margin: 0 auto; display: flex; gap: 10px; align-items: center; }
+.mi-serve input { flex: 1; min-width: 0; border: 1px solid var(--linea); background: var(--foglio);
+  border-radius: 999px; padding: 11px 16px; font-size: 16px; outline: none; }
+.mi-serve input:focus { border-color: var(--accento); }
+.mi-serve .tondo { width: 46px; height: 46px; background: var(--accento); color: var(--su-accento); border: none; }
+.suggerimenti { max-width: 720px; margin: 0 auto 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+.suggerimenti:empty { display: none; }
+
+/* ───────────── Spese: saldo ───────────── */
+
+.saldo { padding: 18px 0 4px; }
+.saldo p { font-size: 17px; }
+.saldo .cifra { font-family: var(--display); font-size: 34px; line-height: 1.1; }
+.saldo .cifra.credito { color: var(--verde); }
+.saldo .cifra.debito { color: var(--frutto); }
+
+/* ───────────── Diario ───────────── */
+
+.taccuino { padding-top: 14px; }
+.taccuino textarea {
+  width: 100%; min-height: 110px; border: none; border-bottom: 1px solid var(--linea-forte); background: transparent;
+  font-size: 17px; line-height: 1.45; padding: 6px 0 10px; resize: vertical; outline: none;
+}
+.taccuino textarea:focus { border-bottom: 2px solid var(--accento); }
+.taccuino textarea::placeholder { color: var(--inchiostro-3); font-family: var(--display); font-size: 19px; font-style: italic; }
+.taccuino__azioni { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.taccuino__azioni .btn--primario { margin-left: auto; }
+.stato-ai { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600;
+  letter-spacing: .07em; text-transform: uppercase; color: var(--inchiostro-3); margin-top: 12px; }
+.stato-ai i { width: 8px; height: 8px; border-radius: 50%; background: var(--inchiostro-3); }
+.stato-ai.on i { background: var(--verde); }
+.stato-ai.on { color: var(--verde); }
+
+.nota { padding: 14px 0 12px; border-bottom: 1px solid var(--linea); }
+.nota:last-child { border-bottom: none; }
+.nota__testa { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--inchiostro-3); }
+.nota__testa .spazio { flex: 1; }
+.nota__testo { white-space: pre-wrap; margin: 4px 0 2px; font-size: 15.5px; }
+
+/* Azioni proposte dall'AI sotto la nota */
+.azioni-ai { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.azione {
+  display: flex; align-items: flex-start; gap: 10px; padding: 9px 10px 9px 12px; border-radius: var(--r);
+  background: var(--accento-tinta);
+}
+.azione > svg { width: 17px; height: 17px; color: var(--accento); margin-top: 2px; }
+.azione .testo { flex: 1; min-width: 0; font-size: 14px; }
+.azione .testo small { display: block; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--accento); }
+.azione .sì, .azione .no { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex: none; }
+.azione .sì { background: var(--accento); color: var(--su-accento); }
+.azione .no { color: var(--inchiostro-2); }
+.azione .sì svg, .azione .no svg { width: 15px; height: 15px; }
+.bozza { margin-top: 6px; padding: 10px 12px; background: var(--foglio); border-radius: 8px; font-size: 14px; white-space: pre-wrap; }
+.bozza__oggetto { font-weight: 600; margin-bottom: 4px; }
+.bozza__azioni { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+
+/* ───────────── Varie ───────────── */
+
+.blocco { padding: 16px 0; border-bottom: 1px solid var(--linea); }
+.blocco h3 { font-family: var(--display); font-weight: 400; font-size: 21px; line-height: 1.2; margin-bottom: 4px; }
+.blocco > p { font-size: 14px; color: var(--inchiostro-2); margin-bottom: 10px; }
+
 .toast {
-  position: fixed;
-  left: 50%; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 12px);
-  transform: translateX(-50%);
-  background: var(--text);
-  color: var(--bg);
-  padding: 10px 14px;
-  border-radius: var(--radius);
-  font-size: 14px;
-  z-index: 20;
-  max-width: calc(100% - 32px);
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--barra) + 84px); z-index: 800;
+  background: var(--inchiostro); color: var(--carta); padding: 10px 16px; border-radius: 999px;
+  font-size: 13.5px; max-width: 88vw; display: flex; align-items: center; gap: 14px;
 }
+.toast button { color: var(--accento-tinta); font-weight: 600; font-size: 13px; }
 
-/* Schermata di accesso */
-.login {
-  min-height: 70dvh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  gap: 16px;
-}
+.accesso { min-height: 70dvh; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; gap: 14px; padding: 20px; }
+.accesso h2 { font-family: var(--display); font-weight: 400; font-size: 40px; line-height: 1; }
+.errore { font-size: 13px; color: var(--frutto); background: var(--frutto-tinta); padding: 10px 12px; border-radius: var(--r); }
 
-/* Proposte (coda di approvazione) */
-.proposal { border-left: 3px solid var(--accent); }
-.proposal__actions { display: flex; gap: 8px; margin-top: 10px; }
+svg.mini { width: 13px; height: 13px; vertical-align: -2px; color: var(--inchiostro-3); }
+select.pillola { appearance: none; -webkit-appearance: none; padding-right: 14px; }

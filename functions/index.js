@@ -48,11 +48,20 @@ export const analyzeEntry = onCall(
     }
     const entry = { id: snap.id, ...snap.data() };
     const { analyzeJournalEntry } = await import("./src/agent.js");
-    const n = await analyzeJournalEntry(db, entry, {
-      uid: req.auth.uid,
-      keys: { anthropic: ANTHROPIC_API_KEY.value(), gemini: GEMINI_API_KEY.value() },
-    });
-    return { proposals: n };
+    try {
+      const n = await analyzeJournalEntry(db, entry, {
+        uid: req.auth.uid,
+        keys: { anthropic: ANTHROPIC_API_KEY.value().trim(), gemini: GEMINI_API_KEY.value().trim() },
+      });
+      return { proposals: n };
+    } catch (err) {
+      console.error("analyzeEntry", err.message);
+      // 401: chiave assente o fittizia. Il telefono mostra «AI non ancora collegata».
+      if (/\b401\b|authentication|invalid x-api-key/i.test(err.message)) {
+        throw new HttpsError("failed-precondition", "Chiave dell'AI non configurata");
+      }
+      throw new HttpsError("internal", "Analisi non riuscita");
+    }
   },
 );
 

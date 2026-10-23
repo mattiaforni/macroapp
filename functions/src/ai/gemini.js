@@ -2,6 +2,15 @@
 const MODEL = "gemini-2.5-flash";
 const base = (key, action) => `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:${action}?key=${key}`;
 
+/** Lo schema di Gemini non accetta additionalProperties: lo togliamo a ogni livello. */
+function perGemini(x) {
+  if (Array.isArray(x)) return x.map(perGemini);
+  if (!x || typeof x !== "object") return x;
+  const out = {};
+  for (const [k, v] of Object.entries(x)) if (k !== "additionalProperties") out[k] = perGemini(v);
+  return out;
+}
+
 export async function reason({ system, user, schema, key }) {
   const res = await fetch(base(key, "generateContent"), {
     method: "POST",
@@ -9,7 +18,7 @@ export async function reason({ system, user, schema, key }) {
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: system }] },
       contents: [{ role: "user", parts: [{ text: user }] }],
-      generationConfig: { responseMimeType: "application/json", responseSchema: schema },
+      generationConfig: { responseMimeType: "application/json", responseSchema: perGemini(schema) },
     }),
   });
   if (!res.ok) throw new Error(`Gemini ${res.status}: ${await res.text()}`);

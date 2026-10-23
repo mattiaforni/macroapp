@@ -1,0 +1,9 @@
+{
+  "name": "macroapp-prove",
+  "private": true,
+  "description": "Font locali per le schermate della prova (npm install --prefix prove)",
+  "dependencies": {
+    "@fontsource/instrument-sans": "^5.0.0",
+    "@fontsource/instrument-serif": "^5.0.0"
+  }
+}
