@@ -121,9 +121,11 @@ service cloud.firestore {
       allow delete: if signedIn() && canDelete();
     }
 
-    // Collegamenti bancari: scritti solo dalle Cloud Functions (Admin SDK); il client legge solo i propri.
+    // Collegamenti bancari: scritti solo dalle Cloud Functions (Admin SDK); il client legge solo il proprio.
+    // L'id è l'uid: così la lettura è permessa anche quando il documento non esiste ancora
+    // (resource.data su un documento assente è un errore, e la pagina Banca riceverebbe un rifiuto).
     match /bank_connections/{id} {
-      allow read: if signedIn() && resource.data.ownerUid == uid();
+      allow read: if signedIn() && id == uid();
       allow write: if false;
     }
 
