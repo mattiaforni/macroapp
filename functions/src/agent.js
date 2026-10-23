@@ -3,7 +3,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { reason } from "./ai/provider.js";
 
-function system({ oggi, altro, progetti, persone, categorie }) {
+export function system({ oggi, altro, progetti, persone, categorie }) {
   return `Sei l'assistente di un'app personale e di coppia (lista della spesa, spese condivise, task per progetti,
 manuale di casa, appunti). Ricevi una nota scritta o dettata dall'utente: può contenere errori di dettatura
 e poca punteggiatura. Estrai SOLO le azioni concrete che la nota contiene o chiede, senza inventarne.
@@ -30,6 +30,9 @@ Tipi di azione:
   firmato "Mattia" se serve una firma. payload.channel ("email", "messaggio" o "documento"),
   payload.to (destinatario se noto: il nome come in rubrica, o l'indirizzo mail), payload.subject (oggetto, per le mail), payload.body (il testo completo).
 
+Nel payload scrivi sempre tutti i campi: quelli che non servono a quel tipo di azione lasciali vuoti
+("" per i testi, 0 per amount).
+
 Per ogni azione:
 - summary: una riga chiara di cosa verrà fatto (es. "Chiamare l'idraulico entro venerdì").
 - shared: true se riguarda la casa o la coppia (spesa, lista, manuale, faccende comuni), false se è personale
@@ -37,7 +40,10 @@ Per ogni azione:
 Se la nota è una riflessione senza azioni, restituisci una lista vuota.`;
 }
 
-const SCHEMA = {
+const PAYLOAD = ["text", "due", "project", "people", "description", "amount", "name", "category", "notes",
+  "type", "phone", "email", "channel", "to", "subject", "body"];
+
+export const SCHEMA = {
   type: "object",
   properties: {
     actions: {
@@ -68,6 +74,9 @@ const SCHEMA = {
               subject: { type: "string" },
               body: { type: "string" },
             },
+            // Tutti obbligatori: con i campi facoltativi la grammatica dell'output strutturato
+            // diventa troppo complessa («Schema is too complex» dopo decine di secondi).
+            required: PAYLOAD,
             additionalProperties: false,
           },
         },

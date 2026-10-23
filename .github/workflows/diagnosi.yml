@@ -17,6 +17,9 @@ on:
         description: "Prova una chiamata minima all'API di Anthropic con la chiave salvata (tempo e risposta)"
         type: boolean
         default: false
+      nota:
+        description: "Testo per la prova dell'agente"
+        default: "Chiama Domenico domani. Comprare il caffè."
       ripara:
         description: "Rendi la funzione chiamabile dall'app (invocatore pubblico; l'accesso lo controlla Firebase Auth nel codice)"
         type: boolean
@@ -27,6 +30,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
 
       - name: Autenticazione Google Cloud
         uses: google-github-actions/auth@v2
@@ -75,6 +82,8 @@ jobs:
             -H "x-api-key: $K" -H "anthropic-version: 2023-06-01" -H "content-type: application/json" \
             -d "{\"model\":\"$MODELLO\",\"max_tokens\":200,\"messages\":[{\"role\":\"user\",\"content\":\"Rispondi solo: ok\"}],\"output_config\":{\"format\":{\"type\":\"json_schema\",\"schema\":{\"type\":\"object\",\"properties\":{\"r\":{\"type\":\"string\"}},\"required\":[\"r\"],\"additionalProperties\":false}}}}" > tempo.txt 2>&1 || true
           { echo "modello: $MODELLO"; echo "lunghezza chiave: ${#K}, inizio: ${K:0:10}…"; cat tempo.txt; head -c 600 risposta.json; } | ann notice "Prova dell'API"
+          # Poi l'agente vero: stesso prompt e stesso schema della funzione.
+          (cd functions && npm ci --silent > /dev/null 2>&1 && ANTHROPIC_API_KEY="$K" node strumenti/prova-agente.mjs "${{ inputs.nota }}") 2>&1 | ann notice "Prova dell'agente"
 
       - name: Raccolta
         env:
