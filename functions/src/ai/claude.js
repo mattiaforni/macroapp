@@ -7,7 +7,7 @@ const URL = "https://api.anthropic.com/v1/messages";
 
 const ATTESA_MASSIMA = 100_000; // ms: sotto il tempo massimo della funzione (120 s)
 
-export async function reason({ system, user, schema, key }) {
+export async function reason({ system, user, schema, key, maxTokens = 4096 }) {
   const res = await fetch(URL, {
     method: "POST",
     signal: AbortSignal.timeout(ATTESA_MASSIMA),
@@ -18,7 +18,7 @@ export async function reason({ system, user, schema, key }) {
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: 4096,
+      max_tokens: maxTokens,
       system,
       messages: [{ role: "user", content: user }],
       output_config: { format: { type: "json_schema", schema } },

@@ -350,6 +350,62 @@ with sync_playwright() as p:
         pg.click(".schede a[href='#/lista']")
         pg.wait_for_selector(".tessera >> text=Lampadine")
 
+        # ── Diario per progetto: Tennis con istruzioni, riepilogo sotto la nota, trascrizione ripiegata ──
+        step[0] = "diario per progetto"
+        pg.click(".schede a[href='#/task']")
+        pg.click("button.pillola >> text=Progetto")
+        pg.fill("#foglio input[placeholder='Nome del progetto']", "Tennis")
+        pg.fill("#foglio textarea", "Riassumi cosa mi ha insegnato il maestro e cosa ricordare.")
+        pg.wait_for_timeout(150)
+        shot(pg, "15-progetto-istruzioni")
+        conferma(pg)
+        pg.wait_for_selector("button.pillola.on >> text=Tennis")
+        pg.click("button.btn--piatto >> text=Diario")
+        pg.wait_for_selector(".schede a[aria-current='page'][href='#/diario']")
+        pg.wait_for_selector("button.pillola.on >> text=Tennis")
+        pg.wait_for_selector("text=Nessuna nota in questo progetto")
+        assert pg.locator("button.pillola >> text=Circolo").count() == 0, "Circolo senza note né istruzioni: niente filtro"
+        pg.click("button.fab")
+        pg.wait_for_selector("#foglio button.pillola.on >> text=Tennis")  # progetto già scelto dal filtro
+        pg.fill("#foglio textarea", "oggi il maestro mi ha fatto lavorare sul dritto, chiudere prima la spalla, e sul rovescio a due mani con i piedi più larghi. devo comprare le corde")
+        conferma(pg)
+        pg.wait_for_selector(".nota__riepilogo h4 >> text=Cosa ho imparato", timeout=6000)
+        assert pg.locator(".nota__riepilogo b >> text=chiudere prima").count() == 1, "grassetto nel riepilogo"
+        assert pg.locator(".nota__testo >> text=oggi il maestro").count() == 0, "trascrizione ripiegata"
+        assert pg.locator(".azione >> text=Comprare le corde nuove").count() == 1, "le azioni restano proposte"
+        pg.wait_for_timeout(250)
+        shot(pg, "16-tennis-riepilogo")
+        pg.click("button.nota__apri")
+        pg.wait_for_selector(".nota__testo >> text=oggi il maestro")
+        pg.wait_for_timeout(150)
+        shot(pg, "16b-tennis-trascrizione")
+        # Il riepilogo si corregge dal foglio della nota
+        pg.click(".nota__riepilogo")
+        pg.wait_for_selector("#foglio label >> text=Riepilogo")
+        r = pg.locator("#foglio .campo textarea")
+        assert "Cosa ho imparato" in r.input_value(), r.input_value()
+        r.fill(r.input_value() + "\n- Servizio: lancio più avanti")
+        pg.wait_for_timeout(150)
+        shot(pg, "17-tennis-nota")
+        conferma(pg)
+        pg.wait_for_selector(".nota__riepilogo li >> text=Servizio: lancio più avanti")
+        # Il task proposto finisce nel progetto Tennis
+        pg.locator(".azione", has_text="Comprare le corde nuove").locator("button[aria-label='Conferma']").click()
+        pg.wait_for_timeout(300)
+        # In «Tutte» la nota porta il nome del progetto; le altre note restano
+        pg.click("button.pillola >> text=Tutte")
+        pg.wait_for_selector(".nota .progetto >> text=Tennis")
+        assert pg.locator(".nota").count() >= 2, "in Tutte ci sono anche le altre note"
+        pg.wait_for_timeout(200)
+        shot(pg, "18-diario-tutte")
+        pg.click(".schede a[href='#/task']")
+        pg.click("button.pillola >> text=Tennis")
+        pg.wait_for_selector(".riga >> text=Comprare le corde nuove")
+        assert pg.locator("button.pillola", has_text="Tennis").count() == 1, "il progetto non deve duplicarsi"
+        # Il filtro del Diario torna su Tutte per il resto della prova
+        pg.click(".schede a[href='#/diario']")
+        pg.click("button.pillola >> text=Tutte")
+
         # ── Scollegare Google Contatti ──
         step[0] = "scollega"
         menu(pg, "Google Contatti")

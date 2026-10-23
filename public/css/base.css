@@ -344,6 +344,24 @@ a.pillola { text-decoration: none; }
 .nota__testa { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--inchiostro-3); }
 .nota__testa .spazio { flex: 1; }
 .nota__testo { white-space: pre-wrap; margin: 4px 0 2px; font-size: 15.5px; }
+.nota__testa .progetto { margin-left: 2px; }
+/* Riepilogo scritto dall'AI per le note di un progetto con istruzioni; la trascrizione sta sotto, ripiegata. */
+.nota__riepilogo { margin: 4px 0 2px; font-size: 15.5px; line-height: 1.5; cursor: pointer; }
+.nota__riepilogo h4 {
+  font-size: 11px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--inchiostro-3); margin: 12px 0 2px;
+}
+.nota__riepilogo h4:first-child { margin-top: 6px; }
+.nota__riepilogo p { margin: 3px 0; }
+.nota__riepilogo ul { margin: 2px 0 4px; padding-left: 18px; }
+.nota__riepilogo li { margin: 2px 0; }
+.nota__riepilogo li::marker { color: var(--inchiostro-3); }
+.nota__riepilogo b { font-weight: 600; }
+.nota__apri { display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; padding: 4px 0;
+  font-size: 12.5px; color: var(--inchiostro-2); }
+.nota__apri svg { width: 15px; height: 15px; transition: transform .15s; }
+.nota__apri[aria-expanded="true"] svg { transform: rotate(180deg); }
+.nota__testo--trascrizione { font-size: 14px; color: var(--inchiostro-2); padding-left: 10px; border-left: 1px solid var(--linea-forte); margin-top: 4px; }
 
 /* Azioni proposte dall'AI sotto la nota */
 .azioni-ai { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }

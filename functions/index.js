@@ -68,12 +68,12 @@ export const analyzeEntry = onCall(
       const entry = { id: snap.id, ...snap.data() };
       passo("nota letta");
       const { analyzeJournalEntry } = await import("./src/agent.js");
-      const n = await analyzeJournalEntry(db, entry, {
+      const { azioni, riepilogo } = await analyzeJournalEntry(db, entry, {
         uid: req.auth.uid,
         passo,
         keys: { anthropic: ANTHROPIC_API_KEY.value().trim(), gemini: GEMINI_API_KEY.value().trim() },
       });
-      return { proposals: n };
+      return { proposals: azioni, riepilogo };
     } catch (err) {
       if (err instanceof HttpsError) throw err;
       console.error("analyzeEntry", err);

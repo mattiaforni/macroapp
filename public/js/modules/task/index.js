@@ -2,7 +2,8 @@
 // prese dalla rubrica del manuale. Personali per impostazione predefinita; un progetto
 // condiviso rende condivisi i suoi task.
 //
-// projects { name, archived }
+// projects { name, archived, istruzioni }
+//          istruzioni = per l'agente del diario: con queste, ogni nota del progetto riceve un riepilogo
 // tasks    { text, done, doneAt, due ("AAAA-MM-GG" o null), projectId, peopleIds[], people, note }
 //          people = nomi delle persone in chiaro, copia di peopleIds per chi non vede la voce in rubrica
 import { el, icon, toast, fascia, vuoto, sceltaVisibilita, fmtDate, isoGiorno, toDate, fab } from "../../core/ui.js";
@@ -10,6 +11,7 @@ import { create, update, remove, watchVisible, readVisible, VIS } from "../../co
 import { openSheet, campo } from "../../components/sheet.js";
 import { sceltaPersone } from "../../components/persone.js";
 import { nomiTask, suRubrica, personaDaId, modiDiContatto, canaleDa } from "../../core/rubrica.js";
+import { vaiA } from "../../core/router.js";
 
 export const id = "task";
 export const title = "Task";
@@ -20,6 +22,7 @@ export { navIcon as icon };
 const TASKS = "tasks";
 const PROJ = "projects";
 const CHIAVE_PROGETTO = "macroapp.task.progetto";
+const CHIAVE_DIARIO = "macroapp.diario.progetto"; // filtro del Diario (lo legge modules/diario)
 const norm = (s) => String(s || "").trim().toLowerCase();
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const GIORNI = ["domenica", "lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato"];
@@ -142,16 +145,23 @@ export async function apriTask(esistente = null, prefill = {}, progettiNoti = nu
   });
 }
 
-function apriProgetto(esistente = null, onCreato) {
+/** Foglio del progetto: nome, visibilità, istruzioni per l'agente del diario. Invio sul nome salva. */
+export function apriProgetto(esistente = null, onCreato) {
   let visibility = esistente?.visibility || VIS.PRIVATE;
   const nome = el("input.linea-input", { value: esistente?.name || "", placeholder: "Nome del progetto", autofocus: true, enterkeyhint: "done", style: "font-size:19px" });
   nome.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); sheet.confirm(); } });
+  const istruzioni = el("textarea", {
+    value: esistente?.istruzioni || "", rows: 5,
+    placeholder: "Es. Riassumi cosa mi ha insegnato il maestro, cosa ha funzionato, cosa no, cosa ricordare la prossima volta.",
+  });
   const sheet = openSheet({
     title: esistente ? "Progetto" : "Nuovo progetto",
     body: [
       el("div.campo", { style: "margin-top:14px" }, nome),
       el("div.campo", {}, el("label", {}, "Visibilità"), sceltaVisibilita(visibility, (v) => { visibility = v; })),
-      el("p.meta", {}, "Un progetto condiviso è visibile ai due membri della casa, insieme ai suoi task."),
+      el("p.meta", { style: "margin:-8px 0 18px" }, "Un progetto condiviso è visibile ai due membri della casa, insieme ai suoi task. Le note del diario restano solo tue."),
+      campo("Istruzioni per il diario", istruzioni),
+      el("p.meta", { style: "margin-top:-10px" }, "Facoltative. Con le istruzioni, l'AI scrive un riepilogo di ogni nota del diario di questo progetto, tenendo conto delle note precedenti."),
       esistente ? el("div.foglio__piede", {},
         el("button.btn", { onclick: () => { update(PROJ, esistente.id, { archived: true }); sheet.close(); toast("Progetto archiviato"); } }, "Archivia"),
         el("button.btn.btn--pericolo", { onclick: async () => {
@@ -163,9 +173,10 @@ function apriProgetto(esistente = null, onCreato) {
     ],
     onConfirm: () => {
       const name = nome.value.trim();
-      if (!name) return false;
-      if (esistente) update(PROJ, esistente.id, { name, visibility });
-      else onCreato?.(create(PROJ, { name: cap(name), archived: false }, visibility).id);
+      if (!name) { nome.focus(); return false; }
+      const dati = { name, istruzioni: istruzioni.value.trim() };
+      if (esistente) update(PROJ, esistente.id, { ...dati, visibility });
+      else onCreato?.(create(PROJ, { ...dati, name: cap(name), archived: false }, visibility).id);
     },
   });
 }
@@ -231,6 +242,8 @@ export function mount(container) {
       const p = attivi.find((x) => x.id === scelto);
       nodi.push(el("div.segmenti", { style: "padding-top:4px" },
         el("button.btn.btn--piatto", { onclick: () => apriProgetto(p) }, icon("matita"), "Modifica progetto"),
+        // Le note del diario di questo progetto: si aprono nel Diario, già filtrato.
+        el("button.btn.btn--piatto", { onclick: () => { try { localStorage.setItem(CHIAVE_DIARIO, p.id); } catch (e) {} vaiA("diario"); } }, icon("diario"), "Diario"),
         p.visibility === VIS.SHARED ? el("span.etichetta.etichetta--accento", { style: "align-self:center" }, "condiviso") : null));
     }
 

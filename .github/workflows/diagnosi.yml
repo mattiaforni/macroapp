@@ -20,6 +20,9 @@ on:
       nota:
         description: "Testo per la prova dell'agente"
         default: "Chiama Domenico domani. Comprare il caffè."
+      istruzioni:
+        description: "Istruzioni di un progetto per la prova dell'agente (vuoto = nota senza progetto)"
+        default: ""
       ripara:
         description: "Rendi la funzione chiamabile dall'app (invocatore pubblico; l'accesso lo controlla Firebase Auth nel codice)"
         type: boolean
@@ -71,6 +74,9 @@ jobs:
       # e con quale errore (credito, workspace, modello). La chiave non viene mai stampata.
       - name: Prova dell'API di Anthropic
         if: ${{ inputs.provaai }}
+        env:
+          NOTA: ${{ inputs.nota }}
+          ISTRUZIONI: ${{ inputs.istruzioni }}
         run: |
           ann() { echo "::$1 title=$2::$(sed -e 's/%/%25/g' -e 's/\r//g' | head -c 4000 | awk '{printf "%s%%0A", $0}')"; }
           if ! K=$(gcloud secrets versions access latest --secret=ANTHROPIC_API_KEY --project macroapp-b9bd0 2>err.txt); then
@@ -83,7 +89,7 @@ jobs:
             -d "{\"model\":\"$MODELLO\",\"max_tokens\":200,\"messages\":[{\"role\":\"user\",\"content\":\"Rispondi solo: ok\"}],\"output_config\":{\"format\":{\"type\":\"json_schema\",\"schema\":{\"type\":\"object\",\"properties\":{\"r\":{\"type\":\"string\"}},\"required\":[\"r\"],\"additionalProperties\":false}}}}" > tempo.txt 2>&1 || true
           { echo "modello: $MODELLO"; echo "lunghezza chiave: ${#K}, inizio: ${K:0:10}…"; cat tempo.txt; head -c 600 risposta.json; } | ann notice "Prova dell'API"
           # Poi l'agente vero: stesso prompt e stesso schema della funzione.
-          (cd functions && npm ci --silent > /dev/null 2>&1 && ANTHROPIC_API_KEY="$K" node strumenti/prova-agente.mjs "${{ inputs.nota }}") 2>&1 | ann notice "Prova dell'agente"
+          (cd functions && npm ci --silent > /dev/null 2>&1 && ANTHROPIC_API_KEY="$K" ISTRUZIONI="$ISTRUZIONI" node strumenti/prova-agente.mjs "$NOTA") 2>&1 | ann notice "Prova dell'agente"
 
       - name: Raccolta
         env:

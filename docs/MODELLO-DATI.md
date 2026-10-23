@@ -40,7 +40,8 @@ cancella quello della rubrica); il nome resta quello della rubrica. Senza colleg
 `description, amount, paidBy, split, every: "week"|"month"|"year", nextDate, active` — all'avvio l'app genera le spese scadute con id `rec_<id>_<AAAA-MM-GG>` (nessun doppione se lo fanno entrambi i telefoni).
 
 ## `projects`
-`name, archived` — personali o condivisi.
+`name, archived, istruzioni?` — personali o condivisi. `istruzioni`: per l'agente del diario; con queste,
+ogni nota del progetto riceve un riepilogo (vedi `journal_entries`).
 
 ## `expense_rules`
 `match: { description_contains }, set: { visibility, category, split, autoAccept }` — da definire con i dati reali.
@@ -50,7 +51,11 @@ cancella quello della rubrica); il nome resta quello della rubrica. Senza colleg
 `people` è la copia in chiaro dei nomi: serve a chi non vede la voce in rubrica (voce privata dell'altro membro) e ai task vecchi, che avevano solo il testo.
 
 ## `journal_entries`
-`text, analyzed, analyzedAt` — sempre `private`, solo il proprietario (anche nelle regole).
+`text, projectId?, riepilogo?, riepilogoAt?, analyzed, analyzedAt, analysisError` — sempre `private`, solo il
+proprietario (anche nelle regole), anche quando il progetto è condiviso. `riepilogo` lo scrive l'agente
+(`analyzeEntry`) per le note di un progetto con `istruzioni`, tenendo conto delle 8 note precedenti dello
+stesso progetto; l'utente lo corregge dal foglio della nota. Indici: `ownerUid+createdAt` e
+`ownerUid+projectId+createdAt` (Diario filtrato e note precedenti per l'agente).
 
 ## `notes`
 `text`, e per le bozze `type: "draft", channel, to, subject` — appunti e bozze salvate dalle azioni proposte.

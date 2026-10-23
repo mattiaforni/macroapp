@@ -3,7 +3,41 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { reason } from "./ai/provider.js";
 
-export function system({ oggi, altro, progetti, persone, categorie }) {
+/**
+ * Sezione del prompt per una nota collegata a un progetto. Con le istruzioni del progetto
+ * (come quelle di un progetto Claude) l'agente scrive anche il riepilogo della nota, tenendo
+ * conto delle note precedenti dello stesso progetto.
+ */
+function sezioneProgetto(progetto) {
+  if (!progetto) return "";
+  const righe = [`
+La nota appartiene al progetto «${progetto.name}»: i task che ne ricavi vanno in questo progetto
+(payload.project = "${progetto.name}"), salvo che la nota dica altro.`];
+  if (progetto.istruzioni) {
+    righe.push(`
+Oltre alle azioni, scrivi nel campo "riepilogo" un riepilogo della nota seguendo queste istruzioni
+dell'utente per il progetto:
+<istruzioni>
+${progetto.istruzioni}
+</istruzioni>
+Il riepilogo è testo semplice: righe che iniziano con "## " per i titoli di sezione, "- " per gli
+elenchi, **grassetto** solo dove serve; niente tabelle. Ciò che va ricordato sta nel riepilogo:
+non ripeterlo come azioni "note". Le azioni restano per le cose da fare, comprare, spendere o scrivere.`);
+    righe.push(progetto.precedenti.length
+      ? `
+Note precedenti dello stesso progetto, dalla più vecchia alla più recente. Servono a collegare la nota
+di oggi a ciò che è già emerso (correzioni che tornano, progressi, cose da riprendere): non
+riassumerle di nuovo.
+<precedenti>
+${progetto.precedenti.map((n) => `<nota data="${n.data}">\n${n.testo}\n</nota>`).join("\n")}
+</precedenti>`
+      : `
+È la prima nota di questo progetto.`);
+  }
+  return righe.join("\n");
+}
+
+export function system({ oggi, altro, progetti, persone, categorie, progetto = null }) {
   return `Sei l'assistente di un'app personale e di coppia (lista della spesa, spese condivise, task per progetti,
 manuale di casa, appunti). Ricevi una nota scritta o dettata dall'utente: può contenere errori di dettatura
 e poca punteggiatura. Estrai SOLO le azioni concrete che la nota contiene o chiede, senza inventarne.
@@ -37,7 +71,8 @@ Per ogni azione:
 - summary: una riga chiara di cosa verrà fatto (es. "Chiamare l'idraulico entro venerdì").
 - shared: true se riguarda la casa o la coppia (spesa, lista, manuale, faccende comuni), false se è personale
   (lavoro, volontariato, cose proprie).
-Se la nota è una riflessione senza azioni, restituisci una lista vuota.`;
+Se la nota è una riflessione senza azioni, restituisci una lista vuota.
+${sezioneProgetto(progetto)}`;
 }
 
 const PAYLOAD = ["text", "due", "project", "people", "description", "amount", "name", "category", "notes",
@@ -89,6 +124,16 @@ export const SCHEMA = {
   additionalProperties: false,
 };
 
+/** Lo schema della risposta: con il riepilogo solo per le note di un progetto con istruzioni. */
+export function schema(conRiepilogo = false) {
+  if (!conRiepilogo) return SCHEMA;
+  return {
+    ...SCHEMA,
+    properties: { riepilogo: { type: "string" }, ...SCHEMA.properties },
+    required: ["riepilogo", ...SCHEMA.required],
+  };
+}
+
 const s = (x) => (typeof x === "string" ? x.trim() : "");
 
 /** Tiene solo i campi che servono a ciascun tipo. */
@@ -133,6 +178,40 @@ async function contesto(db, entry, uid) {
   return { oggi: `${oggi} (${iso})`, altro: altro.split(" ")[0], progetti: [...nomi], persone: [...persone].slice(0, 300), categorie };
 }
 
+const PRECEDENTI = 8;       // note precedenti date come contesto
+const LUNGHEZZA_NOTA = 4000; // caratteri per nota precedente
+const fmtData = (t) => new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", day: "numeric", month: "long", year: "numeric" })
+  .format(t?.toDate ? t.toDate() : new Date(t || Date.now()));
+
+/**
+ * Il progetto della nota, se ce l'ha e l'utente lo vede (suo, o condiviso nella sua casa).
+ * Con le istruzioni, anche le ultime note dello stesso progetto: il riepilogo se c'è, se no il testo.
+ * La query usa l'indice ownerUid + projectId + createdAt; se manca (appena pubblicato) si va avanti senza.
+ */
+async function progettoDellaNota(db, entry, uid, passo) {
+  if (!entry.projectId) return null;
+  const snap = await db.collection("projects").doc(entry.projectId).get();
+  if (!snap.exists) return null;
+  const p = snap.data();
+  const visibile = p.ownerUid === uid || (p.visibility === "shared" && p.householdId && p.householdId === entry.householdId);
+  if (!visibile) return null;
+  const istruzioni = s(p.istruzioni).slice(0, 8000);
+  let precedenti = [];
+  if (istruzioni) {
+    try {
+      const q = await db.collection("journal_entries")
+        .where("ownerUid", "==", uid).where("projectId", "==", entry.projectId)
+        .orderBy("createdAt", "desc").limit(PRECEDENTI + 1).get();
+      precedenti = q.docs.filter((d) => d.id !== entry.id).slice(0, PRECEDENTI).reverse()
+        .map((d) => ({ data: fmtData(d.data().createdAt), testo: (s(d.data().riepilogo) || s(d.data().text)).slice(0, LUNGHEZZA_NOTA) }))
+        .filter((n) => n.testo);
+    } catch (err) {
+      passo(`note precedenti non lette: ${err.message}`);
+    }
+  }
+  return { name: p.name || "senza nome", istruzioni, precedenti };
+}
+
 /** Spese e lista riguardano sempre la casa; le bozze sono sempre solo tue. */
 function visibilita(a) {
   if (a.kind === "expense" || a.kind === "shopping_item") return "shared";
@@ -141,13 +220,23 @@ function visibilita(a) {
   return a.shared ? "shared" : "private";
 }
 
-/** Ritorna il numero di proposte create. */
+/**
+ * Legge la nota, scrive le proposte e, per le note di un progetto con istruzioni, il riepilogo
+ * nella nota stessa (testo correggibile, non un'azione: vedi CLAUDE.md, regola 5).
+ * Ritorna { azioni, riepilogo }: quante proposte e se ha scritto il riepilogo.
+ */
 export async function analyzeJournalEntry(db, entry, { uid, keys, provider, passo = () => {} }) {
-  const ctx = await contesto(db, entry, uid);
-  passo(`contesto pronto (${ctx.progetti.length} progetti, ${ctx.persone.length} persone)`);
-  const out = await reason({ system: system(ctx), user: entry.text, schema: SCHEMA, keys, provider });
+  const [ctx, progetto] = await Promise.all([contesto(db, entry, uid), progettoDellaNota(db, entry, uid, passo)]);
+  const conRiepilogo = !!progetto?.istruzioni;
+  passo(`contesto pronto (${ctx.progetti.length} progetti, ${ctx.persone.length} persone`
+    + (progetto ? `, progetto con ${progetto.precedenti.length} note precedenti${conRiepilogo ? ", riepilogo" : ""}` : "") + ")");
+  const out = await reason({
+    system: system({ ...ctx, progetto }), user: entry.text, schema: schema(conRiepilogo), keys, provider,
+    maxTokens: conRiepilogo ? 8000 : 4096,
+  });
   passo(`risposta dell'AI (${Array.isArray(out.actions) ? out.actions.length : 0} azioni)`);
   const actions = (Array.isArray(out.actions) ? out.actions : []).filter((a) => SCHEMA.properties.actions.items.properties.kind.enum.includes(a.kind));
+  const riepilogo = conRiepilogo ? s(out.riepilogo) : "";
 
   // Rianalisi: le proposte ancora in attesa della stessa nota vengono sostituite.
   const vecchie = await db.collection("proposals")
@@ -171,7 +260,12 @@ export async function analyzeJournalEntry(db, entry, { uid, keys, provider, pass
       updatedAt: FieldValue.serverTimestamp(),
     });
   }
+  if (riepilogo) {
+    batch.update(db.collection("journal_entries").doc(entry.id), {
+      riepilogo, riepilogoAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+    });
+  }
   await batch.commit();
-  passo("proposte scritte");
-  return actions.length;
+  passo(`proposte scritte${riepilogo ? ", riepilogo scritto" : ""}`);
+  return { azioni: actions.length, riepilogo: !!riepilogo };
 }

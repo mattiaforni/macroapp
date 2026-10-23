@@ -7,16 +7,16 @@ const providers = { claude, gemini };
 export const DEFAULT_PROVIDER = "claude";
 
 /**
- * reason({ system, user, schema, keys, provider })
+ * reason({ system, user, schema, keys, provider, maxTokens })
  * Ritorna un oggetto JSON conforme a `schema` (JSON Schema). Ogni provider gestisce
- * la propria modalità di output strutturato.
+ * la propria modalità di output strutturato. maxTokens: tetto della risposta (dove il provider lo usa).
  */
-export async function reason({ system, user, schema, keys, provider = DEFAULT_PROVIDER }) {
+export async function reason({ system, user, schema, keys, provider = DEFAULT_PROVIDER, maxTokens }) {
   const p = providers[provider];
   if (!p) throw new Error(`Provider sconosciuto: ${provider}`);
   const key = provider === "claude" ? keys.anthropic : keys.gemini;
   if (!key) throw new Error(`Chiave mancante per ${provider}`);
-  return p.reason({ system, user, schema, key });
+  return p.reason({ system, user, schema, key, maxTokens });
 }
 
 /**

@@ -39,6 +39,8 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 | `components/proposals.js` | azioni proposte: `APPLICA` per tipo, `renderAzione` |
 | `components/persone.js` | scelta delle persone di un task: suggerimenti dalla rubrica e da Google Contatti, persone nuove; una voce della rubrica non collegata e il contatto Google con lo stesso nome compaiono una volta sola, e sceglierla la collega |
 | `modules/*/index.js` | un modulo = `{ id, title, nav, icon, mount(container) → smonta }`, in `modules/registry.js` |
+| `modules/diario/index.js` | note (anche dettate o condivise), filtro per progetto (`macroapp.diario.progetto`, lo scrive anche la pagina Task), riepilogo dell'AI con la trascrizione ripiegata, proposte sotto la nota |
+| `modules/task/index.js` | task per progetti; `apriProgetto` (nome, visibilità, istruzioni per il diario); dal progetto il pulsante Diario |
 | `modules/banca/index.js` | stato del collegamento (`bank_connections/{uid}` in tempo reale), scelta della banca, conclusione al ritorno da `/banca?code=…` (messo da parte in `app.js`), «Leggi ora», rinnovo, scollega |
 
 ## Regole di lavoro
@@ -61,7 +63,9 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 4. Nuova collezione: blocco in `firestore.rules` + indici in `firestore.indexes.json`
    (servono per `householdId+visibility+ordine` e `ownerUid+ordine`). Gli ordinamenti fini
    si fanno nel modulo, per non moltiplicare gli indici.
-5. Niente entra nei moduli dall'AI senza conferma: l'agente scrive solo `proposals`.
+5. Niente entra nei moduli dall'AI senza conferma: l'agente scrive solo `proposals`. Unica eccezione,
+   decisa da Mattia il 23/10: il riepilogo di una nota di un progetto con istruzioni
+   (`journal_entries.riepilogo`), che è testo della nota stessa e si corregge dal suo foglio.
 6. Mai nel repo chiavi o dati personali.
 
 ## Diagnosi delle functions
@@ -116,28 +120,18 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
       Da fare una volta (Mattia): aggiungere `https://macroapp-b9bd0.web.app/google-contatti` agli URI
       di reindirizzamento del client «Web client (auto created by Google Service)». Se il permesso
       scade dopo 7 giorni, la schermata di consenso OAuth è in modalità di test.
-- [ ] **Diario per progetto, primo caso il tennis** (idea di Mattia, 23/10). Oggi Mattia usa un
-      progetto di Claude con una chat per lezione: manda la trascrizione e riceve il riepilogo (cosa ha
-      fatto, cosa ha funzionato, cosa no), che tiene come diario. Scelta proposta: niente sezione a sé
-      né task (un registro di lezioni non è una cosa da fare), ma **note del diario collegabili a un
-      progetto**. Il progetto diventa un contenitore con due viste, Task e Diario.
-      - `journal_entries.projectId` facoltativo, pillola del progetto nel foglio della nota. Le note
-        restano private anche se il progetto è condiviso.
-      - `projects.istruzioni`: istruzioni per l'agente, come quelle di un progetto Claude (Mattia ci
-        copia le sue). Se la nota ha un progetto con istruzioni, l'agente scrive anche un riepilogo,
-        avendo come contesto i riepiloghi delle ultime note dello stesso progetto (memoria tra lezioni).
-      - Il riepilogo è un testo della nota (`summary`), mostrato sopra la trascrizione ripiegata. Non
-        è un'azione: eccezione alla regola 5 **da confermare con Mattia**. Le azioni ricavate (task,
-        spese) restano proposte.
-      - Ingresso: Mattia detta da solo, dopo la lezione, ciò che il maestro gli ha insegnato (oggi con
-        la dettatura di Claude in chat). Prima versione: testo incollato o condiviso nel diario (lo
-        Share Target c'è già). Poi registrazione nel diario con `transcribe()` (Gemini): un parlato di
-        pochi minuti passa da una chiamata onCall, senza Storage.
-      - Storico: le chat del progetto Claude si possono importare dall'esportazione dei dati di claude.ai.
-      - Lezioni che Mattia **prende**; nelle trascrizioni c'è solo la sua voce: nessun dato di terzi,
-        niente da aggiungere alla pagina privacy. Il riepilogo serve a ricordare ciò che il maestro
-        insegna; il contesto delle note precedenti serve a seguire correzioni ricorrenti e progressi.
-      - Vale anche per altri progetti (es. Circolo: verbali delle riunioni).
+- [x] **Diario per progetto** (primo caso il tennis: lezioni che Mattia prende, dettate da lui dopo
+      la lezione). Una nota può avere un progetto (`journal_entries.projectId`); un progetto può avere
+      istruzioni per il diario (`projects.istruzioni`, come quelle di un progetto Claude). Con le
+      istruzioni l'agente scrive anche `riepilogo` nella nota, con come contesto le ultime 8 note dello
+      stesso progetto (riepilogo se c'è, se no testo; indice ownerUid + projectId + createdAt, senza
+      indice va avanti senza contesto). Diario: pillole Tutte/progetti (quelli con istruzioni o con
+      note), riepilogo al posto del testo e «Trascrizione» ripiegata; nel progetto dei Task il pulsante
+      Diario apre il Diario filtrato. Le note restano private anche in un progetto condiviso.
+      Prova con l'API vera: Diagnosi con `provaai` e `istruzioni` compilato.
+- [ ] Diario per progetto, seguiti: importare lo storico delle lezioni dalle chat del progetto Claude
+      (esportazione dei dati di claude.ai); registrare nel diario con `transcribe()` (Gemini: un parlato
+      di pochi minuti passa da onCall, senza Storage); valutare con le note vere quante precedenti servono.
 - [ ] Pagina per appunti e bozze: le proposte `note` e `draft` confermate finiscono in `notes`,
       che oggi nessuna pagina mostra
 - [ ] Riga di contesto per pagina, stile Leghe Fantacalcio (Task «2 in ritardo · 3 oggi»,
