@@ -68,6 +68,26 @@
         ".git",
         "*.local"
       ]
+    },
+    {
+      "source": "probe-admin",
+      "codebase": "probe-admin",
+      "runtime": "nodejs24",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "*.local"
+      ]
+    },
+    {
+      "source": "probe-call",
+      "codebase": "probe-call",
+      "runtime": "nodejs24",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "*.local"
+      ]
     }
   ],
   "emulators": {
