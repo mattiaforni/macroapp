@@ -116,8 +116,33 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
       Da fare una volta (Mattia): aggiungere `https://macroapp-b9bd0.web.app/google-contatti` agli URI
       di reindirizzamento del client «Web client (auto created by Google Service)». Se il permesso
       scade dopo 7 giorni, la schermata di consenso OAuth è in modalità di test.
-- [ ] Riga di contesto per pagina, stile Leghe Fantacalcio (Task «2 in ritardo · 3 oggi»,
-      Spese «Ottobre · X ti deve…»)
+- [ ] **Diario per progetto, primo caso il tennis** (idea di Mattia, 23/10). Oggi Mattia usa un
+      progetto di Claude con una chat per lezione: manda la trascrizione e riceve il riepilogo (cosa ha
+      fatto, cosa ha funzionato, cosa no), che tiene come diario. Scelta proposta: niente sezione a sé
+      né task (un registro di lezioni non è una cosa da fare), ma **note del diario collegabili a un
+      progetto**. Il progetto diventa un contenitore con due viste, Task e Diario.
+      - `journal_entries.projectId` facoltativo, pillola del progetto nel foglio della nota. Le note
+        restano private anche se il progetto è condiviso.
+      - `projects.istruzioni`: istruzioni per l'agente, come quelle di un progetto Claude (Mattia ci
+        copia le sue). Se la nota ha un progetto con istruzioni, l'agente scrive anche un riepilogo,
+        avendo come contesto i riepiloghi delle ultime note dello stesso progetto (memoria tra lezioni).
+      - Il riepilogo è un testo della nota (`summary`), mostrato sopra la trascrizione ripiegata. Non
+        è un'azione: eccezione alla regola 5 **da confermare con Mattia**. Le azioni ricavate (task,
+        spese) restano proposte.
+      - Ingresso: prima testo incollato o condiviso (trascrizioni lunghe, da misurare tempi e limite
+        di 120 s); audio dopo, caricato su Storage perché un'ora di registrazione non passa da onCall.
+      - Storico: le chat del progetto Claude si possono importare dall'esportazione dei dati di claude.ai.
+      - Da chiarire: lezioni che Mattia prende o che dà? Se le dà, la nota si collega anche alla
+        persona (storico per allievo) e la pagina privacy va aggiornata (voci di terzi inviate all'AI).
+        Come ottiene oggi la trascrizione?
+      - Vale anche per altri progetti (es. Circolo: verbali delle riunioni).
 - [ ] Pagina per appunti e bozze: le proposte `note` e `draft` confermate finiscono in `notes`,
       che oggi nessuna pagina mostra
+- [ ] Riga di contesto per pagina, stile Leghe Fantacalcio (Task «2 in ritardo · 3 oggi»,
+      Spese «Ottobre · X ti deve…»)
 - [ ] Identità visiva definitiva: da decidere con Mattia
+
+Bassa priorità (Mattia, 23/10: la revisione delle spese è meno rilevante), previste in
+`docs/ARCHITETTURA.md`: regole di spesa apprese (`expense_rules`: c'è la regola Firestore, nessuno
+le scrive né le applica in `syncBank`), bonifici tra i due membri riconosciuti come pareggi, divisione
+a percentuale. Più avanti anche notifiche push (consenso in scadenza, lista condivisa).
