@@ -23,9 +23,11 @@ function getDb() {
     dbPromise = (async () => {
       const { initializeApp, getApps } = await import("firebase-admin/app");
       const { getFirestore } = await import("firebase-admin/firestore");
-      if (!getApps().length) initializeApp();
-      return getFirestore();
-    })();
+      // Non basta «nessuna app»: firebase-functions crea per sé un'app con un altro nome
+      // (per verificare l'accesso nelle onCall), e quella non è l'app predefinita.
+      const app = getApps().find((a) => a.name === "[DEFAULT]") || initializeApp();
+      return getFirestore(app);
+    })().catch((err) => { dbPromise = null; throw err; }); // al prossimo giro si riprova
   }
   return dbPromise;
 }
@@ -50,21 +52,22 @@ export const analyzeEntry = onCall(
     const { entryId } = req.data || {};
     if (!entryId) throw new HttpsError("invalid-argument", "entryId mancante");
 
-    const db = await getDb();
-    const snap = await db.collection("journal_entries").doc(entryId).get();
-    if (!snap.exists || snap.data().ownerUid !== req.auth.uid) {
-      throw new HttpsError("permission-denied", "Nota non trovata");
-    }
-    const entry = { id: snap.id, ...snap.data() };
-    const { analyzeJournalEntry } = await import("./src/agent.js");
     try {
+      const db = await getDb();
+      const snap = await db.collection("journal_entries").doc(entryId).get();
+      if (!snap.exists || snap.data().ownerUid !== req.auth.uid) {
+        throw new HttpsError("permission-denied", "Nota non trovata");
+      }
+      const entry = { id: snap.id, ...snap.data() };
+      const { analyzeJournalEntry } = await import("./src/agent.js");
       const n = await analyzeJournalEntry(db, entry, {
         uid: req.auth.uid,
         keys: { anthropic: ANTHROPIC_API_KEY.value().trim(), gemini: GEMINI_API_KEY.value().trim() },
       });
       return { proposals: n };
     } catch (err) {
-      console.error("analyzeEntry", err.message);
+      if (err instanceof HttpsError) throw err;
+      console.error("analyzeEntry", err);
       // 401: chiave assente o fittizia. Il telefono mostra «AI non ancora collegata».
       if (/\b401\b|authentication|invalid x-api-key/i.test(err.message)) {
         throw new HttpsError("failed-precondition", "Chiave dell'AI non configurata");
