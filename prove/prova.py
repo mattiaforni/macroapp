@@ -112,6 +112,7 @@ with sync_playwright() as p:
         pg.click("#foglio .riga >> text=Internet")
         pg.wait_for_timeout(300)
         assert pg.is_visible("#foglio"), "il foglio del modello deve restare aperto"
+        assert "foglio--sostituisce" in pg.get_attribute("#foglio", "class"), "il modello cambia solo il contenuto"
         pg.click("#foglio button[aria-label='Indietro']")
         pg.wait_for_timeout(200)
         assert not pg.is_visible("#foglio"), "indietro chiude il foglio"
@@ -418,6 +419,11 @@ with sync_playwright() as p:
 
         # ── Tema scuro ──
         step[0] = "tema"
+        # Passaggi tra le pagine (data-passaggio su <html>): dal menu si entra, verso la barra si
+        # torna, tra le sezioni della barra niente.
+        pg.evaluate("""() => { window.passaggi = []; new MutationObserver(() => {
+            const p = document.documentElement.dataset.passaggio; if (p) passaggi.push(p); })
+          .observe(document.documentElement, { attributes: true, attributeFilter: ["data-passaggio"] }); }""")
         pg.click("button[aria-label='Menu']")
         pg.wait_for_timeout(250)
         shot(pg, "10-menu")
@@ -433,6 +439,7 @@ with sync_playwright() as p:
         pg.click(".schede a[href='#/diario']")
         pg.wait_for_timeout(300)
         shot(pg, "9-diario-scuro")
+        assert pg.evaluate("passaggi") == ["entra", "torna"], pg.evaluate("passaggi")
         pg.click("button[aria-label='Menu']")
         pg.click(".menu__voce >> text=Casa, tema e account")
         pg.click("button.pillola >> text=Chiaro")

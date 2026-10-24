@@ -62,11 +62,16 @@ function startApp() {
   if (!routerStarted) {
     for (const m of modules) addRoute(m.id, m.mount);
     routerStarted = true;
+    const sezioni = new Set(navModules.map((m) => m.id));
     startRouter({
       container: view,
       fallback: DEFAULT_ROUTE,
+      // Come in Leghe: tra le sezioni della barra cambio secco; da una pagina del menu a una sezione
+      // della barra si torna con una dissolvenza breve; verso una pagina del menu si entra sfumando
+      // (menu e pulsanti nelle pagine passano da vaiA, che entra sempre).
+      transizione: (da, a) => (sezioni.has(a) ? (sezioni.has(da) ? null : "torna") : "entra"),
       onChange: (id) => {
-        closeSheet({ fromHistory: true });
+        closeSheet({ fromHistory: true, subito: true });
         chiudiMenu();
         const mod = modules.find((m) => m.id === id);
         title.textContent = mod?.title || "Macroapp";

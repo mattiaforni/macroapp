@@ -3,9 +3,23 @@
 // le azioni: a sinistra le secondarie (Elimina…), a destra la principale (Salva), sotto il
 // pollice destro. Quando si apre la tastiera la barra le sta sopra.
 // Il tasto indietro del telefono chiude il foglio invece di uscire dalla pagina.
+// Movimento come in Leghe Fantacalcio (animazioni in base.css): si apre sfumando, si chiude con
+// una dissolvenza breve; un foglio che ne sostituisce un altro cambia solo il contenuto.
 import { el, icon } from "../core/ui.js";
 
 let current = null;
+let chiusura = null; // foglio che sta svanendo: { finisci }
+
+const riduci = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+const MODI = ["foglio--entra", "foglio--sostituisce", "foglio--chiude"];
+
+// Fa ripartire da capo un'animazione: toglie le classi, ricalcola lo stile, mette quella nuova.
+function anima(host, classe) {
+  host.classList.remove(...MODI);
+  if (!classe) return;
+  void host.offsetWidth;
+  host.classList.add(classe);
+}
 
 // Altezza della tastiera dove il browser non ridimensiona la pagina da solo (iOS):
 // la barra in basso si alza di quanto la copre. Su Android ci pensa interactive-widget
@@ -41,7 +55,12 @@ export function openSheet({ title, body, onConfirm, confirmLabel = "Salva", azio
   // stessa voce della cronologia: tornare indietro con history.back() farebbe arrivare il
   // popstate al foglio nuovo, che si chiuderebbe da solo.
   const sostituisce = !!current;
-  if (current) current.close({ fromHistory: true });
+  // Per il movimento vale come sostituzione anche un foglio appena chiuso che sta ancora svanendo
+  // (chiudi e apri il successivo nello stesso gesto): niente lampo della pagina in mezzo.
+  // La cronologia invece segue solo `sostituisce`.
+  const fondoPieno = sostituisce || !!chiusura;
+  if (current) current.close({ fromHistory: true, subito: true });
+  chiusura?.finisci();
   const host = document.getElementById("foglio");
   let closed = false;
 
@@ -68,16 +87,37 @@ export function openSheet({ title, body, onConfirm, confirmLabel = "Salva", azio
   }
 
   let smettiTastiera = () => {};
-  function close({ fromHistory = false } = {}) {
+  function svuota() {
+    anima(host, null);
+    host.hidden = true;
+    host.replaceChildren();
+  }
+
+  // subito: senza dissolvenza (cambio di pagina, foglio sostituito da un altro).
+  function close({ fromHistory = false, subito = false } = {}) {
     if (closed) return;
     closed = true;
     smettiTastiera();
-    host.hidden = true;
-    host.replaceChildren();
     window.removeEventListener("popstate", onPop);
     document.removeEventListener("keydown", onKey);
     if (!fromHistory && history.state && history.state.foglio) history.back();
     current = null;
+    if (subito || riduci?.matches) { svuota(); return; }
+    // Dissolvenza breve verso la pagina, poi si svuota. Un foglio aperto nel frattempo la chiude
+    // subito (chiusura.finisci); il timeout copre il caso in cui l'animazione non parta.
+    let timer;
+    const fine = (e) => { if (e.target === host && e.animationName === "svanisce") finisci(); };
+    const mia = { finisci };
+    function finisci() {
+      clearTimeout(timer);
+      host.removeEventListener("animationend", fine);
+      if (chiusura === mia) chiusura = null;
+      svuota();
+    }
+    chiusura = mia;
+    host.addEventListener("animationend", fine);
+    timer = setTimeout(finisci, 400);
+    anima(host, "foglio--chiude");
   }
 
   function onPop() { close({ fromHistory: true }); }
@@ -93,6 +133,9 @@ export function openSheet({ title, body, onConfirm, confirmLabel = "Salva", azio
     barra,
   ].filter(Boolean));
   host.hidden = false;
+  // Durante il passaggio a una pagina (es. «Spese ricorrenti» dal menu) il foglio entra con la
+  // pagina, senza una seconda dissolvenza.
+  anima(host, document.documentElement.dataset.passaggio ? null : fondoPieno ? "foglio--sostituisce" : "foglio--entra");
   smettiTastiera = seguiTastiera(host);
   if (!(sostituisce && history.state && history.state.foglio)) {
     history.pushState({ ...(history.state || {}), foglio: true }, "");
@@ -109,7 +152,8 @@ export function openSheet({ title, body, onConfirm, confirmLabel = "Salva", azio
   return current;
 }
 
-/** Chiude il foglio aperto. { fromHistory: true } = senza toccare la cronologia (cambio di pagina). */
+/** Chiude il foglio aperto. { fromHistory: true } = senza toccare la cronologia;
+ *  { subito: true } = senza dissolvenza (cambio di pagina). */
 export function closeSheet(opts) { if (current) current.close(opts); }
 
 /** Riga di un campo con etichetta piccola sopra. */

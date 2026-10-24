@@ -28,13 +28,13 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 | file | cosa fa |
 |---|---|
 | `app.js` | guscio: accesso, barra in basso, pulsante del menu, router, service worker, ricorrenti all'avvio |
-| `core/router.js` | router a hash; `vaiA(id, apri)` + `richiesto(id, apri)`: il menu chiede a una pagina di aprire un suo foglio |
+| `core/router.js` | router a hash; `vaiA(id, apri)` + `richiesto(id, apri)`: il menu chiede a una pagina di aprire un suo foglio. Passaggi tra le pagine con View Transitions (`<html data-passaggio>` = `entra` / `torna`): vaiA entra sempre, il resto lo decide `transizione(da, a)` in app.js |
 | `core/ui.js` | `el()`, icone disegnate a mano (`D`), date, importi, pillole |
 | `core/db.js` | `create` (non aspetta il server, ritorna `{id, saved}`), `update`, `watchVisible`, `readVisible` |
 | `core/household.js` | casa, nomi dei membri (`memberNames`), `nomeDi`, `updateHousehold` (es. categorie del manuale) |
 | `core/rubrica.js` | voci del manuale in memoria, aggiornate in tempo reale: `trovaPersona`, `risolviPersone` (crea quelle che mancano, collegate a Google se il nome è univoco), `nomiTask`, `sincronizzaDaGoogle` (all'avvio) |
 | `core/contatti-google.js` | Google Contatti: collegamento una tantum (ritorno su `/google-contatti`), permesso di un'ora dal server, elenco in memoria per `cercaContatti` / `contattoUnico` |
-| `components/sheet.js` | foglio a tutta altezza: in alto indietro e titolo; in basso barra con le azioni secondarie a sinistra (anche un `div.foglio__piede` nel corpo finisce lì) e il pulsante principale a destra (`confirmLabel`, «Salva»), sopra la tastiera; il tasto indietro lo chiude |
+| `components/sheet.js` | foglio a tutta altezza: in alto indietro e titolo; in basso barra con le azioni secondarie a sinistra (anche un `div.foglio__piede` nel corpo finisce lì) e il pulsante principale a destra (`confirmLabel`, «Salva»), sopra la tastiera; il tasto indietro lo chiude. Classi di movimento `foglio--entra` / `--sostituisce` / `--chiude`; `close({ subito: true })` senza dissolvenza |
 | `components/menu.js` | menu a sinistra a gruppi (Casa, Collegamenti, Account), come in Leghe Fantacalcio |
 | `components/proposals.js` | azioni proposte: `APPLICA` per tipo, `renderAzione` |
 | `components/persone.js` | scelta delle persone di un task: suggerimenti dalla rubrica e da Google Contatti, persone nuove; una voce della rubrica non collegata e il contatto Google con lo stesso nome compaiono una volta sola, e sceglierla la collega |
@@ -49,6 +49,10 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
    icone a linea sottile, righe con filetti invece di riquadri, campi con la sola linea sotto,
    pillole, fogli a tutta altezza. Colori solo dalle variabili in `css/base.css`.
    Identità visiva definitiva ancora da decidere: non inventarla senza che lo chieda.
+   Movimento come in Leghe Fantacalcio, solo opacità (durate `--t-*` in base.css): tra le sezioni
+   della barra in basso nessun passaggio; menu, pulsanti che portano altrove e fogli entrano sfumando
+   sul fondo (uscita breve, poi entrata); indietro e chiusura con una dissolvenza breve. Niente
+   dissolvenze sull'arrivo dei dati. Con «riduci movimento» tutto cambia di colpo.
 2. Inserimento uniforme: in ogni pagina un + tondo in basso a destra (`fab()` in ui.js) apre il foglio
    per scrivere. Invio salva appena hai scritto tutto ciò che è obbligatorio; se manca un campo
    obbligatorio, Invio ti porta lì. Quindi: spesa = descrizione → importo → salva; task, voce del
@@ -90,7 +94,7 @@ python3 prove/prova.py            # flusso completo in Chromium, schermate in pr
 ```
 Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggiorna `prove/finto/firebase.js`.
 
-## Stato (23 ottobre 2026, sera) e prossimi passi
+## Stato (24 ottobre 2026) e prossimi passi
 
 - [x] Pubblicazione automatica, accesso Google (anche da app installata), service worker
 - [x] Lista (stile Bring), Spese (stile Splitwise, ricorrenti, pareggio), Diario con agente, Task per
@@ -99,6 +103,10 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
 - [x] Fogli con la barra in basso, menu a sinistra, apertura sul Diario, scorciatoie Chiama/WhatsApp/
       Telegram sui task con una persona che ha il numero (`modiDiContatto`, `canaleDa` in rubrica.js)
 - [x] Pagine pubbliche `/privacy` e `/termini` (richieste da Enable Banking)
+- [x] **Dissolvenze come in Leghe** (24/10, dal video di Mattia: uscita ~150 ms sul fondo, entrata
+      ~250 ms, indietro ~100 ms, schede in basso di fatto a taglio). Pagine: View Transitions nel
+      router; fogli: animazioni CSS sul foglio, che resta attivo mentre compare; menu: velo in
+      dissolvenza e cambio di pagina dopo il rientro del pannello. Le prove controllano i passaggi.
 - [x] **Banca, codice**: function `bank` (banche → avvia `POST /auth` → ritorno su `/banca?code=…` →
       concludi `POST /sessions` → conti in `bank_connections/{uid}`; scollega; sincronizza), pagina
       Banca dal menu, proposte di spesa **personali** dai movimenti (la spesa confermata nasce condivisa).

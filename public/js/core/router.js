@@ -11,16 +11,44 @@ export function currentRoute() {
   return m ? m[1] : null;
 }
 
-export function startRouter({ container, fallback, onChange }) {
-  async function render() {
-    const id = currentRoute() || fallback;
-    const mount = routes.get(id) || routes.get(fallback);
+// Passaggi tra le pagine, come in Leghe Fantacalcio (animazioni in base.css):
+// "entra" (lo schermo sfuma sul fondo, poi compare la pagina nuova), "torna" (dissolvenza
+// incrociata breve) o nessuno (cambio secco). Chi naviga con vaiA (menu, pulsanti nelle pagine)
+// entra sempre; per il resto (barra in basso, tasto indietro) decide transizione(da, a).
+// Il browser fotografa lo schermo vecchio (View Transitions); dove non c'è, o con «riduci
+// movimento», la pagina cambia di colpo. Durante il passaggio <html data-passaggio> dice quale.
+const riduci = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+let passaggi = 0;
+let forzato = null; // passaggio chiesto da vaiA per la prossima pagina
+
+export function startRouter({ container, fallback, onChange, transizione }) {
+  async function monta(id, mount) {
     if (current?.unmount) { try { current.unmount(); } catch (e) { console.error(e); } }
     container.replaceChildren();
     container.scrollTop = 0;
     const unmount = await mount(container);
     current = { id, unmount };
     onChange?.(id);
+  }
+  function render() {
+    const id = currentRoute() || fallback;
+    const mount = routes.get(id) || routes.get(fallback);
+    const tipo = !current ? null : forzato || (current.id !== id ? transizione?.(current.id, id) : null);
+    forzato = null;
+    if (!tipo || !document.startViewTransition || riduci?.matches) return monta(id, mount);
+    const html = document.documentElement;
+    const mio = ++passaggi;
+    html.dataset.passaggio = tipo;
+    let montata;
+    const vt = document.startViewTransition(() => {
+      montata = monta(id, mount);
+      // Una pagina che aspetta dati lenti non tiene fermo lo schermo vecchio: dopo poco si sfuma
+      // comunque, e il resto arriva mentre la pagina compare.
+      return Promise.race([montata, new Promise((r) => setTimeout(r, 150))]);
+    });
+    vt.ready.catch(() => {});
+    vt.finished.catch(() => {}).then(() => { if (passaggi === mio) delete html.dataset.passaggio; });
+    return vt.updateCallbackDone.then(() => montata);
   }
   window.addEventListener("hashchange", render);
   return render();
@@ -30,9 +58,11 @@ export function startRouter({ container, fallback, onChange }) {
 // (es. Spese → Ricorrenti). La pagina la legge nel mount con richiesto().
 const CHIAVE_APRI = "macroapp.apri";
 
-/** Va alla pagina id e le chiede di aprire `apri` (facoltativo). Se ci sei già, la rimonta. */
+/** Va alla pagina id e le chiede di aprire `apri` (facoltativo). Se ci sei già, la rimonta.
+ *  Si entra con la dissolvenza; il foglio chiesto, se si apre durante il passaggio, entra con la pagina. */
 export function vaiA(id, apri = null) {
   try { apri ? sessionStorage.setItem(CHIAVE_APRI, `${id}:${apri}`) : sessionStorage.removeItem(CHIAVE_APRI); } catch (e) {}
+  forzato = "entra";
   if (currentRoute() === id) window.dispatchEvent(new HashChangeEvent("hashchange"));
   else navigate(id);
 }

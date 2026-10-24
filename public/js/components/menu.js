@@ -25,6 +25,10 @@ const GRUPPI = [
 
 let aperto = null;
 
+// Durata dello scorrimento del pannello e della dissolvenza del velo (base.css, .menu).
+const DURATA = 180;
+const riduci = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+
 export function apriMenu() {
   if (aperto) return;
   let chiuso = false;
@@ -33,14 +37,19 @@ export function apriMenu() {
     if (chiuso) return;
     chiuso = true;
     window.removeEventListener("popstate", onPop);
-    pannello.classList.remove("aperto");
-    setTimeout(() => radice.remove(), 180);
+    radice.classList.remove("aperto");
+    setTimeout(() => radice.remove(), DURATA);
     aperto = null;
-    // Prima si toglie la voce del menu dalla cronologia, poi si cambia pagina.
+    // Come in Leghe: la voce scelta parte quando il pannello è rientrato, poi la pagina cambia con
+    // il suo passaggio. Prima si toglie anche la voce del menu dalla cronologia.
+    const rientrato = new Promise((r) => setTimeout(r, riduci?.matches ? 0 : DURATA));
     if (!fromHistory && history.state && history.state.menu) {
-      if (poi) window.addEventListener("popstate", () => poi(), { once: true });
+      if (poi) {
+        const tolto = new Promise((r) => window.addEventListener("popstate", r, { once: true }));
+        Promise.all([tolto, rientrato]).then(() => poi());
+      }
       history.back();
-    } else poi?.();
+    } else if (poi) rientrato.then(() => poi());
   }
   function onPop() { chiudi({ fromHistory: true }); }
 
@@ -67,7 +76,8 @@ export function apriMenu() {
   );
   const radice = el("div.menu", { onclick: (e) => { if (e.target === radice) chiudi(); } }, pannello);
   document.body.append(radice);
-  requestAnimationFrame(() => pannello.classList.add("aperto"));
+  void radice.offsetWidth; // parte dallo stato chiuso: il pannello scorre e il velo sfuma
+  radice.classList.add("aperto");
 
   history.pushState({ ...(history.state || {}), menu: true }, "");
   window.addEventListener("popstate", onPop);

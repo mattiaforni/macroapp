@@ -4,7 +4,7 @@
    Identità provvisoria. La grammatica viene dall'app della cura del verde:
    Instrument Sans per l'interfaccia, Instrument Serif per i titoli, icone a
    linea sottile, righe separate da filetti invece che chiuse in riquadri,
-   spunte tonde, pillole, pannelli che salgono dal basso. La tavolozza è
+   spunte tonde, pillole, pannelli a tutta altezza. La tavolozza è
    neutra (carta calda, inchiostro, un accento verde acqua) in attesa
    dell'identità definitiva: per cambiarla bastano le variabili qui sotto.
    ========================================================================== */
@@ -43,6 +43,12 @@
   --ui: "Instrument Sans", system-ui, -apple-system, sans-serif;
   --display: "Instrument Serif", Georgia, serif;
   --barra: calc(58px + env(safe-area-inset-bottom));
+
+  /* Movimento, come in Leghe Fantacalcio: entrando lo schermo sfuma sul fondo (uscita) e il nuovo
+     compare (entrata, più lunga); tornando, dissolvenza incrociata breve. Solo opacità. */
+  --t-uscita: 140ms;
+  --t-entrata: 240ms;
+  --t-ritorno: 110ms;
 }
 
 :root[data-tema="notte"] {
@@ -91,7 +97,23 @@ a { color: var(--accento); }
 .muted { color: var(--inchiostro-2); }
 .small { font-size: 13px; }
 svg { flex: none; }
-@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+}
+@keyframes compare { from { opacity: 0; } }
+@keyframes svanisce { to { opacity: 0; } }
+
+/* ───────────── Passaggi tra le pagine (core/router.js) ─────────────
+   Tra le sezioni della barra in basso nessun passaggio. Entrando in una pagina del menu tutto lo
+   schermo sfuma sul fondo e la pagina nuova compare; tornando a una sezione della barra,
+   dissolvenza incrociata breve. Il browser fotografa lo schermo vecchio (View Transitions). */
+::view-transition { background: var(--carta); }
+html[data-passaggio="entra"]::view-transition-old(root) { animation: svanisce var(--t-uscita) ease-in both; }
+html[data-passaggio="entra"]::view-transition-new(root) {
+  animation: compare var(--t-entrata) ease-out calc(var(--t-uscita) * .7) both; }
+html[data-passaggio="torna"]::view-transition-old(root) { animation: svanisce var(--t-ritorno) linear both; }
+html[data-passaggio="torna"]::view-transition-new(root) { animation: compare var(--t-ritorno) linear both; }
 
 /* ───────────── Struttura ───────────── */
 
@@ -269,9 +291,17 @@ a.pillola { text-decoration: none; }
 
 .foglio {
   position: fixed; inset: 0; bottom: var(--tastiera, 0px); z-index: 700; background: var(--foglio);
-  display: flex; flex-direction: column; animation: sale .18s ease;
+  display: flex; flex-direction: column;
 }
-@keyframes sale { from { transform: translateY(16px); opacity: .7; } to { transform: none; opacity: 1; } }
+/* Entrata come in Leghe: la pagina sotto sfuma nel fondo del foglio, poi compare il contenuto.
+   Il foglio è attivo da subito: si scrive mentre compare. Classi messe da components/sheet.js. */
+.foglio--entra { animation: fondo var(--t-uscita) ease-out both; }
+.foglio--entra > * { animation: compare var(--t-entrata) ease-out calc(var(--t-uscita) * .7) both; }
+@keyframes fondo { from { background-color: transparent; } }
+/* Un foglio che ne sostituisce un altro: il fondo resta, cambia solo il contenuto. */
+.foglio--sostituisce > * { animation: compare var(--t-entrata) ease-out both; }
+/* Chiusura: dissolvenza breve verso la pagina; intanto il foglio non prende più i tocchi. */
+.foglio--chiude { animation: svanisce var(--t-ritorno) linear both; pointer-events: none; }
 .foglio__testa {
   display: flex; align-items: center; gap: 8px;
   padding: calc(10px + env(safe-area-inset-top)) 10px 10px; border-bottom: 1px solid var(--linea);
@@ -293,6 +323,9 @@ a.pillola { text-decoration: none; }
 @media (min-width: 760px) {
   .foglio { inset: auto; left: 50%; top: 6vh; transform: translateX(-50%); width: 620px; max-height: 88vh;
     border-radius: 20px; box-shadow: var(--ombra); border: 1px solid var(--linea); }
+  /* Finestra al centro: compare tutta insieme, senza toccare transform (che la tiene centrata). */
+  .foglio--entra { animation: compare var(--t-entrata) ease-out both; }
+  .foglio--entra > * { animation: none; }
 }
 
 /* ───────────── Lista della spesa (tessere) ───────────── */
@@ -383,13 +416,14 @@ a.pillola { text-decoration: none; }
 /* ───────────── Menu a sinistra ───────────── */
 
 .testata__menu { margin-left: -8px; }
-.menu { position: fixed; inset: 0; z-index: 650; background: var(--velo); }
+.menu { position: fixed; inset: 0; z-index: 650; background: transparent; transition: background-color .18s ease; }
+.menu.aperto { background: var(--velo); }
 .menu__pannello {
   position: absolute; top: 0; bottom: 0; left: 0; width: min(84vw, 330px); overflow-y: auto;
   background: var(--foglio); box-shadow: var(--ombra); transform: translateX(-100%); transition: transform .18s ease;
   padding: calc(18px + env(safe-area-inset-top)) 0 calc(20px + env(safe-area-inset-bottom));
 }
-.menu__pannello.aperto { transform: none; }
+.menu.aperto .menu__pannello { transform: none; }
 .menu__testa { display: flex; flex-direction: column; gap: 1px; padding: 4px 20px 14px; border-bottom: 1px solid var(--linea); }
 .menu__testa b { font-size: 27px; font-weight: 400; line-height: 1.1; margin-bottom: 3px; }
 .menu__testa span { font-size: 13px; color: var(--inchiostro-2); }
