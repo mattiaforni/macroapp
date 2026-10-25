@@ -22,7 +22,10 @@ Campi comuni a tutte le collezioni di contenuto, compilati da `core/db.js`:
 `manualCategories`: categorie del manuale, uguali per tutta la casa; se mancano valgono quelle predefinite (`PREDEFINITE` in `modules/manuale`).
 
 ## `shopping_items`
-`text, detail, done, addedAt, boughtAt, count, doneBy` — sempre `shared`. `done: true` = comprato (resta tra i "usati di recente"), `false` = da comprare. Non si cancella quando lo compri.
+`text, detail, done, addedAt, boughtAt, count, doneBy, reparto?` — sempre `shared`. `done: true` = comprato (resta tra i "usati di recente"), `false` = da comprare. Non si cancella quando lo compri.
+`reparto` (`frutta`, `dispensa`, `colazione`, `carne`, `frigo`, `surgelati`, `bevande`, `casa`, `altro`): solo se
+scelto a mano nel foglio Modifica e diverso da quello che si ricava dal nome (`REGOLE_REPARTO` in `modules/lista`);
+`null` o assente = ricavato dal nome.
 
 ## `manual_entries`
 `type: "shop"|"person"|"info", name, category, address, phone, email, url, notes, googleId?`

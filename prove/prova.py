@@ -58,6 +58,9 @@ with sync_playwright() as p:
         pg.click("#foglio button[aria-label='Indietro']")
         pg.wait_for_selector(".tessera >> text=Pane")
         assert pg.locator(".tessera:not(.tessera--verde)").count() == 6, "6 tessere rosse attese"
+        # Divise per reparto, nell'ordine del giro; «gelato» va nei surgelati, il pesce prima dei latticini.
+        reparti = pg.locator(".reparto__nome").all_inner_texts()
+        assert [r.strip().lower() for r in reparti] == ["pane e dispensa", "carne e pesce", "latticini e uova", "surgelati"], f"reparti: {reparti}"
         pg.locator(".tessera:not(.tessera--verde) >> text=Latte").click()
         pg.locator(".tessera:not(.tessera--verde) >> text=Uova").click()
         pg.wait_for_selector(".tessera--verde >> text=Latte")
@@ -74,6 +77,15 @@ with sync_playwright() as p:
         # Il foglio si chiude in dissolvenza: finché c'è, la sua tessera «Latte» conta anche lei.
         pg.wait_for_selector("#foglio", state="hidden")
         assert pg.locator(".tessera >> text=Latte").count() == 1, "Latte non deve duplicarsi"
+        # Reparto scelto a mano: la pasta sfoglia sta nel banco frigo, non in dispensa.
+        step[0] = "lista, reparto a mano"
+        pg.locator(".tessera:not(.tessera--verde)", has_text="Pasta sfoglia").locator("button.altro").click()
+        pg.wait_for_selector("#foglio .pillola.on >> text=Pane e dispensa")
+        pg.click("#foglio .pillola >> text=Latticini e uova")
+        conferma(pg)
+        pg.wait_for_selector("section.reparto[aria-label='Latticini e uova'] .tessera >> text=Pasta sfoglia")
+        pg.wait_for_selector("#foglio", state="hidden")
+        shot(pg, "1c-lista-reparti")
 
         # ── Spese ──
         step[0] = "spese"

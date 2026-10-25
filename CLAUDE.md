@@ -40,6 +40,7 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 | `components/persone.js` | scelta delle persone di un task: suggerimenti dalla rubrica e da Google Contatti, persone nuove; una voce della rubrica non collegata e il contatto Google con lo stesso nome compaiono una volta sola, e sceglierla la collega |
 | `modules/*/index.js` | un modulo = `{ id, title, nav, icon, mount(container) → smonta }`, in `modules/registry.js` |
 | `modules/diario/index.js` | note (anche dettate o condivise), filtro per progetto (`macroapp.diario.progetto`, lo scrive anche la pagina Task), riepilogo dell'AI con la trascrizione ripiegata, proposte sotto la nota |
+| `modules/lista/index.js` | tessere a 4 colonne; quelle da comprare divise per reparto (`REPARTI` = ordine del giro, `REGOLE_REPARTO` dal nome, `reparto` scelto a mano nel foglio Modifica); recenti e «Mi serve» per frequenza, senza reparti |
 | `modules/task/index.js` | task per progetti; `apriProgetto` (nome, visibilità, istruzioni per il diario); dal progetto il pulsante Diario |
 | `modules/banca/index.js` | stato del collegamento (`bank_connections/{uid}` in tempo reale), scelta della banca, conclusione al ritorno da `/banca?code=…` (messo da parte in `app.js`), «Leggi ora», rinnovo, scollega |
 
@@ -158,6 +159,9 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
 - [ ] Diario per progetto, seguiti: importare lo storico delle lezioni dalle chat del progetto Claude
       (esportazione dei dati di claude.ai); registrare nel diario con `transcribe()` (Gemini: un parlato
       di pochi minuti passa da onCall, senza Storage); valutare con le note vere quante precedenti servono.
+- [x] **Lista per reparti** (25/10, scelta di Mattia tra tre anteprime: etichette con filetto). Reparti e
+      ordine del giro sono un'ipotesi: da adattare quando Mattia dice in che ordine li trova nel suo
+      supermercato. Corretta l'icona dei surgelati («gelat» prendeva anche «surgelate»).
 - [ ] Pagina per appunti e bozze: le proposte `note` e `draft` confermate finiscono in `notes`,
       che oggi nessuna pagina mostra
 - [ ] Riga di contesto per pagina, stile Leghe Fantacalcio (Task «2 in ritardo · 3 oggi»,

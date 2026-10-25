@@ -3,9 +3,12 @@
 // Niente si cancella quando lo compri: lo storico serve a rimettere in lista con un tocco
 // e a suggerire mentre scrivi.
 //
-// Collezione: shopping_items { text, detail, done, addedAt, boughtAt, count }
+// Le tessere da comprare stanno divise per reparto, nell'ordine del giro al supermercato.
+//
+// Collezione: shopping_items { text, detail, done, addedAt, boughtAt, count, reparto? }
 //   done = true  → comprato (sta tra i recenti)
 //   done = false → da comprare
+//   reparto      → scelto a mano nel foglio Modifica; assente = ricavato dal nome
 import { el, icon, iconaDa, toast, fascia, vuoto, toDate, fab } from "../../core/ui.js";
 import { create, update, remove, watchVisible, VIS } from "../../core/db.js";
 import { session } from "../../core/auth.js";
@@ -21,13 +24,15 @@ const COLL = "shopping_items";
 const RECENTI_VISIBILI = 18;
 const CHIAVE_APERTI = "macroapp.lista.recentiAperti";
 
-// L'ordine conta: la prima regola che corrisponde vince.
+// L'ordine conta: la prima regola che corrisponde vince. I surgelati vengono prima, e «gelat» solo a
+// inizio parola: sennò «verdure surgelate» prendeva l'icona del gelato.
 const ICONE = [
+  [/surgelat|ghiaccio/, "fiocco"],
   [/pesce|tonno|salmone|merluzz|acciugh|alici|gamber|calamar|cozz|vongol|baccal/, "pesce"],
   [/carne|pollo|manzo|maiale|salsicc|prosciutt|salame|bresaola|tacchino|hamburger|w[uü]rstel|speck|pancetta|macinat|cotolett/, "carne"],
   [/formagg|parmigian|grana|mozzarell|ricott|pecorin|stracchin|gorgonzol|burrata|scamorz/, "formaggio"],
   [/\buov[ao]/, "uovo"],
-  [/gelat|biscott|cioccolat|dolc|torta|merend|nutella|marmellat|miele|zucchero/, "gelato"],
+  [/\bgelat|biscott|cioccolat|dolc|torta|merend|nutella|marmellat|miele|zucchero/, "gelato"],
   [/caff[eè]|\bt[eè]\b|tisan|camomill/, "tazza"],
   [/\bvino|prosecco|spumante/, "vino"],
   [/latte|acqua|succo|bibit|coca|aranciata|birra|olio|aceto|panna|yogurt/, "bottiglia"],
@@ -35,12 +40,40 @@ const ICONE = [
   [/pasta|riso|farina|spaghett|penne|fusill|cous|orzo|farro|cereal|lievito|pangrattato/, "spiga"],
   [/verdur|insalat|zucchin|carot|pomodor|patat|cipoll|aglio|melanzan|peperon|spinac|broccol|cavol|finocch|sedano|lattuga|rucola|funghi|legum|ceci|fagiol|lenticch|piselli|zucca/, "carota"],
   [/frutt|\bmel[ae]\b|\bper[ae]\b|banan|aranc|limon|kiwi|\buva\b|fragol|\bpesc[ah]e?\b|albicocc|mandarin|ananas|noci|nocciol|mandorl|castagn/, "mela"],
-  [/surgelat|ghiaccio/, "fiocco"],
   [/detersiv|sgrassat|candeggin|spugn|sacchett|carta igienica|carta cucina|scottex|ammorbident|piatti|anticalcare/, "spray"],
   [/sapone|shampoo|bagnoschiuma|dentifric|deodorant|crema|assorbent|igien|rasoi/, "goccia"],
   [/basilico|prezzemol|rosmarin|salvia|origano|piant|terriccio|concime|\bsemi\b/, "foglia"],
   [/lampadin|\bpil[ae]\b|batteri/, "lampadina"],
 ];
+
+// Reparti nell'ordine del giro al supermercato (ipotesi del 25/10, da adattare al negozio di Mattia).
+const REPARTI = [
+  ["frutta", "Frutta e verdura"],
+  ["dispensa", "Pane e dispensa"],
+  ["colazione", "Colazione e dolci"],
+  ["carne", "Carne e pesce"],
+  ["frigo", "Latticini e uova"],
+  ["surgelati", "Surgelati"],
+  ["bevande", "Bevande"],
+  ["casa", "Casa e persona"],
+  ["altro", "Altro"],
+];
+const NOME_REPARTO = Object.fromEntries(REPARTI);
+
+// Dal nome al reparto. Anche qui vince la prima regola: i surgelati prima di tutto (verdure surgelate,
+// gelato), la carne prima della dispensa (tonno), i latticini prima delle bevande (latte).
+const REGOLE_REPARTO = [
+  [/surgelat|\bgelat|ghiacci/, "surgelati"],
+  [/pesce|tonno|salmone|merluzz|acciugh|alici|gamber|calamar|cozz|vongol|baccal|carne|pollo|manzo|maiale|salsicc|prosciutt|salame|bresaola|tacchino|hamburger|w[uü]rstel|speck|pancetta|macinat|cotolett/, "carne"],
+  [/formagg|parmigian|grana|mozzarell|ricott|pecorin|stracchin|gorgonzol|burrata|scamorz|\buov[ao]|\blatte\b|yogurt|panna|burro/, "frigo"],
+  [/verdur|insalat|zucchin|carot|pomodor|patat|cipoll|aglio|melanzan|peperon|spinac|broccol|cavol|finocch|sedano|lattuga|rucola|funghi|zucca|frutt|\bmel[ae]\b|\bper[ae]\b|banan|\baranc(?:e|ia)\b|limon|kiwi|\buva\b|fragol|\bpesc[ah]e?\b|albicocc|mandarin|ananas|basilico|prezzemol|rosmarin|salvia|origano/, "frutta"],
+  [/biscott|cioccolat|dolc|torta|merend|nutella|marmellat|miele|zucchero|caff[eè]|\bt[eè]\b|tisan|camomill|brioche|cornett/, "colazione"],
+  [/\bpane|panin|focacc|pizza|cracker|grissin|piadin|pasta|riso|farina|spaghett|penne|fusill|cous|orzo|farro|cereal|lievito|pangrattato|\bolio|aceto|\bsale\b|legum|ceci|fagiol|lenticch|piselli|noci|nocciol|mandorl/, "dispensa"],
+  [/acqua|succo|bibit|coca|aranciata|birra|\bvino|prosecco|spumante/, "bevande"],
+  [/detersiv|sgrassat|candeggin|spugn|sacchett|carta igienica|carta cucina|scottex|ammorbident|piatti|anticalcare|sapone|shampoo|bagnoschiuma|dentifric|deodorant|crema|assorbent|igien|rasoi|lampadin|\bpil[ae]\b|batteri/, "casa"],
+];
+const repartoDaNome = (text, detail) => iconaDa(`${text} ${detail || ""}`, REGOLE_REPARTO, "altro");
+const repartoDi = (it) => (NOME_REPARTO[it.reparto] ? it.reparto : repartoDaNome(it.text, it.detail));
 
 const norm = (s) => String(s || "").trim().toLowerCase().replace(/\s+/g, " ");
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -87,11 +120,23 @@ function apriModifica(it) {
   const dett = el("input", { value: it.detail || "", placeholder: "es. surgelate, 1 kg, della marca…", enterkeyhint: "done" });
   nome.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); dett.focus(); } });
   dett.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); sheet.confirm(); } });
+
+  // Reparto: preselezionato quello attuale. Si salva solo se lo tocchi, e solo se diverso da quello
+  // che si ricava dal nome: così una voce corretta a mano resta lì anche quando torna in lista.
+  let reparto = repartoDi(it);
+  let toccato = false;
+  const reparti = el("div.segmenti", { style: "flex-wrap:wrap;padding-top:6px" });
+  const disegnaReparti = () => reparti.replaceChildren(...REPARTI.map(([k, n]) => el("button.pillola", {
+    type: "button", class: k === reparto ? "on" : "", onclick: () => { reparto = k; toccato = true; disegnaReparti(); },
+  }, n)));
+  disegnaReparti();
+
   const sheet = openSheet({
     title: "Modifica",
     body: [
       campo("Nome", nome),
       campo("Dettaglio", dett),
+      campo("Reparto", reparti),
       el("div.foglio__piede", {},
         el("button.btn.btn--pericolo", { onclick: () => { remove(COLL, it.id); sheet.close(); toast(`${it.text} eliminato`); } },
           icon("cestino"), "Elimina"),
@@ -99,7 +144,10 @@ function apriModifica(it) {
     ],
     onConfirm: () => {
       if (!nome.value.trim()) return false;
-      update(COLL, it.id, { text: cap(nome.value.trim()), detail: dett.value.trim() });
+      const text = cap(nome.value.trim()), detail = dett.value.trim();
+      const campi = { text, detail };
+      if (toccato) campi.reparto = reparto === repartoDaNome(text, detail) ? null : reparto;
+      update(COLL, it.id, campi);
     },
   });
 }
@@ -188,11 +236,15 @@ export function mount(container) {
     const da = items.filter((i) => !i.done).sort((a, b) => quando(a, "addedAt") - quando(b, "addedAt"));
     const fatti = items.filter((i) => i.done).sort((a, b) => quando(b, "boughtAt") - quando(a, "boughtAt"));
 
-    daComprare.replaceChildren(
-      da.length
-        ? el("div.tessere", { style: "margin-top:14px" }, ...da.map((it) => tessera(it, { onTap: () => compra(it), onAltro: () => apriModifica(it) })))
-        : vuoto("Niente da comprare", "Tocca + per aggiungere, oppure una voce tra quelle usate di recente."),
-    );
+    // Un gruppo per reparto, nell'ordine del giro; dentro, nell'ordine in cui le voci sono state aggiunte.
+    const perReparto = new Map(REPARTI.map(([k]) => [k, []]));
+    for (const it of da) perReparto.get(repartoDi(it)).push(it);
+    daComprare.replaceChildren(...(da.length
+      ? [...perReparto].filter(([, voci]) => voci.length).map(([k, voci]) => el("section.reparto", { "aria-label": NOME_REPARTO[k] },
+          el("div.reparto__nome", {}, el("span", {}, NOME_REPARTO[k])),
+          el("div.tessere", {}, ...voci.map((it) => tessera(it, { onTap: () => compra(it), onAltro: () => apriModifica(it) }))),
+        ))
+      : [vuoto("Niente da comprare", "Tocca + per aggiungere, oppure una voce tra quelle usate di recente.")]));
 
     if (!fatti.length) { recenti.replaceChildren(); return; }
     const visibili = mostraTutti ? fatti : fatti.slice(0, RECENTI_VISIBILI);
