@@ -22,7 +22,7 @@ import { createSign, randomBytes } from "node:crypto";
 
 const API = "https://api.enablebanking.com";
 const GIORNI_LETTURA = 7;          // quanti giorni indietro si leggono i movimenti
-const GIORNI_CONSENSO_MAX = 90;    // la durata massima della PSD2; la banca può accorciarla
+const GIORNI_CONSENSO_MAX = 180;   // massimo della PSD2 dal 2023; vale il minimo con maximum_consent_validity della banca
 
 function b64url(buf) {
   return Buffer.from(buf).toString("base64").replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
@@ -46,8 +46,17 @@ export class EnableBankingError extends Error {
     super(`Enable Banking ${status || ""} ${path}: ${String(body).slice(0, 300)}`);
     this.status = status;
     this.body = String(body);
+    try { this.code = JSON.parse(this.body).error || ""; } catch (e) { this.code = ""; }
   }
 }
+
+/**
+ * La sessione non vale più (EXPIRED_SESSION, sessione revocata o chiusa): serve un consenso nuovo.
+ * Succede anche molto prima di access.valid_until: le banche italiane tengono un solo consenso attivo
+ * per terza parte e per utente (uno nuovo, anche dal Control Panel di Enable Banking, invalida il
+ * precedente), e possono chiuderlo da sé.
+ */
+export const sessioneChiusa = (err) => err instanceof EnableBankingError && [401, 410].includes(err.status) && /SESSION/i.test(err.code || err.body);
 
 async function api(path, { jwt, method = "GET", body } = {}) {
   const res = await fetch(API + path, {
@@ -93,13 +102,16 @@ export async function avviaAutorizzazione(jwt, { aspsp, state, redirectUrl, vali
 
 function contoSintetico(a) {
   const iban = a.account_id?.iban || "";
+  const altro = String(a.account_id?.other?.identification || "").replace(/\s/g, "");
   return {
     uid: a.uid,
-    name: a.name || a.product || "Conto",
+    name: a.name || "",               // con alcune banche (Intesa) è il nome dell'intestatario
     product: a.product || "",
+    details: a.details || "",
     currency: a.currency || "EUR",
-    type: a.cash_account_type || "",
+    type: a.cash_account_type || "",  // CACC conto, CARD carta, SVGS deposito, LOAN finanziamento…
     ibanMask: iban ? `${iban.slice(0, 2)}…${iban.slice(-4)}` : "",
+    idMask: !iban && altro.length >= 4 ? `…${altro.slice(-4)}` : "",
   };
 }
 
@@ -112,6 +124,12 @@ export async function creaSessione(jwt, code) {
     aspsp: s.aspsp ? { name: s.aspsp.name, country: s.aspsp.country } : null,
     accounts: (s.accounts || []).map(contoSintetico),
   };
+}
+
+/** Stato della sessione secondo Enable Banking (AUTHORIZED, EXPIRED, REVOKED, CLOSED, …), per la diagnosi. */
+export async function statoSessione(jwt, sessionId) {
+  const s = await api(`/sessions/${encodeURIComponent(sessionId)}`, { jwt });
+  return { status: s.status || "", validUntil: s.access?.valid_until || null, created: s.created || null, authorized: s.authorized || null };
 }
 
 /** Chiude la sessione (e, se la banca lo permette, il consenso). Una sessione già sparita non è un errore. */
@@ -200,19 +218,35 @@ export async function syncConnection(db, ref, c, defaults) {
         created++;
       }
     }
-    await ref.update({ lastSyncAt: FieldValue.serverTimestamp(), lastSyncCreated: created, lastError: null });
+    // lastSyncAt è l'ultima lettura riuscita; i tentativi falliti vanno in lastAttemptAt.
+    await ref.update({ lastSyncAt: FieldValue.serverTimestamp(), lastAttemptAt: FieldValue.serverTimestamp(), lastSyncCreated: created, lastError: null });
     return created;
   } catch (err) {
     console.error("syncBank", ref.id, err.message);
-    await ref.update({ lastSyncAt: FieldValue.serverTimestamp(), lastError: err.message.slice(0, 300) });
+    if (sessioneChiusa(err)) {
+      // Consenso chiuso prima della scadenza: la lettura si ferma finché non lo rinnovi (concludi
+      // toglie needsRenewal). Lo stato della sessione resta nel documento, per capire chi l'ha chiusa.
+      let stato = null;
+      try { stato = await statoSessione(makeJwt({ appId: c.appId || defaults.appId, privateKey: c.privateKey || defaults.privateKey }), c.sessionId); }
+      catch (e) { console.warn("stato della sessione", e.message); }
+      console.warn("syncBank sessione chiusa", ref.id, JSON.stringify(stato));
+      await ref.update({
+        lastAttemptAt: FieldValue.serverTimestamp(), lastError: null, needsRenewal: true,
+        sessionStatus: stato?.status || err.code || "EXPIRED_SESSION",
+        ...(c.sessionEndedAt ? {} : { sessionEndedAt: FieldValue.serverTimestamp() }),
+      });
+    } else {
+      await ref.update({ lastAttemptAt: FieldValue.serverTimestamp(), lastError: err.message.slice(0, 300) });
+    }
     throw err;
   }
 }
 
-/** Sincronizzazione di tutti i collegamenti attivi (syncBank, ogni mattina). */
+/** Sincronizzazione di tutti i collegamenti attivi (syncBank, ogni mattina). Salta quelli da rinnovare. */
 export async function syncAllConnections(db, defaults) {
   const conns = await db.collection("bank_connections").where("active", "==", true).get();
   for (const doc of conns.docs) {
+    if (doc.data().needsRenewal) continue;
     try { await syncConnection(db, doc.ref, doc.data(), defaults); } catch (e) { /* già registrato nel documento */ }
   }
 }

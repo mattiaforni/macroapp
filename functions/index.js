@@ -95,9 +95,11 @@ export const analyzeEntry = onCall(
 const RITORNI_BANCA = ["https://macroapp-b9bd0.web.app/banca", "https://macroapp-b9bd0.firebaseapp.com/banca"];
 
 /** Errore di Enable Banking → [codice, messaggio leggibile]. */
-function spiegaErroreBanca(err) {
+function spiegaErroreBanca(err, eb) {
   const s = err.status;
-  if (s === 0 || s === 401) return ["failed-precondition", "Banca non ancora configurata: mancano le chiavi di Enable Banking"];
+  if (eb.sessioneChiusa(err)) return ["failed-precondition", "La banca ha chiuso il consenso: rinnovalo per riprendere la lettura"];
+  if (s === 0) return ["failed-precondition", "Banca non ancora configurata: mancano le chiavi di Enable Banking"];
+  if (s === 401) return ["failed-precondition", `Enable Banking non accetta le credenziali dell'app (${err.code || err.body.slice(0, 120)})`];
   if (s === 403) return ["permission-denied", "Enable Banking non permette questa operazione (app in modalità ristretta?)"];
   if (s === 422 || s === 400) return ["invalid-argument", `Richiesta rifiutata da Enable Banking (${err.body.slice(0, 160)})`];
   if (s === 429) return ["resource-exhausted", "Troppe richieste alla banca: riprova tra poco"];
@@ -181,6 +183,7 @@ export const bank = onCall(
           linkedAt: FieldValue.serverTimestamp(),
           pending: FieldValue.delete(),
           lastError: null,
+          needsRenewal: false, sessionStatus: "AUTHORIZED", sessionEndedAt: FieldValue.delete(),
           updatedAt: FieldValue.serverTimestamp(),
         }, { merge: true });
         return { accounts: sessione.accounts, consentExpiresAt: sessione.validUntil };
@@ -194,6 +197,7 @@ export const bank = onCall(
         }
         await ref.set({
           active: false, sessionId: null, accounts: [], accountIds: [], consentExpiresAt: null,
+          needsRenewal: false, sessionStatus: null, sessionEndedAt: FieldValue.delete(),
           pending: FieldValue.delete(), unlinkedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
         }, { merge: true });
         return { ok: true };
@@ -210,7 +214,7 @@ export const bank = onCall(
     } catch (err) {
       if (err instanceof HttpsError) throw err;
       console.error("bank", azione, err);
-      const [codice, testo] = err instanceof eb.EnableBankingError ? spiegaErroreBanca(err) : ["internal", `Operazione non riuscita (${(err.message || "").slice(0, 160)})`];
+      const [codice, testo] = err instanceof eb.EnableBankingError ? spiegaErroreBanca(err, eb) : ["internal", `Operazione non riuscita (${(err.message || "").slice(0, 160)})`];
       throw new HttpsError(codice, testo);
     }
   },

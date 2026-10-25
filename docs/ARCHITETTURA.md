@@ -40,11 +40,12 @@ Scelte: nessun framework né bundler (coerente con i progetti precedenti, deploy
 
 ## Banca (Enable Banking)
 
-Stato: codice completo, da provare coi dati veri (serve l'app registrata in produzione e i segreti). Da verificare al primo collegamento:
+Stato: in funzione dal 23/10 con Intesa Sanpaolo (quattro rapporti, due senza IBAN). Il 25/10 la sessione è stata chiusa nella notte, circa 36 ore dopo il consenso, con `access.valid_until` a gennaio: da allora un consenso chiuso prima della scadenza è uno stato previsto (`needsRenewal`, vedi sotto). Da verificare coi dati veri:
 - quali conti espone ciascuna banca (Crédit Agricole non espone le carte di credito senza IBAN);
 - formato di `entry_reference` / `transaction_id` per la deduplica, e come viene la descrizione (`descrizioneDi`: nome del creditore, altrimenti causale);
 - presenza del codice categoria esercente (MCC, salvato in `payload.merchantCategory`);
-- durata del consenso e flusso di rinnovo (molte banche italiane tengono un solo consenso attivo per utente: crearne uno nuovo invalida il precedente; `concludi` chiude comunque la sessione precedente).
+- durata del consenso e flusso di rinnovo: Enable Banking documenta che molte banche italiane tengono **un solo consenso attivo per terza parte e per utente** e che uno nuovo invalida il precedente, anche se aperto dal Control Panel di Enable Banking («Link accounts» rifatto sulla stessa banca) o da un'altra app che passa da Enable Banking; una banca può anche chiudere il consenso da sé. `concludi` chiude comunque la sessione precedente. Si chiede il massimo che la banca concede (`maximum_consent_validity`, fino a 180 giorni: Intesa li concede).
+- se le carte (rapporti senza IBAN) vanno lette: una carta di credito porterebbe ogni acquisto e poi l'addebito mensile sul conto, cioè due proposte per la stessa spesa.
 
 Una sola app Enable Banking per la casa, in **produzione in modalità ristretta** (gratuita, uso personale): vede solo i conti collegati prima nel Control Panel («Link accounts»); appId e chiave stanno in Secret Manager. Un collegamento può avere credenziali proprie (`appId`/`privateKey` nel documento), ma oggi non le scrive nessuno: starebbero in un documento che il proprietario legge dal telefono.
 
@@ -52,6 +53,7 @@ Flusso di collegamento:
 1. menu → Banca → + → elenco banche (`bank banche`) → tocco → `bank avvia`: JWT → `POST /auth` → l'app manda l'utente all'url della banca
 2. la banca rimanda su `https://macroapp-b9bd0.web.app/banca?code=…&state=…` (o `?error=access_denied`): `app.js` mette l'esito in `sessionStorage` e va a `#/banca`, che chiama `bank concludi` → `POST /sessions` → conti e scadenza in `bank_connections/{uid}`
 3. `syncBank` ogni mattina, o «Leggi ora» (`bank sincronizza`); la pagina avvisa quando il consenso scade entro 14 giorni (notifica push: in futuro).
+4. Se Enable Banking risponde `EXPIRED_SESSION` (401 con codice `*SESSION*`, `sessioneChiusa` in enable.js): `syncConnection` legge lo stato della sessione, scrive `needsRenewal: true`, `sessionStatus`, `sessionEndedAt`; `syncBank` non la tocca più; la pagina mostra «Collegamento interrotto» e mette «Rinnova il consenso» in basso a destra, che rifà il punto 1 con la stessa banca.
 
 ## Spese: regole e saldo
 

@@ -71,6 +71,8 @@ with sync_playwright() as p:
         pg.click("#foglio .tessera >> text=Latte")
         pg.click("#foglio button[aria-label='Indietro']")
         pg.wait_for_selector(".tessera:not(.tessera--verde) >> text=Latte")
+        # Il foglio si chiude in dissolvenza: finché c'è, la sua tessera «Latte» conta anche lei.
+        pg.wait_for_selector("#foglio", state="hidden")
         assert pg.locator(".tessera >> text=Latte").count() == 1, "Latte non deve duplicarsi"
 
         # ── Spese ──
@@ -464,6 +466,10 @@ with sync_playwright() as p:
         assert pg.url.endswith("/#/banca"), f"dopo il ritorno l'indirizzo è {pg.url}"
         assert pg.locator("button[aria-label='Collega una banca']").is_hidden(), "collegata: niente +"
         assert "null" not in pg.locator("#view").inner_text(), "nessun null disegnato"
+        # Nomi dei conti dal tipo, non dall'intestatario ripetuto
+        pg.wait_for_selector(".riga b >> text=Conto corrente")
+        pg.wait_for_selector(".riga b >> text=Carta")
+        assert pg.locator(".riga b", has_text="ROSSI MARIO").count() == 0, "l'intestatario non fa da nome del conto"
         pg.wait_for_timeout(300)
         shot(pg, "13-banca-collegata")
         pg.click("button.pillola >> text=Leggi ora")
@@ -477,7 +483,28 @@ with sync_playwright() as p:
         pg.locator(".azione", has_text="dalla banca").first.locator("button[aria-label='Conferma']").click()
         pg.click(".schede a[href='#/spese']")
         pg.wait_for_selector(".riga >> text=ESSELUNGA FIRENZE")
+
+        # ── Banca: la banca chiude il consenso prima della scadenza → stato interrotto e rinnovo ──
+        step[0] = "banca interrotta"
         menu(pg, "Banca")
+        pg.click("button.pillola >> text=Leggi ora")
+        pg.wait_for_selector("text=Collegamento interrotto oggi")
+        pg.wait_for_selector("text=La banca ha chiuso il consenso: rinnovalo")
+        assert pg.locator("button.fab[aria-label='Rinnova il consenso']").is_visible(), "rinnovo in basso a destra"
+        assert pg.locator("button[aria-label='Collega una banca']").is_hidden(), "niente + mentre è collegata"
+        assert pg.locator("button.pillola", has_text="Leggi ora").count() == 0, "niente Leggi ora a consenso chiuso"
+        assert pg.locator("text=Consenso valido fino al").count() == 0, "niente scadenza ingannevole"
+        assert pg.locator(".errore", has_text="EXPIRED_SESSION").count() == 0, "niente errore grezzo"
+        pg.wait_for_selector("text=Lettura sospesa: riprende dopo il rinnovo.")
+        box = pg.locator("button.fab[aria-label='Rinnova il consenso']").bounding_box()
+        assert box["x"] + box["width"] > 390 - 30 and box["y"] > 844 - 200, f"rinnovo nella zona del pollice destro: {box}"
+        pg.wait_for_timeout(5500)  # il toast se ne va
+        shot(pg, "15-banca-interrotta")
+        pg.click("button.fab[aria-label='Rinnova il consenso']")
+        pg.wait_for_selector("text=Consenso valido fino al", timeout=8000)
+        assert pg.locator("button.fab[aria-label='Rinnova il consenso']").is_hidden(), "rinnovato: niente pulsante di rinnovo"
+        pg.wait_for_selector("button.pillola >> text=Leggi ora")
+
         pg.click("button.btn--pericolo >> text=Scollega")
         pg.wait_for_selector("#foglio h2 >> text=Scollega la banca")
         conferma(pg)

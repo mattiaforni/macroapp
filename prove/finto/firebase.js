@@ -123,9 +123,14 @@ async function bankFinto(data = {}) {
     return { data: { url: `/banca?code=codice-prova&state=${state}` } };
   }
   if (data.azione === "concludi") {
-    const accounts = [{ uid: "conto-1", name: "Conto corrente", product: "Conto Smart", currency: "EUR", type: "CACC", ibanMask: "IT…1234" }];
+    // Come Intesa: name è l'intestatario, uguale per tutti i conti; una carta senza IBAN.
+    const accounts = [
+      { uid: "conto-1", name: "ROSSI MARIO", product: "", currency: "EUR", type: "CACC", ibanMask: "IT…1234", idMask: "" },
+      { uid: "carta-1", name: "ROSSI MARIO", product: "", currency: "EUR", type: "CARD", ibanMask: "", idMask: "…9876" },
+    ];
     B.set(UID, { ownerUid: UID, householdId: hid, active: true, aspsp: { name: "Banca di Prova", country: "IT" }, sessionId: "sessione-prova",
-      accounts, accountIds: ["conto-1"], consentExpiresAt: new Date(Date.now() + 85 * 86400e3), linkedAt: new Date(), lastError: null });
+      accounts, accountIds: accounts.map((a) => a.uid), consentExpiresAt: new Date(Date.now() + 175 * 86400e3), linkedAt: new Date(),
+      lastError: null, needsRenewal: false, sessionStatus: "AUTHORIZED", letture: 0 });
     notify();
     return { data: { accounts } };
   }
@@ -135,12 +140,19 @@ async function bankFinto(data = {}) {
     return { data: { ok: true } };
   }
   if (data.azione === "sincronizza") {
+    const c = B.get(UID) || {};
+    // Dalla seconda lettura la banca ha chiuso il consenso (come Intesa dopo un giorno).
+    if (c.letture >= 1) {
+      B.set(UID, { ...c, lastAttemptAt: new Date(), lastError: null, needsRenewal: true, sessionStatus: "EXPIRED", sessionEndedAt: c.sessionEndedAt || new Date() });
+      notify();
+      throw Object.assign(new Error("La banca ha chiuso il consenso: rinnovalo per riprendere la lettura"), { code: "functions/failed-precondition" });
+    }
     const P = coll("proposals");
     const base = { ownerUid: UID, householdId: hid, visibility: "private", kind: "expense", source: "bank", status: "pending", createdAt: new Date() };
     const ieri = new Date(Date.now() - 86400e3);
     P.set("eb_prova_1", { ...base, summary: "ESSELUNGA FIRENZE · 42,10 €", payload: { amount: 42.1, description: "ESSELUNGA FIRENZE", paidBy: UID, split: "equal", date: ieri, source: "bank", bankTxId: "eb_prova_1", account: "Conto corrente" } });
     P.set("eb_prova_2", { ...base, summary: "Enel Energia · 61,30 €", payload: { amount: 61.3, description: "Enel Energia", paidBy: UID, split: "equal", date: ieri, source: "bank", bankTxId: "eb_prova_2", account: "Conto corrente" } });
-    B.set(UID, { ...(B.get(UID) || {}), lastSyncAt: new Date(), lastSyncCreated: 2, lastError: null });
+    B.set(UID, { ...c, lastSyncAt: new Date(), lastSyncCreated: 2, lastError: null, letture: (c.letture || 0) + 1 });
     notify();
     return { data: { created: 2 } };
   }

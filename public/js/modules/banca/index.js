@@ -33,8 +33,24 @@ function ritornoDallaBanca() {
 
 const messaggio = (err) => err?.message || err?.code || "Operazione non riuscita";
 const minuscola = (s) => s.charAt(0).toLowerCase() + s.slice(1);
+/** «oggi», «ieri», «il 25 ottobre». */
+const quando = (d) => { const r = giornoRelativo(d); return /^\d/.test(r) ? `il ${r}` : minuscola(r); };
 const ora = (d) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-const norm = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+const norm = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+// Con alcune banche (Intesa) name è l'intestatario, uguale per tutti i conti: il nome si prende
+// dal prodotto o dal tipo (cash_account_type).
+const TIPI_CONTO = { CACC: "Conto corrente", CARD: "Carta", SVGS: "Conto deposito", LOAN: "Finanziamento", TRAN: "Conto", CASH: "Conto", OTHR: "Altro conto" };
+function nomeConto(a) {
+  return a.product || a.details || TIPI_CONTO[a.type] || (a.ibanMask ? "Conto" : "Conto senza IBAN");
+}
+function dettaglioConto(a, nome) {
+  const tipo = TIPI_CONTO[a.type];
+  return [a.ibanMask || a.idMask, tipo && tipo !== nome ? tipo : "", a.currency && a.currency !== "EUR" ? a.currency : ""].filter(Boolean).join(" · ");
+}
+
+/** La banca ha chiuso il consenso prima della scadenza (vedi sessioneChiusa in enable.js). */
+const interrotto = (c) => !!c?.needsRenewal || /EXPIRED_SESSION/.test(c?.lastError || "");
 
 /** Riga sul consenso: quanto vale ancora, con avviso quando sta per scadere. */
 function consenso(c) {
@@ -89,7 +105,7 @@ async function apriScelta() {
   openSheet({
     title: "Scegli la banca",
     body: [
-      el("p.muted.small", { style: "margin-top:8px" }, "Darai il consenso sul sito della banca e tornerai qui. Il consenso vale al massimo 90 giorni, poi si rinnova."),
+      el("p.muted.small", { style: "margin-top:8px" }, "Darai il consenso sul sito della banca e tornerai qui. Il consenso vale fino a 180 giorni, secondo la banca, poi si rinnova."),
       cerca, elenco,
     ],
   });
@@ -128,11 +144,18 @@ export function mount(container) {
 
   const corpo = el("div");
   const piu = fab("Collega una banca", apriScelta);
+  // Consenso chiuso dalla banca: l'azione principale è rinnovarlo, in basso a destra come il +.
+  const rinnovaFab = el("button.fab", { type: "button", "aria-label": "Rinnova il consenso", onclick: async () => {
+    rinnovaFab.disabled = true;
+    if (!(await avviaConsenso(c.aspsp))) rinnovaFab.disabled = false;
+  } }, icon("collegamento"), "Rinnova il consenso");
   const mostra = (...nodi) => corpo.replaceChildren(...nodi.filter(Boolean)); // replaceChildren non salta i null come el()
 
   function render() {
     const attiva = !!c?.active;
+    const fermo = attiva && interrotto(c);
     piu.hidden = attiva || concludendo || !caricato;
+    rinnovaFab.hidden = !fermo || concludendo || !caricato;
     if (!caricato) { mostra(); return; }
 
     if (concludendo) {
@@ -146,14 +169,15 @@ export function mount(container) {
         vuoto("Nessuna banca collegata", "Le uscite del tuo conto diventano proposte di spesa, da confermare una per una. Tocca + per collegare la banca."),
         el("div.blocco", {},
           el("h3", {}, "Come funziona"),
-          el("p", {}, "Il consenso lo dai sul sito della tua banca (PSD2, tramite Enable Banking) e vale al massimo 90 giorni. Ogni mattina l'app legge le uscite degli ultimi giorni: ciascuna compare in «Azioni da confermare», che vedi solo tu. Quelle che confermi diventano spese condivise."),
+          el("p", {}, "Il consenso lo dai sul sito della tua banca (PSD2, tramite Enable Banking) e vale fino a 180 giorni, secondo la banca. Ogni mattina l'app legge le uscite degli ultimi giorni: ciascuna compare in «Azioni da confermare», che vedi solo tu. Quelle che confermi diventano spese condivise."),
         ),
         c?.pending?.aspsp ? el("p.meta", { style: "margin-top:12px" }, `Collegamento con ${c.pending.aspsp.name} avviato e non concluso: puoi ricominciare da +.`) : null,
       );
       return;
     }
 
-    const cons = consenso(c);
+    const cons = fermo ? null : consenso(c);
+    const chiusoIl = toDate(c.sessionEndedAt) || toDate(c.lastSyncAt);
     const ultima = toDate(c.lastSyncAt);
     const conti = c.accounts?.length ? c.accounts : (c.accountIds || []).map((uid) => ({ uid, name: "Conto" }));
     const leggi = el("button.pillola", { type: "button", disabled: leggendo, onclick: leggiOra }, icon("ripeti"), leggendo ? "Leggo…" : "Leggi ora");
@@ -163,28 +187,34 @@ export function mount(container) {
       el("div.blocco", {},
         el("h3", {}, c.aspsp?.name || "Banca"),
         cons ? el("p", { style: cons.tardi ? "color:var(--frutto)" : null }, cons.testo) : null,
-        el("div", {}, ...conti.map((a) => el("div.riga", { style: "cursor:default" },
-          el("div.pallino", {}, icon("banca")),
-          el("div.testo", {}, el("b", {}, a.name || "Conto"), el("span", {}, [a.ibanMask, a.currency !== "EUR" ? a.currency : "", a.product && a.product !== a.name ? a.product : ""].filter(Boolean).join(" · ") || " ")),
-        ))),
+        fermo ? el("p", { style: "color:var(--frutto)" }, `Collegamento interrotto${chiusoIl ? ` ${quando(chiusoIl)}` : ""}: la banca ha chiuso il consenso prima della scadenza. La lettura è ferma finché non lo rinnovi.`) : null,
+        el("div", {}, ...conti.map((a) => {
+          const nome = nomeConto(a);
+          return el("div.riga", { style: "cursor:default" },
+            el("div.pallino", {}, icon("banca")),
+            el("div.testo", {}, el("b", {}, nome), el("span", {}, dettaglioConto(a, nome) || "\u00a0")),
+          );
+        })),
       ),
       el("div.blocco", {},
         el("h3", {}, "Movimenti"),
         el("p", {}, "Letti ogni mattina alle 7:15: ogni uscita diventa una proposta di spesa, che vedi solo tu."),
-        el("p.meta", {}, ultima
+        el("p.meta", {}, fermo
+          ? "Lettura sospesa: riprende dopo il rinnovo."
+          : ultima
           ? `Ultima lettura ${minuscola(giornoRelativo(ultima))} alle ${ora(ultima)}${c.lastSyncCreated != null ? ` · ${c.lastSyncCreated} ${c.lastSyncCreated === 1 ? "proposta nuova" : "proposte nuove"}` : ""}`
           : "Nessuna lettura ancora"),
-        c.lastError ? el("p.errore", { style: "margin-top:10px" }, c.lastError) : null,
+        c.lastError && !fermo ? el("p.errore", { style: "margin-top:10px" }, c.lastError) : null,
         el("div.segmenti", {},
-          leggi,
+          fermo ? null : leggi,
           el("button.pillola", { type: "button", onclick: () => vaiA("proposte") }, icon("scintilla"), "Azioni da confermare"),
         ),
       ),
       el("div.blocco", {},
         el("h3", {}, "Consenso"),
-        el("p", {}, "Rinnovarlo apre di nuovo il sito della banca; scollegare chiude il consenso."),
+        el("p", {}, "Rinnovarlo apre di nuovo il sito della banca; scollegare chiude il consenso. Un collegamento nuovo alla stessa banca, anche dal pannello di Enable Banking, chiude quello di qui."),
         el("div.segmenti", {},
-          rinnova,
+          fermo ? null : rinnova,
           el("button.btn.btn--pericolo", { type: "button", onclick: () => apriScollega(c) }, icon("chiudi"), "Scollega"),
         ),
       ),
@@ -223,7 +253,7 @@ export function mount(container) {
     } finally { concludendo = false; render(); }
   }
 
-  container.append(corpo, piu);
+  container.append(corpo, piu, rinnovaFab);
   const stop = onSnapshot(doc(db, COLL, uid), (snap) => {
     c = snap.exists() ? { id: snap.id, ...snap.data() } : null;
     caricato = true;
@@ -233,5 +263,5 @@ export function mount(container) {
   const r = ritornoDallaBanca();
   if (r) concludi(r);
 
-  return () => { stop(); piu.remove(); };
+  return () => { stop(); piu.remove(); rinnovaFab.remove(); };
 }

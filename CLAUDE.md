@@ -111,7 +111,14 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
       concludi `POST /sessions` → conti in `bank_connections/{uid}`; scollega; sincronizza), pagina
       Banca dal menu, proposte di spesa **personali** dai movimenti (la spesa confermata nasce condivisa).
       Il flusso è coperto dalle prove con una function finta (`prove/finto/firebase.js`).
-- [ ] **Banca, messa in funzione** (Mattia, dal Control Panel di Enable Banking): app in **produzione**,
+- [x] **Banca collegata** (23/10, Intesa Sanpaolo, quattro rapporti di cui due senza IBAN). Il 25/10 la
+      sessione si è chiusa nella notte con `EXPIRED_SESSION` (consenso dichiarato fino a gennaio): ora è uno
+      stato gestito (`needsRenewal`, pagina «Collegamento interrotto» con «Rinnova il consenso» in basso a
+      destra, `syncBank` lo salta, `sessionStatus` da `GET /sessions/{id}` per capire chi l'ha chiusa).
+      Causa probabile: un consenso nuovo alla stessa banca (anche dal Control Panel) invalida il precedente.
+      Da decidere con Mattia: escludere le carte dalla lettura (carta di credito = acquisto + addebito
+      mensile sul conto, due proposte per la stessa spesa).
+- [ ] **Banca, messa in funzione** (fatto, tenuto come promemoria per l'altra persona): app in **produzione**,
       modalità ristretta (gratuita, conti propri); «Allowed Redirect URLs» =
       `https://macroapp-b9bd0.web.app/banca`; **Link accounts** per ogni conto da leggere (senza questo
       passo `/sessions` torna senza conti); ENABLE_BANKING_APP_ID e ENABLE_BANKING_PRIVATE_KEY (il
