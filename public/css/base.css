@@ -330,24 +330,35 @@ a.pillola { text-decoration: none; }
 
 /* ───────────── Lista della spesa (tessere) ───────────── */
 
-.tessere { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-@media (min-width: 560px) { .tessere { grid-template-columns: repeat(4, 1fr); } }
+/* Quattro colonne di tessere basse anche sul telefono: entra più lista in uno schermo.
+   Su schermi larghi le tessere crescono e tornano icona e nome più grandi. */
+.tessere { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
 .tessera {
-  position: relative; aspect-ratio: 1 / .92; border-radius: 12px; padding: 10px 8px 9px;
+  position: relative; aspect-ratio: 1 / .8; border-radius: 10px; padding: 7px 4px 6px;
   background: var(--tessera-rossa); color: var(--su-tessera);
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-align: center;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-align: center;
   cursor: pointer; user-select: none; -webkit-user-select: none; transition: transform .08s;
 }
 .tessera:active { transform: scale(.96); }
 .tessera--verde { background: var(--tessera-verde); }
-.tessera svg { width: 34px; height: 34px; stroke-width: 1.4; }
-.tessera .iniziale { font-family: var(--display); font-size: 34px; line-height: 1; }
-.tessera b { font-weight: 500; font-size: 13.5px; line-height: 1.15; overflow-wrap: anywhere;
+.tessera svg { width: 24px; height: 24px; stroke-width: 1.4; }
+.tessera .iniziale { font-family: var(--display); font-size: 24px; line-height: 1; }
+.tessera b { font-weight: 500; font-size: 12px; line-height: 1.12; overflow-wrap: anywhere; hyphens: auto; -webkit-hyphens: auto;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.tessera small { font-size: 11px; opacity: .9; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-.tessera .altro { position: absolute; top: 2px; right: 2px; width: 30px; height: 30px; display: flex;
+.tessera small { font-size: 10px; opacity: .9; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.tessera .altro { position: absolute; top: 0; right: 0; width: 24px; height: 24px; display: flex;
   align-items: center; justify-content: center; color: var(--su-tessera); opacity: .75; }
-.tessera .altro svg { width: 16px; height: 16px; }
+.tessera .altro svg { width: 13px; height: 13px; }
+@media (min-width: 560px) {
+  .tessere { gap: 6px; }
+  .tessera { border-radius: 12px; padding: 10px 8px 9px; gap: 4px; }
+  .tessera svg { width: 32px; height: 32px; }
+  .tessera .iniziale { font-size: 32px; }
+  .tessera b { font-size: 13.5px; line-height: 1.15; }
+  .tessera small { font-size: 11px; }
+  .tessera .altro { top: 2px; right: 2px; width: 30px; height: 30px; }
+  .tessera .altro svg { width: 16px; height: 16px; }
+}
 
 /* ───────────── Spese: saldo ───────────── */
 
