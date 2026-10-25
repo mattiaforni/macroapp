@@ -133,6 +133,9 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
       un conto ora si vedono gli ultimi 12 movimenti con l'esito di ciascuno (`lettura.conti[].ultimi`):
       da lì si capisce se Intesa li segna come entrate, con uno stato diverso o con una data fuori periodo.
       Repository pubblico: niente testi dei movimenti nei registri (Diagnosi li pubblica).
+      25/10, 11:42: dopo quattro letture col consenso nuovo Intesa ha risposto 429 «consented multiplicity
+      per day» (limite PSD2 di 4 letture al giorno senza l'utente). «Leggi ora» ora manda le intestazioni
+      PSU (IP e browser dell'utente), così non conta; da verificare che Intesa le rispetti.
 - [ ] **Banca, messa in funzione** (fatto, tenuto come promemoria per l'altra persona): app in **produzione**,
       modalità ristretta (gratuita, conti propri); «Allowed Redirect URLs» =
       `https://macroapp-b9bd0.web.app/banca`; **Link accounts** per ogni conto da leggere (senza questo

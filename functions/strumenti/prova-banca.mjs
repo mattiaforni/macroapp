@@ -3,7 +3,7 @@
 //   cd functions && node strumenti/prova-banca.mjs
 import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
-import { classifica, syncConnection, SALDO_CARTA } from "../src/banking/enable.js";
+import { classifica, syncConnection, SALDO_CARTA, intestazioniPsu } from "../src/banking/enable.js";
 
 const oggi = new Date("2026-10-25T08:00:00Z");
 const g = (n) => new Date(oggi - n * 86400e3).toISOString().slice(0, 10); // n giorni fa
@@ -82,7 +82,9 @@ const db = { collection: (c) => ({ doc: (id) => rif(`${c}/${id}`) }) };
 // Una proposta già in attesa per l'addebito della carta (creata prima che arrivasse il pagamento sulla carta).
 docs.set("proposals/eb_a1", { status: "pending", source: "bank" });
 const perConto = Object.fromEntries(movimenti.map((m) => [m.conto.uid, m.transazioni]));
-globalThis.fetch = async (url) => {
+const intestazioniViste = [];
+globalThis.fetch = async (url, opz = {}) => {
+  intestazioniViste.push(opz.headers || {});
   const uid = decodeURIComponent(String(url).match(/accounts\/([^/]+)\/transactions/)[1]);
   return { ok: true, text: async () => JSON.stringify({ transactions: perConto[uid] }) };
 };
@@ -92,8 +94,11 @@ docs.set("bank_connections/u1", c);
 const veraData = Date;
 // syncConnection usa new Date() per «oggi»: lo si fissa alla data della prova.
 globalThis.Date = class extends veraData { constructor(...a) { super(...(a.length ? a : [oggi])); } static now() { return oggi.getTime(); } };
-const creati = await syncConnection(db, rif("bank_connections/u1"), c, { appId: "app", privateKey });
+const psu = intestazioniPsu({ ip: "10.0.0.1", headers: { "x-forwarded-for": "203.0.113.7, 10.0.0.1", "user-agent": "Mozilla/5.0 (Android)", "accept-language": "it-IT" } });
+assert.deepEqual(psu, { "Psu-Ip-Address": "203.0.113.7", "Psu-User-Agent": "Mozilla/5.0 (Android)", "Psu-Accept-Language": "it-IT" });
+const creati = await syncConnection(db, rif("bank_connections/u1"), c, { appId: "app", privateKey }, { psu });
 globalThis.Date = veraData;
+assert.ok(intestazioniViste.length >= 3 && intestazioniViste.every((h) => h["Psu-Ip-Address"] === "203.0.113.7"), "le letture chieste dall'utente portano le intestazioni PSU");
 
 assert.equal(creati, 4, "quattro proposte nuove");
 assert.equal(docs.get("proposals/eb_a1").status, "discarded", "la proposta in attesa dell'addebito è scartata");

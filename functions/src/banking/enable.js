@@ -60,10 +60,10 @@ export class EnableBankingError extends Error {
  */
 export const sessioneChiusa = (err) => err instanceof EnableBankingError && [401, 410].includes(err.status) && /SESSION/i.test(err.code || err.body);
 
-async function api(path, { jwt, method = "GET", body } = {}) {
+async function api(path, { jwt, method = "GET", body, psu = {} } = {}) {
   const res = await fetch(API + path, {
     method,
-    headers: { authorization: `Bearer ${jwt}`, "content-type": "application/json", accept: "application/json" },
+    headers: { authorization: `Bearer ${jwt}`, "content-type": "application/json", accept: "application/json", ...psu },
     body: body ? JSON.stringify(body) : undefined,
   });
   const text = await res.text();
@@ -162,13 +162,13 @@ export function descrizioneDi(tx) {
 }
 
 /** Tutte le pagine dei movimenti di un conto da una data in poi. */
-async function movimenti(jwt, accountUid, dateFrom) {
+async function movimenti(jwt, accountUid, dateFrom, psu) {
   const out = [];
   let key = null;
   for (let pagina = 0; pagina < 10; pagina++) {
     const q = new URLSearchParams({ date_from: dateFrom });
     if (key) q.set("continuation_key", key);
-    const data = await api(`/accounts/${encodeURIComponent(accountUid)}/transactions?${q}`, { jwt });
+    const data = await api(`/accounts/${encodeURIComponent(accountUid)}/transactions?${q}`, { jwt, psu });
     out.push(...(data.transactions || []));
     key = data.continuation_key;
     if (!key) break;
@@ -282,7 +282,31 @@ export function classifica(movimentiPerConto, { oggi = new Date() } = {}) {
  * ancora in attesa per un movimento scartato passa a `discarded`.
  * Ritorna il numero di proposte create. L'errore, se c'è, lo scrive nel documento e lo rilancia.
  */
-export async function syncConnection(db, ref, c, defaults) {
+/**
+ * Intestazioni PSU: dicono alla banca che l'utente è presente (ha toccato «Leggi ora»). Senza, la
+ * lettura conta nel limite PSD2 delle letture in sua assenza, che molte banche (Intesa compresa)
+ * fissano a 4 al giorno per conto; oltre rispondono 429 ASPSP_RATE_LIMIT_EXCEEDED. La lettura
+ * automatica di syncBank non le manda: per lei il limite vale, ed è una al giorno.
+ * Riferimento: https://enablebanking.com/docs/faq/
+ */
+export function intestazioniPsu(req) {
+  const h = req?.headers || {};
+  const out = {};
+  const ip = String(h["x-forwarded-for"] || req?.ip || "").split(",")[0].trim();
+  if (/^[0-9a-f.:]{3,45}$/i.test(ip)) out["Psu-Ip-Address"] = ip;
+  if (h["user-agent"]) out["Psu-User-Agent"] = String(h["user-agent"]).slice(0, 300);
+  if (h["accept-language"]) out["Psu-Accept-Language"] = String(h["accept-language"]).slice(0, 100);
+  if (h["referer"] || h["origin"]) out["Psu-Referer"] = String(h["referer"] || h["origin"]).slice(0, 300);
+  return out;
+}
+
+/** Errori noti di Enable Banking → frase da mostrare nella pagina Banca. */
+function erroreLeggibile(err) {
+  if (err.code === "ASPSP_RATE_LIMIT_EXCEEDED") return "La banca ha raggiunto il limite di letture di oggi (4 al giorno quando non sei tu a chiederle). La lettura automatica riprende domattina.";
+  return err.message.slice(0, 300);
+}
+
+export async function syncConnection(db, ref, c, defaults, { psu = {} } = {}) {
   try {
     const jwt = makeJwt({ appId: c.appId || defaults.appId, privateKey: c.privateKey || defaults.privateKey });
     const oggi = new Date();
@@ -290,7 +314,7 @@ export async function syncConnection(db, ref, c, defaults) {
     const letti = [];
     for (const conto of conti) {
       const giorni = (eCarta(conto) ? GIORNI_LETTURA_CARTE : GIORNI_LETTURA) + GIORNI_ABBINAMENTO;
-      letti.push({ conto, transazioni: await movimenti(jwt, conto.uid, isoGiorno(new Date(oggi - giorni * 86400e3))) });
+      letti.push({ conto, transazioni: await movimenti(jwt, conto.uid, isoGiorno(new Date(oggi - giorni * 86400e3)), psu) });
     }
     const { proposte, scartati, inAttesa, riepilogo } = classifica(letti, { oggi });
 
@@ -378,7 +402,7 @@ export async function syncConnection(db, ref, c, defaults) {
         ...(c.sessionEndedAt ? {} : { sessionEndedAt: FieldValue.serverTimestamp() }),
       });
     } else {
-      await ref.update({ lastAttemptAt: FieldValue.serverTimestamp(), lastError: err.message.slice(0, 300) });
+      await ref.update({ lastAttemptAt: FieldValue.serverTimestamp(), lastError: erroreLeggibile(err) });
     }
     throw err;
   }

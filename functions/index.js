@@ -102,6 +102,7 @@ function spiegaErroreBanca(err, eb) {
   if (s === 401) return ["failed-precondition", `Enable Banking non accetta le credenziali dell'app (${err.code || err.body.slice(0, 120)})`];
   if (s === 403) return ["permission-denied", "Enable Banking non permette questa operazione (app in modalità ristretta?)"];
   if (s === 422 || s === 400) return ["invalid-argument", `Richiesta rifiutata da Enable Banking (${err.body.slice(0, 160)})`];
+  if (s === 429 && err.code === "ASPSP_RATE_LIMIT_EXCEEDED") return ["resource-exhausted", "La banca ha raggiunto il limite di letture di oggi: riprova più tardi"];
   if (s === 429) return ["resource-exhausted", "Troppe richieste alla banca: riprova tra poco"];
   return ["internal", `Banca non raggiungibile (${(err.message || "").slice(0, 160)})`];
 }
@@ -206,7 +207,8 @@ export const bank = onCall(
       if (azione === "sincronizza") {
         const snap = await ref.get();
         if (!snap.exists || !snap.data().active) throw new HttpsError("failed-precondition", "Nessuna banca collegata");
-        const created = await eb.syncConnection(db, ref, snap.data(), credenziali);
+        // L'ha chiesto l'utente dall'app: la banca lo sa dalle intestazioni PSU e non lo conta nel limite giornaliero.
+        const created = await eb.syncConnection(db, ref, snap.data(), credenziali, { psu: eb.intestazioniPsu(req.rawRequest) });
         return { created };
       }
 
