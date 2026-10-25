@@ -1,6 +1,6 @@
 {
-  "name": "Macroapp",
-  "short_name": "Macroapp",
+  "name": "Debiti e Doveri",
+  "short_name": "D&D",
   "description": "App personale e di coppia: spese, lista, manuale di casa, diario, task.",
   "start_url": "/",
   "scope": "/",

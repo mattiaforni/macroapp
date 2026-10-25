@@ -30,7 +30,7 @@ function renderLogin() {
   title.textContent = "";
   view.replaceChildren(
     el("div.accesso", {},
-      el("h2", {}, "Macroapp"),
+      el("h2", {}, "Debiti e Doveri"),
       el("p.muted", {}, "Lista, spese, diario, task e manuale di casa."),
       el("button.btn.btn--primario", { onclick: () => login().catch((e) => toast(e.code || e.message)) }, "Accedi con Google"),
       loginError ? el("p.errore", {}, `Accesso non riuscito: ${loginError}`) : null,
@@ -74,7 +74,7 @@ function startApp() {
         closeSheet({ fromHistory: true, subito: true });
         chiudiMenu();
         const mod = modules.find((m) => m.id === id);
-        title.textContent = mod?.title || "Macroapp";
+        title.textContent = mod?.title || "Debiti e Doveri";
         renderNav(id);
         renderActions(id);
         window.scrollTo(0, 0);

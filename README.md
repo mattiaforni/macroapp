@@ -1,8 +1,9 @@
-# Macroapp
+# Debiti e Doveri (D&D)
 
+Repository `macroapp`.
 App personale e di coppia, installabile come PWA. Moduli: **Lista** della spesa, **Spese** condivise (sostituto di Splitwise), **Manuale** di casa, **Diario** con agente, **Task**, **Proposte** (coda di approvazione).
 
-Nome e identità visiva sono provvisori.
+Il nome è deciso (25/10); l'identità visiva è provvisoria.
 
 ## Stack
 

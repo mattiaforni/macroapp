@@ -1,6 +1,7 @@
-# Macroapp — istruzioni per Claude
+# Debiti e Doveri (D&D) — istruzioni per Claude
 
-App personale e di coppia di Mattia (PWA): lista della spesa, spese condivise, diario con agente,
+App personale e di coppia di Mattia (PWA), nome «Debiti e Doveri», breve «D&D» (repository e
+chiavi interne restano `macroapp`): lista della spesa, spese condivise, diario con agente,
 task per progetti, manuale di casa. Due utenti (Mattia e la compagna) in una "casa".
 Interfaccia, codice e commenti in italiano. Mattia chiede modifiche spesso dal telefono:
 il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione automatica.

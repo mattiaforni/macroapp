@@ -40,7 +40,7 @@ export async function mount(container) {
       el("p", {}, session.profile?.displayName || "", " · ", session.user.email),
       el("button.btn", { onclick: logout }, icon("esci"), "Esci"),
     ),
-    el("p.meta", { style: "text-align:center;margin-top:22px" }, `Macroapp · versione ${VERSION} · identità visiva provvisoria`),
+    el("p.meta", { style: "text-align:center;margin-top:22px" }, `Debiti e Doveri · versione ${VERSION} · identità visiva provvisoria`),
   );
   return () => {};
 }
