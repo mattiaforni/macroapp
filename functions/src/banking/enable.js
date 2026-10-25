@@ -222,13 +222,23 @@ export function classifica(movimentiPerConto, { oggi = new Date() } = {}) {
   const pagamentiCarta = movimentiPerConto.filter((m) => eCarta(m.conto))
     .flatMap((m) => m.transazioni.filter((t) => t.credit_debit_indicator === "CRDT"))
     .map((t) => ({ importo: importoDi(t), giorno: giornoConto(t), usato: false }));
-  const out = { proposte: [], scartati: [] };
+  const out = { proposte: [], scartati: [], inAttesa: [], riepilogo: [] };
   for (const { conto, transazioni } of movimentiPerConto) {
     const da = isoGiorno(new Date(oggi - (eCarta(conto) ? GIORNI_LETTURA_CARTE : GIORNI_LETTURA) * 86400e3));
+    // Cosa ha dato la banca per questo conto, per capire che cosa manca (nessun testo dei movimenti).
+    const stati = {};
+    for (const t of transazioni) { const k = `${t.credit_debit_indicator || "?"} ${t.status || "?"}`; stati[k] = (stati[k] || 0) + 1; }
+    const giorni = transazioni.map(giornoSpesa).filter(Boolean).sort();
+    out.riepilogo.push({ uid: conto.uid, conto: etichettaConto(conto), tipo: conto.type || "", letti: transazioni.length, stati, ultimo: giorni.at(-1) || null });
     for (const tx of transazioni) {
       if (tx.credit_debit_indicator !== "DBIT") continue;          // solo uscite
-      if (tx.status && tx.status !== "BOOK") continue;             // non ancora contabilizzato: può cambiare riferimento
       if (!importoDi(tx)) continue;
+      if (tx.status && tx.status !== "BOOK") {
+        // Non ancora contabilizzata: può cambiare importo (preautorizzazioni) o riferimento, quindi non
+        // diventa una proposta; si mostra nella pagina Banca finché la banca non la contabilizza.
+        if (["PDNG", "HOLD", "SCHD"].includes(tx.status) && (giornoSpesa(tx) || da) >= da) out.inAttesa.push({ conto, tx });
+        continue;
+      }
       const g = giornoConto(tx);
       if (g && g < da) continue;                                   // letto solo per gli abbinamenti
       let motivo = null;
@@ -267,7 +277,7 @@ export async function syncConnection(db, ref, c, defaults) {
       const giorni = (eCarta(conto) ? GIORNI_LETTURA_CARTE : GIORNI_LETTURA) + GIORNI_ABBINAMENTO;
       letti.push({ conto, transazioni: await movimenti(jwt, conto.uid, isoGiorno(new Date(oggi - giorni * 86400e3))) });
     }
-    const { proposte, scartati } = classifica(letti, { oggi });
+    const { proposte, scartati, inAttesa, riepilogo } = classifica(letti, { oggi });
 
     let created = 0;
     for (const { conto, tx } of proposte) {
@@ -309,7 +319,16 @@ export async function syncConnection(db, ref, c, defaults) {
         await propRef.update({ status: "discarded", explain: motivo, updatedAt: FieldValue.serverTimestamp() });
       }
     }
-    const aggiornamento = {};
+    const aggiornamento = {
+      // Ultima lettura riuscita: quanti movimenti per conto e in che stato, e le uscite non ancora
+      // contabilizzate (descrizione, importo, giorno: restano in questo documento privato, non nei registri).
+      lettura: {
+        conti: riepilogo,
+        inAttesa: inAttesa
+          .map(({ conto, tx }) => ({ giorno: giornoSpesa(tx), descrizione: descrizioneDi(tx), importo: importoDi(tx), conto: etichettaConto(conto), stato: tx.status }))
+          .sort((a, b) => String(b.giorno).localeCompare(String(a.giorno))).slice(0, 15),
+      },
+    };
     if (nuoviScarti.length) {
       const visti = new Set(nuoviScarti.map((x) => x.key));
       aggiornamento.scartati = [...nuoviScarti, ...(c.scartati || []).filter((x) => !visti.has(x.key))]

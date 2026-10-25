@@ -46,6 +46,15 @@ assert.match(motivo("a1"), /importo abbinato/);
 assert.match(motivo("a3"), /dal testo/);
 assert.match(motivo("a4"), /Giroconto/);
 
+// Uscite non contabilizzate: non proposte, ma elencate; riepilogo per conto
+const { inAttesa, riepilogo } = classifica(movimenti, { oggi });
+assert.deepEqual(inAttesa.map((x) => x.tx.entry_reference), ["k3"], "in attesa");
+const rk = riepilogo.find((r) => r.uid === "k1");
+assert.equal(rk.conto, "Carta");
+assert.equal(rk.letti, 5);
+assert.equal(rk.stati["DBIT PDNG"], 1);
+assert.equal(rk.ultimo, g(1));
+
 // Senza la carta tra i conti letti l'addebito mensile resta: è l'unica traccia di quelle spese.
 const senzaCarta = classifica([movimenti[0]], { oggi });
 assert.ok(ids(senzaCarta.proposte).includes("a1") && ids(senzaCarta.proposte).includes("a3"), "senza carta l'addebito resta");
@@ -86,6 +95,8 @@ assert.equal(docs.get("proposals/eb_k1").payload.date.toDate().toISOString().sli
 const doc = docs.get("bank_connections/u1");
 assert.deepEqual(doc.scartati.map((x) => x.key), ["eb_a1", "eb_a3", "eb_a4", "eb_vecchio"], "scarti nuovi prima, i vecchi restano");
 assert.equal(doc.lastSyncCreated, 4);
+assert.deepEqual(doc.lettura.inAttesa.map((x) => [x.descrizione, x.importo, x.conto, x.stato]), [["IN ATTESA", 30, "Carta", "PDNG"]], "in attesa nel documento");
+assert.equal(doc.lettura.conti.length, 3);
 
 console.log("prova-banca: tutto a posto");
 console.log(scartati.map((x) => `  scartato ${x.tx.remittance_information[0]} · ${x.motivo}`).join("\n"));

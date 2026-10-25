@@ -475,11 +475,16 @@ with sync_playwright() as p:
         pg.click("button.pillola >> text=Leggi ora")
         pg.wait_for_selector("text=3 movimenti nuovi")
         pg.wait_for_selector("text=3 proposte nuove")
+        # Gli acquisti della carta non ancora contabilizzati si vedono, ma non sono proposte
+        pg.wait_for_selector("text=In attesa di contabilizzazione")
+        pg.wait_for_selector(".riga >> text=RISTORANTE DA PINO")
+        pg.wait_for_selector("text=6 movimenti letti · 2 in attesa")
+        assert pg.locator(".azione", has_text="RISTORANTE DA PINO").count() == 0
         # Il saldo della carta non diventa una proposta: compare tra gli scartati, col motivo
         pg.wait_for_selector("text=Scartati, non sono spese")
         pg.wait_for_selector(".riga >> text=ADDEBITO SALDO E/C CARTA 9876")
         pg.wait_for_selector(".riga >> text=Saldo della carta, importo abbinato")
-        pg.locator("text=Scartati, non sono spese").scroll_into_view_if_needed()
+        pg.locator("text=In attesa di contabilizzazione").scroll_into_view_if_needed()
         pg.wait_for_timeout(5500)  # il toast se ne va
         shot(pg, "13b-banca-scartati")
         pg.click("button.pillola >> text=Azioni da confermare")

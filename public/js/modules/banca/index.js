@@ -44,9 +44,26 @@ const TIPI_CONTO = { CACC: "Conto corrente", CARD: "Carta", SVGS: "Conto deposit
 function nomeConto(a) {
   return a.product || a.details || TIPI_CONTO[a.type] || (a.ibanMask ? "Conto" : "Conto senza IBAN");
 }
-function dettaglioConto(a, nome) {
+function dettaglioConto(a, nome, stat) {
   const tipo = TIPI_CONTO[a.type];
-  return [a.ibanMask || a.idMask, tipo && tipo !== nome ? tipo : "", a.currency && a.currency !== "EUR" ? a.currency : ""].filter(Boolean).join(" · ");
+  // Dall'ultima lettura: quanti movimenti ha dato la banca e quante uscite sono in attesa.
+  const letti = stat ? `${stat.letti} ${stat.letti === 1 ? "movimento letto" : "movimenti letti"}` : "";
+  const attesa = stat ? Object.entries(stat.stati || {}).filter(([k]) => k.startsWith("DBIT") && !k.endsWith("BOOK")).reduce((n, [, v]) => n + v, 0) : 0;
+  return [a.ibanMask || a.idMask, tipo && tipo !== nome ? tipo : "", a.currency && a.currency !== "EUR" ? a.currency : "",
+    letti, attesa ? `${attesa} in attesa` : ""].filter(Boolean).join(" · ");
+}
+
+/** Uscite non ancora contabilizzate (es. acquisti con la carta di ieri): si vedono, ma non sono proposte. */
+function inAttesa(lista) {
+  if (!lista?.length) return null;
+  return el("div", {},
+    fascia("In attesa di contabilizzazione"),
+    el("p.meta", { style: "margin-bottom:2px" }, "Diventano proposte quando la banca le contabilizza: prima l'importo può ancora cambiare."),
+    ...lista.map((x) => el("div.riga", { style: "cursor:default" },
+      el("div.testo", {}, el("b", {}, x.descrizione), el("span", {}, x.conto)),
+      el("div.importo.neutro", {}, el("b", {}, fmtMoney(x.importo)), el("small", {}, fmtDate(x.giorno))),
+    )),
+  );
 }
 
 /** Uscite lette ma non proposte (saldo della carta, giroconti), col motivo: per controllare le regole. */
@@ -204,7 +221,7 @@ export function mount(container) {
           const nome = nomeConto(a);
           return el("div.riga", { style: "cursor:default" },
             el("div.pallino", {}, icon("banca")),
-            el("div.testo", {}, el("b", {}, nome), el("span", {}, dettaglioConto(a, nome) || "\u00a0")),
+            el("div.testo", {}, el("b", {}, nome), el("span", {}, dettaglioConto(a, nome, (c.lettura?.conti || []).find((r) => r.uid === a.uid)) || "\u00a0")),
           );
         })),
       ),
@@ -221,6 +238,7 @@ export function mount(container) {
           fermo ? null : leggi,
           el("button.pillola", { type: "button", onclick: () => vaiA("proposte") }, icon("scintilla"), "Azioni da confermare"),
         ),
+        fermo ? null : inAttesa(c.lettura?.inAttesa),
         scartati(c.scartati),
       ),
       el("div.blocco", {},

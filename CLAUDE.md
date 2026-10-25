@@ -124,6 +124,11 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
       `classifica` (enable.js), prova senza rete: `node functions/strumenti/prova-banca.mjs`.
       Da verificare al primo estratto conto vero: che l'addebito finisca tra gli scartati e gli acquisti
       tra le proposte (vedi docs/ARCHITETTURA.md, Banca); cosa sia il quarto rapporto senza IBAN.
+      25/10: Mattia non vedeva gli acquisti con la carta del giorno prima. Il rinnovo e le letture erano
+      riusciti; ipotesi: movimenti non ancora contabilizzati, che non diventano proposte. Ora la pagina
+      Banca li mostra («In attesa di contabilizzazione») e dice per conto quanti movimenti ha dato la banca
+      (`lettura` in bank_connections). Se la carta risulta con 0 movimenti letti, Intesa non li espone.
+      Repository pubblico: niente testi dei movimenti nei registri (Diagnosi li pubblica).
 - [ ] **Banca, messa in funzione** (fatto, tenuto come promemoria per l'altra persona): app in **produzione**,
       modalità ristretta (gratuita, conti propri); «Allowed Redirect URLs» =
       `https://macroapp-b9bd0.web.app/banca`; **Link accounts** per ogni conto da leggere (senza questo

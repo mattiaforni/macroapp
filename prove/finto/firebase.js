@@ -154,7 +154,17 @@ async function bankFinto(data = {}) {
     P.set("eb_prova_2", { ...base, summary: "Enel Energia · 61,30 €", payload: { amount: 61.3, description: "Enel Energia", paidBy: UID, split: "equal", date: ieri, source: "bank", bankTxId: "eb_prova_2", account: "Conto corrente" } });
     P.set("eb_prova_3", { ...base, summary: "AMAZON EU · 24,99 €", payload: { amount: 24.99, description: "AMAZON EU", paidBy: UID, split: "equal", date: ieri, source: "bank", bankTxId: "eb_prova_3", account: "Carta" } });
     const scartati = [{ key: "eb_saldo", giorno: ieri.toISOString().slice(0, 10), descrizione: "ADDEBITO SALDO E/C CARTA 9876", importo: 312.4, conto: "Conto corrente", motivo: "Saldo della carta, importo abbinato" }];
-    B.set(UID, { ...c, lastSyncAt: new Date(), lastSyncCreated: 3, lastError: null, letture: (c.letture || 0) + 1, scartati });
+    const lettura = {
+      conti: [
+        { uid: "conto-1", conto: "Conto corrente", tipo: "CACC", letti: 14, stati: { "DBIT BOOK": 9, "CRDT BOOK": 5 }, ultimo: ieri.toISOString().slice(0, 10) },
+        { uid: "carta-1", conto: "Carta", tipo: "CARD", letti: 6, stati: { "DBIT BOOK": 3, "DBIT PDNG": 2, "CRDT BOOK": 1 }, ultimo: ieri.toISOString().slice(0, 10) },
+      ],
+      inAttesa: [
+        { giorno: ieri.toISOString().slice(0, 10), descrizione: "RISTORANTE DA PINO", importo: 58, conto: "Carta", stato: "PDNG" },
+        { giorno: ieri.toISOString().slice(0, 10), descrizione: "Q8 FIRENZE", importo: 40, conto: "Carta", stato: "PDNG" },
+      ],
+    };
+    B.set(UID, { ...c, lastSyncAt: new Date(), lastSyncCreated: 3, lastError: null, letture: (c.letture || 0) + 1, scartati, lettura });
     notify();
     return { data: { created: 3 } };
   }
