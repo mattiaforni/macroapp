@@ -44,6 +44,12 @@ Dettagli in [docs/ARCHITETTURA.md](docs/ARCHITETTURA.md) e [docs/MODELLO-DATI.md
 4. Secret Manager: `ENABLE_BANKING_APP_ID` = application id, `ENABLE_BANKING_PRIVATE_KEY` = il contenuto intero del `.pem` (con le righe BEGIN/END). Poi un deploy (Actions → Deploy Firebase → Run workflow).
 5. Dal telefono: menu → Banca → + → scegli la banca → consenso sul sito della banca → ritorno nell'app → «Leggi ora». Le uscite compaiono in «Azioni da confermare», visibili solo a chi possiede il conto.
 
+## Notifiche
+
+Niente da configurare: il deploy attiva le API di Cloud Messaging. Ognuno le attiva sul proprio telefono da
+menu → Notifiche. Su iPhone servono iOS 16.4 o successivo e l'app aggiunta alla schermata Home (da Safari:
+Condividi → Aggiungi alla schermata Home), aperta da lì.
+
 ## Deploy automatico
 
 1. Console Google Cloud → IAM e amministrazione → Account di servizio → crea `github-deploy` con i ruoli *Editor*, *Amministratore Firebase*, *Utente account di servizio*, *Amministratore Secret Manager*.

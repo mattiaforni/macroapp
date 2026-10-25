@@ -6,6 +6,7 @@ import { applicaTema } from "./core/theme.js";
 import { ensureMyName } from "./core/household.js";
 import { avviaRubrica, fermaRubrica, sincronizzaDaGoogle } from "./core/rubrica.js";
 import { ritornoDaGoogle } from "./core/contatti-google.js";
+import { aggiornaAllAvvio as aggiornaNotifiche } from "./core/notifiche.js";
 import { modules, navModules, DEFAULT_ROUTE } from "./modules/registry.js";
 import { renderOnboarding } from "./components/onboarding.js";
 import { closeSheet } from "./components/sheet.js";
@@ -93,6 +94,7 @@ function startApp() {
     else console.warn("contatti", e);
   });
   ensureMyName().catch((e) => console.warn("ensureMyName", e));
+  aggiornaNotifiche().catch((e) => console.warn("notifiche", e)); // token di questo telefono, se le notifiche sono attive
   materializeRecurring().catch((e) => console.warn("materializeRecurring", e));
 }
 
@@ -138,6 +140,12 @@ if ("serviceWorker" in navigator) {
   });
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("/sw.js").then((r) => r.update()).catch(console.warn);
+  });
+  // Tocco su una notifica con l'app già aperta: il service worker dice quale pagina mostrare.
+  navigator.serviceWorker.addEventListener("message", (e) => {
+    if (e.data?.tipo !== "apri") return;
+    const hash = new URL(e.data.url, location.origin).hash;
+    if (hash && location.hash !== hash) location.hash = hash;
   });
 }
 

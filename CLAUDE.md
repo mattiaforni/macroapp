@@ -15,8 +15,8 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 - **Functions** in `functions/` (Node 24, europe-west1): `analyzeEntry` (agente del diario,
   provider AI intercambiabile in `src/ai/`), `bank` (onCall con `azione`: elenco banche, avvio e
   conclusione del consenso, scollega, lettura a richiesta; `src/banking/enable.js`), `contatti` (Google
-  Contatti: collegamento e permessi di un'ora, `src/google/contatti.js`), `syncBank` (lettura
-  quotidiana alle 7:15). firebase-admin, agente e banca si importano dentro i gestori, non all'avvio.
+  Contatti: collegamento e permessi di un'ora, `src/google/contatti.js`), `avvisa` (notifiche push,
+  `src/avvisi.js`), `syncBank` (lettura quotidiana alle 7:15, poi le notifiche della banca). firebase-admin, agente e banca si importano dentro i gestori, non all'avvio.
 - **Pubblicazione**: push su `main` → `.github/workflows/deploy.yml` pubblica hosting,
   regole, indici e functions (secret `FIREBASE_SERVICE_ACCOUNT`). Si può rilanciare a mano.
 - **Segreti** in Secret Manager (ANTHROPIC_API_KEY, GEMINI_API_KEY, ENABLE_BANKING_*):
@@ -31,7 +31,8 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 | `app.js` | guscio: accesso, barra in basso, pulsante del menu, router, service worker, ricorrenti all'avvio |
 | `core/router.js` | router a hash; `vaiA(id, apri)` + `richiesto(id, apri)`: il menu chiede a una pagina di aprire un suo foglio. Passaggi tra le pagine con View Transitions (`<html data-passaggio>` = `entra` / `torna`): vaiA entra sempre, il resto lo decide `transizione(da, a)` in app.js |
 | `core/ui.js` | `el()`, icone disegnate a mano (`D`), date, importi, pillole |
-| `core/db.js` | `create` (non aspetta il server, ritorna `{id, saved}`), `update`, `watchVisible`, `readVisible` |
+| `core/db.js` | `create` (non aspetta il server, ritorna `{id, saved}`), `update`, `watchVisible`, `readVisible`; dopo le scritture condivise di spese, task e lista chiama `segnala` (notifiche) |
+| `core/notifiche.js` | notifiche push: `attiva`/`disattiva` su questo telefono (token in `users.dispositivi`), categorie (`users.notifiche`), `prova`, `segnala` → funzione `avvisa`; il disegno e il tocco della notifica stanno in `sw.js` |
 | `core/household.js` | casa, nomi dei membri (`memberNames`), `nomeDi`, `updateHousehold` (es. categorie del manuale) |
 | `core/rubrica.js` | voci del manuale in memoria, aggiornate in tempo reale: `trovaPersona`, `risolviPersone` (crea quelle che mancano, collegate a Google se il nome è univoco), `nomiTask`, `sincronizzaDaGoogle` (all'avvio) |
 | `core/contatti-google.js` | Google Contatti: collegamento una tantum (ritorno su `/google-contatti`), permesso di un'ora dal server, elenco in memoria per `cercaContatti` / `contattoUnico` |
@@ -43,6 +44,7 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 | `modules/diario/index.js` | note (anche dettate o condivise), filtro per progetto (`macroapp.diario.progetto`, lo scrive anche la pagina Task), riepilogo dell'AI con la trascrizione ripiegata, proposte sotto la nota |
 | `modules/lista/index.js` | tessere a 4 colonne; quelle da comprare divise per reparto (`REPARTI` = ordine del giro, `REGOLE_REPARTO` dal nome, `reparto` scelto a mano nel foglio Modifica); recenti e «Mi serve» per frequenza, senza reparti |
 | `modules/task/index.js` | task per progetti; `apriProgetto` (nome, visibilità, istruzioni per il diario); dal progetto il pulsante Diario |
+| `modules/notifiche/index.js` | pagina Notifiche (menu → Account): stato di questo telefono, «Attiva» in basso a destra, categorie, telefoni attivi, prova |
 | `modules/banca/index.js` | stato del collegamento (`bank_connections/{uid}` in tempo reale), scelta della banca, conclusione al ritorno da `/banca?code=…` (messo da parte in `app.js`), «Leggi ora», rinnovo, scollega |
 
 ## Regole di lavoro
@@ -94,10 +96,11 @@ npm install --prefix prove        # una volta: font per le schermate
 python3 prove/costruisci.py       # copia public/ con Firebase finto in memoria
 python3 prove/prova.py            # flusso completo in Chromium, schermate in prove/_schermate
 node functions/strumenti/prova-banca.mjs   # quali movimenti bancari diventano proposte (servono le dipendenze di functions)
+node functions/strumenti/prova-avvisi.mjs  # cosa dicono le notifiche e a chi
 ```
 Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggiorna `prove/finto/firebase.js`.
 
-## Stato (24 ottobre 2026) e prossimi passi
+## Stato (25 ottobre 2026) e prossimi passi
 
 - [x] Pubblicazione automatica, accesso Google (anche da app installata), service worker
 - [x] Lista (stile Bring), Spese (stile Splitwise, ricorrenti, pareggio), Diario con agente, Task per
@@ -169,6 +172,13 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
 - [x] **Lista per reparti** (25/10, scelta di Mattia tra tre anteprime: etichette con filetto). Reparti e
       ordine del giro sono un'ipotesi: da adattare quando Mattia dice in che ordine li trova nel suo
       supermercato. Corretta l'icona dei surgelati («gelat» prendeva anche «surgelate»).
+- [x] **Nome** (25/10, scelta di Mattia): «Debiti e Doveri», breve «D&D» (manifest, titoli, pagine pubbliche).
+- [x] **Notifiche push** (25/10): spese condivise e pareggi, task condivisi nuovi e fatti, aggiunte alla lista
+      (una notifica che si aggiorna), banca (spese da confermare dopo la lettura del mattino, consenso chiuso).
+      Mai a chi ha fatto la cosa; categorie per persona. L'app segnala, il server decide (docs/ARCHITETTURA.md,
+      Notifiche). Da verificare dal telefono: attivazione (menu → Notifiche → Attiva → «Manda una prova») su
+      entrambi i telefoni; se `getToken` fallisce, controllare che la chiave API web non escluda le API
+      «Firebase Installations» e «FCM Registration».
 - [ ] Pagina per appunti e bozze: le proposte `note` e `draft` confermate finiscono in `notes`,
       che oggi nessuna pagina mostra
 - [ ] Riga di contesto per pagina, stile Leghe Fantacalcio (Task «2 in ritardo · 3 oggi»,
@@ -178,4 +188,5 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
 Bassa priorità (Mattia, 23/10: la revisione delle spese è meno rilevante), previste in
 `docs/ARCHITETTURA.md`: regole di spesa apprese (`expense_rules`: c'è la regola Firestore, nessuno
 le scrive né le applica in `syncBank`), bonifici tra i due membri riconosciuti come pareggi, divisione
-a percentuale. Più avanti anche notifiche push (consenso in scadenza, lista condivisa).
+a percentuale. Notifiche ancora non previste: spese modificate o eliminate dall'altra persona, consenso
+della banca vicino alla scadenza.

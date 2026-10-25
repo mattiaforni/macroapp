@@ -30,7 +30,8 @@ im = '''<script type="importmap">{"imports":{
 "https://www.gstatic.com/firebasejs/11.3.0/firebase-app.js":"/firebase-stub.js",
 "https://www.gstatic.com/firebasejs/11.3.0/firebase-auth.js":"/firebase-stub.js",
 "https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js":"/firebase-stub.js",
-"https://www.gstatic.com/firebasejs/11.3.0/firebase-functions.js":"/firebase-stub.js"}}</script>
+"https://www.gstatic.com/firebasejs/11.3.0/firebase-functions.js":"/firebase-stub.js",
+"https://www.gstatic.com/firebasejs/11.3.0/firebase-messaging.js":"/firebase-stub.js"}}</script>
 '''
 html = html.replace('<script type="module" src="/js/app.js"></script>', im + '<script type="module" src="/js/app.js"></script>')
 open(os.path.join(SITE, "index.html"), "w").write(html)

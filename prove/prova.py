@@ -544,6 +544,68 @@ with sync_playwright() as p:
         pg.wait_for_selector("#foglio h2 >> text=Scollega la banca")
         conferma(pg)
         pg.wait_for_selector("text=Nessuna banca collegata")
+
+        # ── Notifiche: le scritture condivise di prima sono state segnalate alla funzione `avvisa` ──
+        step[0] = "notifiche, segnalazioni"
+        avvisi = pg.evaluate("JSON.parse(sessionStorage.getItem('finto.avvisi') || '[]')")
+        print("AVVISI:", json.dumps(avvisi))
+        tipi = {(a.get("coll"), a.get("evento")) for a in avvisi}
+        assert ("expenses", "nuovo") in tipi, f"spesa condivisa segnalata: {tipi}"
+        assert any(c == "shopping_items" for c, _ in tipi), f"lista segnalata: {tipi}"
+        assert not any(c in ("journal_entries", "proposals", "manual_entries", "notes") for c, _ in tipi), f"niente avvisi per il resto: {tipi}"
+        # La lista manda una chiamata sola per più voci aggiunte di seguito.
+        n_lista = sum(1 for a in avvisi if a.get("coll") == "shopping_items")
+        pg.evaluate("sessionStorage.removeItem('finto.avvisi')")
+        pg.click(".schede a[href='#/lista']")
+        pg.click("button.fab")
+        pg.fill("#foglio input[aria-label='Aggiungi alla lista']", "zucchine, basilico, ceci")
+        pg.keyboard.press("Enter")
+        pg.wait_for_timeout(2200)
+        avvisi = pg.evaluate("JSON.parse(sessionStorage.getItem('finto.avvisi') || '[]')")
+        assert len(avvisi) == 1 and avvisi[0]["coll"] == "shopping_items", f"una chiamata per tre voci: {avvisi}"
+        voce = pg.evaluate("(() => { const s = JSON.parse(sessionStorage.getItem('finto.firestore')); const m = new Map(s.store.find(([c]) => c === 'shopping_items')[1]); return m.get(%s); })()" % json.dumps(avvisi[0]["id"]))
+        assert voce["addedBy"] == "uid-test" and voce["text"].lower() == "ceci", f"l'ultima voce, con chi l'ha aggiunta: {voce}"
+        pg.click("#foglio button[aria-label='Indietro']")
+        pg.wait_for_selector("#foglio", state="hidden")
+
+        # ── Notifiche: pagina dal menu, attivazione in basso a destra, categorie, prova ──
+        step[0] = "notifiche, pagina"
+        # Chromium senza finestra nega sempre le notifiche: il permesso del browser si simula
+        # (prima «default», poi «granted» alla richiesta, che deve partire dal tocco su Attiva).
+        pg.evaluate("""() => {
+          window.__permesso = 'default';
+          Object.defineProperty(Notification, 'permission', { configurable: true, get: () => window.__permesso });
+          Notification.requestPermission = async () => (window.__permesso = 'granted');
+        }""")
+        menu(pg, "Notifiche")
+        pg.wait_for_selector("text=Spente su questo telefono")
+        attiva = pg.locator("button.fab[aria-label='Attiva le notifiche']")
+        pg.wait_for_timeout(500)  # fine del passaggio dal menu
+        shot(pg, "16a-notifiche-spente")
+        box = attiva.bounding_box()
+        assert box["x"] + box["width"] > 390 - 30 and box["y"] > 844 - 200, f"Attiva nella zona del pollice destro: {box}"
+        attiva.click()
+        pg.wait_for_selector("text=Attive su questo telefono.")
+        assert attiva.is_hidden(), "attive: niente pulsante Attiva"
+        pg.wait_for_selector(".riga >> text=questo telefono")
+        utente = pg.evaluate("(() => { const s = JSON.parse(sessionStorage.getItem('finto.firestore')); return new Map(s.store.find(([c]) => c === 'users')[1]).get('uid-test'); })()")
+        disp = list((utente.get("dispositivi") or {}).values())
+        assert len(disp) == 1 and disp[0]["token"] == "token-finto", f"token salvato: {utente.get('dispositivi')}"
+        assert pg.locator(".spunta.on").count() == 4, "quattro categorie, accese all'inizio"
+        pg.click(".riga:has-text('Lista della spesa')")
+        pg.wait_for_selector(".riga:has-text('Lista della spesa') .spunta:not(.on)")
+        assert pg.locator(".spunta.on").count() == 3
+        utente = pg.evaluate("(() => { const s = JSON.parse(sessionStorage.getItem('finto.firestore')); return new Map(s.store.find(([c]) => c === 'users')[1]).get('uid-test'); })()")
+        assert utente["notifiche"] == {"lista": False}, f"preferenza salvata: {utente.get('notifiche')}"
+        pg.wait_for_timeout(2700)  # il toast di attivazione se ne va
+        shot(pg, "16-notifiche")
+        pg.click("button.pillola >> text=Manda una prova")
+        pg.wait_for_selector("text=Prova inviata")
+        pg.click("button.pillola >> text=Spegni qui")
+        pg.wait_for_selector("text=Spente su questo telefono")
+        utente = pg.evaluate("(() => { const s = JSON.parse(sessionStorage.getItem('finto.firestore')); return new Map(s.store.find(([c]) => c === 'users')[1]).get('uid-test'); })()")
+        assert not utente.get("dispositivi"), f"telefono tolto: {utente.get('dispositivi')}"
+        assert attiva.is_visible(), "spente: torna Attiva"
         print("FLUSSO COMPLETO")
     except Exception as e:
         shot(pg, "errore")

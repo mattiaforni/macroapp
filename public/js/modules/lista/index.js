@@ -95,9 +95,9 @@ export function aggiungiVoci(raw, items = []) {
     const { text, detail } = parseVoce(p);
     const esistente = items.find((i) => norm(i.text) === norm(text));
     if (esistente) {
-      update(COLL, esistente.id, { done: false, addedAt: new Date(), ...(detail ? { detail } : {}) });
+      update(COLL, esistente.id, { done: false, addedAt: new Date(), addedBy: session.user.uid, ...(detail ? { detail } : {}) });
     } else {
-      create(COLL, { text, detail, done: false, addedAt: new Date(), count: 0 }, VIS.SHARED);
+      create(COLL, { text, detail, done: false, addedAt: new Date(), addedBy: session.user.uid, count: 0 }, VIS.SHARED);
     }
     nuove++;
   }
@@ -187,7 +187,7 @@ function apriMiServe(getItems) {
       mostra.length ? el("div.tessere", {}, ...mostra.map((it) => tessera(it, {
         verde: true,
         onTap: () => {
-          update(COLL, it.id, { done: false, addedAt: new Date() });
+          update(COLL, it.id, { done: false, addedAt: new Date(), addedBy: session.user.uid });
           aggiunte.append(el("span.pillola.on", {}, icon("spunta"), it.text));
           input.value = ""; input.focus();
           setTimeout(disegna, 60);
@@ -229,7 +229,7 @@ export function mount(container) {
   }
 
   function rimetti(it) {
-    update(COLL, it.id, { done: false, addedAt: new Date() });
+    update(COLL, it.id, { done: false, addedAt: new Date(), addedBy: session.user.uid });
   }
 
   function render() {

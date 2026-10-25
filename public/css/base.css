@@ -237,6 +237,8 @@ a.pillola { text-decoration: none; }
 }
 .spunta svg { width: 16px; height: 16px; }
 .riga.fatta .spunta { background: var(--verde); border-color: var(--verde); color: #fff; }
+/* Spunta usata come interruttore (es. categorie delle notifiche): accesa = colore dell'accento. */
+.spunta.on { background: var(--accento); border-color: var(--accento); color: var(--su-accento); }
 
 /* Data a colonna, come in Splitwise: mese sopra, giorno sotto. */
 .data-col { width: 34px; flex: none; text-align: center; line-height: 1.1; color: var(--inchiostro-2); }

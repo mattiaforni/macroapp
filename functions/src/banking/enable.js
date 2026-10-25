@@ -408,11 +408,18 @@ export async function syncConnection(db, ref, c, defaults, { psu = {} } = {}) {
   }
 }
 
-/** Sincronizzazione di tutti i collegamenti attivi (syncBank, ogni mattina). Salta quelli da rinnovare. */
+/**
+ * Sincronizzazione di tutti i collegamenti attivi (syncBank, ogni mattina). Salta quelli da rinnovare.
+ * Ritorna com'è andata per ciascuno ({ uid, created, interrotto }), per le notifiche.
+ */
 export async function syncAllConnections(db, defaults) {
   const conns = await db.collection("bank_connections").where("active", "==", true).get();
+  const esiti = [];
   for (const doc of conns.docs) {
     if (doc.data().needsRenewal) continue;
-    try { await syncConnection(db, doc.ref, doc.data(), defaults); } catch (e) { /* già registrato nel documento */ }
+    const uid = doc.data().ownerUid || doc.id;
+    try { esiti.push({ uid, created: await syncConnection(db, doc.ref, doc.data(), defaults) }); }
+    catch (e) { esiti.push({ uid, created: 0, interrotto: sessioneChiusa(e) }); } // l'errore è già nel documento
   }
+  return esiti;
 }

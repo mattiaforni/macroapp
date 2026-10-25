@@ -35,6 +35,7 @@ Scelte: nessun framework né bundler (coerente con i progetti precedenti, deploy
 - `contatti` (callable): Google Contatti. `avvio` → pagina di Google (OAuth con codice, `access_type=offline`);
   `collega` → scambia il codice, conserva il refresh token in `google_tokens/{uid}`; `token` → permesso di un'ora
   per la People API, che l'app usa direttamente; `scollega` → revoca e cancella.
+- `avvisa` (callable): notifiche push (Firebase Cloud Messaging), vedi «Notifiche» sotto.
 - `syncBank` (schedulata, 07:15 Europe/Rome): per ogni `bank_connections` attiva scarica i movimenti contabilizzati degli ultimi 7 giorni e crea una proposta di spesa **personale** per ogni uscita (la spesa confermata nasce condivisa). Deduplica con id deterministico della proposta (`eb_<entry_reference>`).
 - Segreti in Secret Manager, mai nel repository.
 
@@ -82,3 +83,23 @@ Flusso di collegamento:
 3. Spese: inserimento manuale — *fatto (base)*; collegamento bancario — *codice fatto, da provare con l'app registrata in produzione*
 4. Task — *base minima, da estendere se serve*
 5. Identità visiva — *da definire*
+
+## Notifiche
+
+Notifiche push con Firebase Cloud Messaging, senza chiave VAPID propria (quella predefinita dell'SDK).
+- **Telefoni**: dalla pagina Notifiche (menu → Account) un telefono chiede il permesso, prende il token con
+  `getToken` sul service worker dell'app (`sw.js`) e lo scrive in `users/{uid}.dispositivi.<id>`. All'avvio il
+  token si riconferma (`aggiornaAllAvvio`). Su iPhone funziona solo dall'app aggiunta alla schermata Home.
+- **Quando**: `core/db.js` segnala alla funzione `avvisa` le scritture condivise che possono interessare l'altra
+  persona: creazione di spese, task e voci della lista; task segnato fatto; voce rimessa in lista. La lista
+  aspetta 1,5 s e manda una chiamata sola per più voci di seguito. Il server rilegge il documento e decide:
+  solo documenti `shared` della casa di chi chiama, niente spese ricorrenti, mai a chi ha fatto la cosa.
+  Si è scelta la chiamata dall'app invece dei trigger di Firestore per non introdurre Eventarc (e i permessi
+  IAM che il deploy dovrebbe concedere): il prezzo è che una scrittura fatta senza rete avvisa solo se l'app
+  è ancora aperta quando la scrittura arriva al server.
+- **Cosa**: messaggio di soli dati `{ titolo, testo, url, tag }`, disegnato da `sw.js`; il tocco apre la pagina
+  (`url`). Stesso `tag` = la notifica si sostituisce: la lista ha un tag solo e riassume le cose aggiunte dalla
+  stessa persona nell'ultima mezz'ora ancora da comprare.
+- **Banca**: dopo `syncBank`, a chi possiede il collegamento: spese nuove da confermare, o consenso chiuso.
+- **Preferenze**: `users/{uid}.notifiche.<spese|task|lista|banca>`, per persona. Prova senza rete:
+  `node functions/strumenti/prova-avvisi.mjs`.

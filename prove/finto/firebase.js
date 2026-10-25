@@ -19,6 +19,7 @@ function notify() {
 }
 export const serverTimestamp = () => new Date();
 export const arrayUnion = (...v) => ({ __arrayUnion: v });
+export const deleteField = () => ({ __delete: true });
 export class Timestamp {}
 
 export function initializeApp() { return {}; }
@@ -50,8 +51,24 @@ function contatti(data) {
   throw errore("azione");
 }
 
+// Messaging finto: un token fisso, sempre supportato.
+export function getMessaging() { return {}; }
+export async function isSupported() { return true; }
+export async function getToken() { return "token-finto"; }
+export async function deleteToken() { return true; }
+
+// Funzione `avvisa` finta: tiene l'elenco delle chiamate (sessionStorage «finto.avvisi»), che la prova controlla.
+function avvisaFinto(data = {}) {
+  let elenco = [];
+  try { elenco = JSON.parse(sessionStorage.getItem("finto.avvisi") || "[]"); } catch (e) {}
+  elenco.push(data);
+  try { sessionStorage.setItem("finto.avvisi", JSON.stringify(elenco)); } catch (e) {}
+  return { inviati: data.prova ? 1 : 0 };
+}
+
 export function httpsCallable(_f, name) {
   if (name === "bank") return bankFinto;
+  if (name === "avvisa") return async (data) => ({ data: avvisaFinto(data) });
   return async (data) => {
     if (name === "contatti") return { data: contatti(data) };
     if (name !== "analyzeEntry") return { data: {} };
@@ -92,7 +109,12 @@ export async function setDoc(ref, data) { coll(ref.coll).set(ref.id, { ...data }
 export async function updateDoc(ref, data) {
   const d = coll(ref.coll).get(ref.id) || {};
   for (const [k, v] of Object.entries(data)) {
-    if (k.includes(".")) { const [a, b] = k.split("."); d[a] = { ...(d[a] || {}), [b]: v }; continue; }
+    if (k.includes(".")) {
+      const [a, b] = k.split(".");
+      d[a] = { ...(d[a] || {}), [b]: v };
+      if (v && v.__delete) delete d[a][b];
+      continue;
+    }
     if (v && v.__arrayUnion) d[k] = [...new Set([...(d[k] || []), ...v.__arrayUnion])];
     else d[k] = v;
   }

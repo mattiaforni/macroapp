@@ -16,8 +16,18 @@ import {
 } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js";
 import { db } from "./firebase.js";
 import { session } from "./auth.js";
+import { segnala } from "./notifiche.js";
 
 export const VIS = { SHARED: "shared", PRIVATE: "private" };
+
+// Notifiche: scritture condivise che l'altra persona può voler sapere. Qui si fa solo una prima
+// scelta; cosa dire, a chi e se dirlo lo decide la funzione `avvisa` rileggendo il documento.
+const AVVISI_NUOVI = new Set(["expenses", "tasks", "shopping_items"]);
+function eventoModifica(coll, data) {
+  if (coll === "tasks" && data.done === true) return "fatto";
+  if (coll === "shopping_items" && data.done === false && data.addedAt) return "aggiunto"; // rimessa in lista, non «Annulla»
+  return null;
+}
 
 function base(visibility) {
   return {
@@ -38,6 +48,7 @@ export function create(coll, data, visibility = VIS.SHARED) {
   const ref = doc(collection(db, coll));
   const saved = setDoc(ref, { ...base(visibility), ...data });
   saved.catch((e) => console.error(`create(${coll})`, e));
+  if (visibility === VIS.SHARED && AVVISI_NUOVI.has(coll)) saved.then(() => segnala(coll, ref.id, "nuovo"), () => {});
   return { id: ref.id, saved };
 }
 
@@ -51,7 +62,9 @@ export async function createWithId(coll, id, data, visibility = VIS.SHARED) {
 }
 
 export function update(coll, id, data) {
+  const evento = eventoModifica(coll, data);
   return updateDoc(doc(db, coll, id), { ...data, updatedAt: serverTimestamp() })
+    .then(() => { if (evento) segnala(coll, id, evento); })
     .catch((e) => console.error(`update(${coll})`, e));
 }
 

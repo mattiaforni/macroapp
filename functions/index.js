@@ -2,7 +2,8 @@
 // Segreti (Secret Manager): firebase functions:secrets:set ANTHROPIC_API_KEY, GEMINI_API_KEY, ENABLE_BANKING_APP_ID, ENABLE_BANKING_PRIVATE_KEY
 // GOOGLE_OAUTH_CLIENT ({"id","secret"} del client web dell'accesso con Google) lo scrive il deploy.
 //
-// Funzioni: analyzeEntry (agente del diario), bank (collegamento e lettura della banca), syncBank (lettura quotidiana).
+// Funzioni: analyzeEntry (agente del diario), bank (collegamento e lettura della banca), contatti (Google Contatti),
+// avvisa (notifiche push sulle cose condivise), syncBank (lettura quotidiana).
 // All'avvio del container si caricano solo le dichiarazioni delle funzioni.
 // firebase-admin, l'agente e il client bancario vengono importati alla prima richiesta (import dinamico):
 // avvio più rapido e nessun lavoro a livello di modulo che possa bloccare il container.
@@ -245,6 +246,26 @@ export const contatti = onCall(
 );
 
 /**
+ * Notifiche push. L'app la chiama dopo una scrittura condivisa ({ coll, id, evento }) o per una
+ * prova ({ prova: true }); il server rilegge il documento e avvisa gli altri membri della casa,
+ * secondo le loro preferenze. Ritorna { inviati }. Vedi src/avvisi.js.
+ */
+export const avvisa = onCall(
+  { timeoutSeconds: 30 },
+  async (req) => {
+    if (!req.auth) throw new HttpsError("unauthenticated", "Accesso richiesto");
+    try {
+      const db = await getDb();
+      const { avvisaDaApp } = await import("./src/avvisi.js");
+      return await avvisaDaApp(db, req.auth.uid, req.data || {});
+    } catch (err) {
+      console.error("avvisa", err.code || "", String(err.message).slice(0, 200));
+      throw new HttpsError("internal", `Notifica non inviata (${String(err.message).slice(0, 160)})`);
+    }
+  },
+);
+
+/**
  * Sincronizzazione bancaria giornaliera: per ogni collegamento attivo scarica i movimenti
  * e crea proposte di spesa. Resta inattiva finché non esistono documenti in bank_connections.
  */
@@ -253,9 +274,12 @@ export const syncBank = onSchedule(
   async () => {
     const db = await getDb();
     const { syncAllConnections } = await import("./src/banking/enable.js");
-    await syncAllConnections(db, {
+    const esiti = await syncAllConnections(db, {
       appId: ENABLE_BANKING_APP_ID.value(),
       privateKey: ENABLE_BANKING_PRIVATE_KEY.value(),
     });
+    // Notifiche: spese nuove da confermare, o consenso chiuso dalla banca.
+    const { avvisaBanca } = await import("./src/avvisi.js");
+    await avvisaBanca(db, esiti);
   },
 );

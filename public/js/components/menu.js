@@ -19,6 +19,7 @@ const GRUPPI = [
     { icona: "banca", testo: "Banca", vai: ["banca"] },
   ]],
   ["Account", [
+    { icona: "campana", testo: "Notifiche", vai: ["notifiche"] },
     { icona: "impostazioni", testo: "Casa, tema e account", vai: ["impostazioni"] },
   ]],
 ];

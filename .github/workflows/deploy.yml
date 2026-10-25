@@ -65,6 +65,13 @@ jobs:
             echo "$S aggiornato"
           fi
 
+      # Notifiche push: Firebase Cloud Messaging (invio dalle functions) e registrazione dei telefoni
+      # (getToken nell'app). Di solito sono già attive nei progetti Firebase; ripeterlo è innocuo.
+      - name: Notifiche (API di Cloud Messaging)
+        run: |
+          gcloud services enable fcm.googleapis.com fcmregistrations.googleapis.com --project macroapp-b9bd0 --quiet \
+            || echo "::warning title=Notifiche::API di Cloud Messaging non attivate dal deploy: vanno attivate dalla console"
+
       - name: Numero di versione nell'app
         run: echo "export const VERSION = \"${GITHUB_SHA::7}\";" > public/js/version.js
 
@@ -86,7 +93,7 @@ jobs:
       # creazione e una volta non c'era: senza, l'app vede «internal». Ripeterlo è innocuo.
       - name: Funzioni chiamate dall'app invocabili
         run: |
-          for S in analyzeentry bank contatti; do
+          for S in analyzeentry bank contatti avvisa; do
             gcloud run services add-iam-policy-binding "$S" --region europe-west1 --project macroapp-b9bd0 \
               --member=allUsers --role=roles/run.invoker --quiet > /dev/null
           done
