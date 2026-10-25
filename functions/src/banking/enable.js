@@ -21,7 +21,9 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { createSign, randomBytes } from "node:crypto";
 
 const API = "https://api.enablebanking.com";
-const GIORNI_LETTURA = 7;          // quanti giorni indietro si leggono i movimenti
+const GIORNI_LETTURA = 7;          // quanti giorni indietro si leggono i movimenti (data di contabilizzazione)
+const GIORNI_LETTURA_CARTE = 14;   // le carte di credito contabilizzano più tardi
+const GIORNI_ABBINAMENTO = 5;      // distanza massima tra l'addebito sul conto e il pagamento sulla carta
 const GIORNI_CONSENSO_MAX = 180;   // massimo della PSD2 dal 2023; vale il minimo con maximum_consent_validity della banca
 
 function b64url(buf) {
@@ -174,52 +176,148 @@ async function movimenti(jwt, accountUid, dateFrom) {
   return out;
 }
 
+// ───────────── Quali uscite sono spese ─────────────
+
+const TIPI_CONTO = { CACC: "Conto corrente", CARD: "Carta", SVGS: "Conto deposito", LOAN: "Finanziamento", TRAN: "Conto", CASH: "Conto", OTHR: "Altro conto" };
+/** Nome leggibile di un conto: con alcune banche (Intesa) name è l'intestatario, uguale per tutti. */
+export const etichettaConto = (k) => k.product || k.details || TIPI_CONTO[k.type] || k.name || "Conto";
+export const eCarta = (k) => k.type === "CARD";
+
+const importoDi = (tx) => Math.abs(parseFloat(tx.transaction_amount?.amount || "0")) || 0;
+/** Giorno della spesa (acquisto) e giorno di contabilizzazione, "AAAA-MM-GG". */
+const giornoSpesa = (tx) => tx.transaction_date || tx.booking_date || tx.value_date || null;
+const giornoConto = (tx) => tx.booking_date || tx.value_date || tx.transaction_date || null;
+const testoDi = (tx) => [...(tx.remittance_information || []), tx.creditor?.name, tx.note, tx.bank_transaction_code?.description]
+  .filter(Boolean).join(" ").replace(/\s+/g, " ");
+const giorniTra = (a, b) => (a && b ? Math.abs(new Date(a) - new Date(b)) / 86400e3 : Infinity);
+const isoGiorno = (d) => d.toISOString().slice(0, 10);
+
+// Addebito del saldo della carta sul conto. Parole tipiche: il testo esatto di Intesa non è pubblicato,
+// quindi è solo il secondo criterio dopo l'abbinamento degli importi; gli scarti restano visibili nella
+// pagina Banca per controllarli coi movimenti veri. «Pagamento POS … carta 1234» (bancomat) non corrisponde.
+export const SALDO_CARTA = /carta\s+(di\s+)?credito|credit\s*card|\b(saldo|estratto\s+conto|e\/c)\b.{0,30}\bcart[ae]\b|\bcart[ae]\b.{0,30}\b(saldo|estratto\s+conto|e\/c)\b/i;
+
+/** L'IBAN del beneficiario è quello di un conto letto (confronto con la maschera: prime due e ultime quattro). */
+function stessoIban(iban, k) {
+  const m = k.ibanMask || "";
+  const x = String(iban || "").replace(/\s/g, "").toUpperCase();
+  return !!m && !!x && x.startsWith(m.slice(0, 2)) && x.endsWith(m.slice(-4));
+}
+
 /**
- * Legge i movimenti recenti di un collegamento e crea una proposta di spesa per ogni addebito
- * contabilizzato non ancora visto. Le proposte sono personali: i movimenti del conto li vede solo
- * chi lo possiede; la spesa, se confermata, nasce condivisa (APPLICA.expense in proposals.js).
+ * Decide quali uscite diventano proposte di spesa e quali si scartano, con il motivo.
+ * movimentiPerConto: [{ conto, transazioni }]. Ritorna { proposte: [{ conto, tx }], scartati: [{ conto, tx, motivo }] }.
+ *
+ * Si considerano le uscite contabilizzate degli ultimi GIORNI_LETTURA giorni (GIORNI_LETTURA_CARTE per le
+ * carte). Con una carta di credito tra i conti letti, le spese sono i suoi acquisti, uno per uno, e
+ * l'addebito mensile della carta sul conto si scarta:
+ *   1. se sulla carta c'è un'entrata dello stesso importo entro GIORNI_ABBINAMENTO giorni (il pagamento del saldo);
+ *   2. altrimenti se il testo dell'uscita nomina la carta di credito o il saldo (SALDO_CARTA).
+ * Senza carte lette l'addebito resta: è l'unica traccia di quelle spese.
+ * Si scarta anche un trasferimento verso un altro dei conti letti (IBAN del beneficiario).
+ */
+export function classifica(movimentiPerConto, { oggi = new Date() } = {}) {
+  const conti = movimentiPerConto.map((m) => m.conto);
+  const conCarte = conti.some(eCarta);
+  const pagamentiCarta = movimentiPerConto.filter((m) => eCarta(m.conto))
+    .flatMap((m) => m.transazioni.filter((t) => t.credit_debit_indicator === "CRDT"))
+    .map((t) => ({ importo: importoDi(t), giorno: giornoConto(t), usato: false }));
+  const out = { proposte: [], scartati: [] };
+  for (const { conto, transazioni } of movimentiPerConto) {
+    const da = isoGiorno(new Date(oggi - (eCarta(conto) ? GIORNI_LETTURA_CARTE : GIORNI_LETTURA) * 86400e3));
+    for (const tx of transazioni) {
+      if (tx.credit_debit_indicator !== "DBIT") continue;          // solo uscite
+      if (tx.status && tx.status !== "BOOK") continue;             // non ancora contabilizzato: può cambiare riferimento
+      if (!importoDi(tx)) continue;
+      const g = giornoConto(tx);
+      if (g && g < da) continue;                                   // letto solo per gli abbinamenti
+      let motivo = null;
+      if (!eCarta(conto)) {
+        const verso = tx.creditor_account?.iban;
+        if (verso && conti.some((k) => k !== conto && stessoIban(verso, k))) {
+          motivo = "Giroconto tra i tuoi conti";
+        } else if (conCarte) {
+          const pag = pagamentiCarta.find((p) => !p.usato && Math.abs(p.importo - importoDi(tx)) < 0.005 && giorniTra(p.giorno, g) <= GIORNI_ABBINAMENTO);
+          if (pag) { pag.usato = true; motivo = "Saldo della carta, importo abbinato"; }
+          else if (SALDO_CARTA.test(testoDi(tx))) motivo = "Saldo della carta, dal testo";
+        }
+      }
+      if (motivo) out.scartati.push({ conto, tx, motivo });
+      else out.proposte.push({ conto, tx });
+    }
+  }
+  return out;
+}
+
+/**
+ * Legge i movimenti recenti di un collegamento e crea una proposta di spesa per ogni uscita
+ * contabilizzata non ancora vista che sia una spesa (vedi classifica). Le proposte sono personali: i
+ * movimenti del conto li vede solo chi lo possiede; la spesa, se confermata, nasce condivisa
+ * (APPLICA.expense in proposals.js). Gli scarti finiscono in `scartati` (gli ultimi 12), e una proposta
+ * ancora in attesa per un movimento scartato passa a `discarded`.
  * Ritorna il numero di proposte create. L'errore, se c'è, lo scrive nel documento e lo rilancia.
  */
 export async function syncConnection(db, ref, c, defaults) {
   try {
     const jwt = makeJwt({ appId: c.appId || defaults.appId, privateKey: c.privateKey || defaults.privateKey });
-    const since = new Date(Date.now() - GIORNI_LETTURA * 86400e3).toISOString().slice(0, 10);
-    let created = 0;
+    const oggi = new Date();
     const conti = c.accounts?.length ? c.accounts : (c.accountIds || []).map((uid) => ({ uid, name: "" }));
+    const letti = [];
     for (const conto of conti) {
-      for (const tx of await movimenti(jwt, conto.uid, since)) {
-        if (tx.credit_debit_indicator !== "DBIT") continue;        // solo uscite
-        if (tx.status && tx.status !== "BOOK") continue;           // non ancora contabilizzato: può cambiare riferimento
-        const key = txKey(tx);
-        const propRef = db.collection("proposals").doc(key);       // id deterministico = deduplica
-        if ((await propRef.get()).exists) continue;
-        const amount = Math.abs(parseFloat(tx.transaction_amount?.amount || "0"));
-        if (!amount) continue;
-        const desc = descrizioneDi(tx);
-        const giorno = tx.booking_date || tx.value_date || tx.transaction_date;
-        const date = giorno ? Timestamp.fromDate(new Date(giorno)) : FieldValue.serverTimestamp();
-        await propRef.set({
-          ownerUid: c.ownerUid,
-          householdId: c.householdId,
-          visibility: "private",
-          kind: "expense",
-          source: "bank",
-          status: "pending",
-          target: "expenses",
-          payload: {
-            amount, description: desc, paidBy: c.ownerUid, split: "equal", date, category: "",
-            source: "bank", bankTxId: key, account: conto.name || "", merchantCategory: tx.merchant_category_code || "",
-          },
-          summary: `${desc} · ${amount.toFixed(2).replace(".", ",")} €`,
-          explain: "Movimento bancario",
-          createdAt: FieldValue.serverTimestamp(),
-          updatedAt: FieldValue.serverTimestamp(),
-        });
-        created++;
+      const giorni = (eCarta(conto) ? GIORNI_LETTURA_CARTE : GIORNI_LETTURA) + GIORNI_ABBINAMENTO;
+      letti.push({ conto, transazioni: await movimenti(jwt, conto.uid, isoGiorno(new Date(oggi - giorni * 86400e3))) });
+    }
+    const { proposte, scartati } = classifica(letti, { oggi });
+
+    let created = 0;
+    for (const { conto, tx } of proposte) {
+      const key = txKey(tx);
+      const propRef = db.collection("proposals").doc(key);       // id deterministico = deduplica
+      if ((await propRef.get()).exists) continue;
+      const amount = importoDi(tx);
+      const desc = descrizioneDi(tx);
+      const giorno = giornoSpesa(tx);
+      const date = giorno ? Timestamp.fromDate(new Date(giorno)) : FieldValue.serverTimestamp();
+      await propRef.set({
+        ownerUid: c.ownerUid,
+        householdId: c.householdId,
+        visibility: "private",
+        kind: "expense",
+        source: "bank",
+        status: "pending",
+        target: "expenses",
+        payload: {
+          amount, description: desc, paidBy: c.ownerUid, split: "equal", date, category: "",
+          source: "bank", bankTxId: key, account: etichettaConto(conto), merchantCategory: tx.merchant_category_code || "",
+        },
+        summary: `${desc} · ${amount.toFixed(2).replace(".", ",")} €`,
+        explain: "Movimento bancario",
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      created++;
+    }
+
+    const nuoviScarti = [];
+    for (const { conto, tx, motivo } of scartati) {
+      const key = txKey(tx);
+      nuoviScarti.push({ key, giorno: giornoSpesa(tx), descrizione: descrizioneDi(tx), importo: importoDi(tx), conto: etichettaConto(conto), motivo });
+      // Proposta nata prima che lo scarto fosse riconoscibile (es. pagamento sulla carta arrivato dopo).
+      const propRef = db.collection("proposals").doc(key);
+      const p = await propRef.get();
+      if (p.exists && p.data().status === "pending" && p.data().source === "bank") {
+        await propRef.update({ status: "discarded", explain: motivo, updatedAt: FieldValue.serverTimestamp() });
       }
     }
+    const aggiornamento = {};
+    if (nuoviScarti.length) {
+      const visti = new Set(nuoviScarti.map((x) => x.key));
+      aggiornamento.scartati = [...nuoviScarti, ...(c.scartati || []).filter((x) => !visti.has(x.key))]
+        .sort((a, b) => String(b.giorno).localeCompare(String(a.giorno))).slice(0, 12);
+    }
+
     // lastSyncAt è l'ultima lettura riuscita; i tentativi falliti vanno in lastAttemptAt.
-    await ref.update({ lastSyncAt: FieldValue.serverTimestamp(), lastAttemptAt: FieldValue.serverTimestamp(), lastSyncCreated: created, lastError: null });
+    await ref.update({ ...aggiornamento, lastSyncAt: FieldValue.serverTimestamp(), lastAttemptAt: FieldValue.serverTimestamp(), lastSyncCreated: created, lastError: null });
     return created;
   } catch (err) {
     console.error("syncBank", ref.id, err.message);

@@ -91,6 +91,7 @@ per le funzioni elencate nell'ultimo passo di `deploy.yml`: una nuova funzione o
 npm install --prefix prove        # una volta: font per le schermate
 python3 prove/costruisci.py       # copia public/ con Firebase finto in memoria
 python3 prove/prova.py            # flusso completo in Chromium, schermate in prove/_schermate
+node functions/strumenti/prova-banca.mjs   # quali movimenti bancari diventano proposte (servono le dipendenze di functions)
 ```
 Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggiorna `prove/finto/firebase.js`.
 
@@ -115,9 +116,14 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
       sessione si è chiusa nella notte con `EXPIRED_SESSION` (consenso dichiarato fino a gennaio): ora è uno
       stato gestito (`needsRenewal`, pagina «Collegamento interrotto» con «Rinnova il consenso» in basso a
       destra, `syncBank` lo salta, `sessionStatus` da `GET /sessions/{id}` per capire chi l'ha chiusa).
-      Causa probabile: un consenso nuovo alla stessa banca (anche dal Control Panel) invalida il precedente.
-      Da decidere con Mattia: escludere le carte dalla lettura (carta di credito = acquisto + addebito
-      mensile sul conto, due proposte per la stessa spesa).
+      Causa non accertata: Mattia ha riprovato a collegare, ma la sessione era già chiusa; la prossima
+      volta `sessionStatus` dirà se è EXPIRED o REVOKED.
+- [x] **Carta di credito** (25/10, scelta di Mattia): si leggono gli acquisti della carta uno per uno e si
+      scarta il suo addebito mensile sul conto (importo abbinato a un'entrata sulla carta, altrimenti
+      testo); giroconti tra conti letti scartati; scarti visibili nella pagina Banca. Regole in
+      `classifica` (enable.js), prova senza rete: `node functions/strumenti/prova-banca.mjs`.
+      Da verificare al primo estratto conto vero: che l'addebito finisca tra gli scartati e gli acquisti
+      tra le proposte (vedi docs/ARCHITETTURA.md, Banca); cosa sia il quarto rapporto senza IBAN.
 - [ ] **Banca, messa in funzione** (fatto, tenuto come promemoria per l'altra persona): app in **produzione**,
       modalità ristretta (gratuita, conti propri); «Allowed Redirect URLs» =
       `https://macroapp-b9bd0.web.app/banca`; **Link accounts** per ogni conto da leggere (senza questo

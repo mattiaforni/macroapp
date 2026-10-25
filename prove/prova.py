@@ -473,11 +473,19 @@ with sync_playwright() as p:
         pg.wait_for_timeout(300)
         shot(pg, "13-banca-collegata")
         pg.click("button.pillola >> text=Leggi ora")
-        pg.wait_for_selector("text=2 movimenti nuovi")
-        pg.wait_for_selector("text=2 proposte nuove")
+        pg.wait_for_selector("text=3 movimenti nuovi")
+        pg.wait_for_selector("text=3 proposte nuove")
+        # Il saldo della carta non diventa una proposta: compare tra gli scartati, col motivo
+        pg.wait_for_selector("text=Scartati, non sono spese")
+        pg.wait_for_selector(".riga >> text=ADDEBITO SALDO E/C CARTA 9876")
+        pg.wait_for_selector(".riga >> text=Saldo della carta, importo abbinato")
+        pg.locator("text=Scartati, non sono spese").scroll_into_view_if_needed()
+        pg.wait_for_timeout(5500)  # il toast se ne va
+        shot(pg, "13b-banca-scartati")
         pg.click("button.pillola >> text=Azioni da confermare")
         pg.wait_for_selector(".azione >> text=dalla banca")
-        assert pg.locator(".azione", has_text="dalla banca").count() == 2, "due proposte dalla banca"
+        assert pg.locator(".azione", has_text="dalla banca").count() == 3, "tre proposte dalla banca"
+        assert pg.locator(".azione", has_text="AMAZON EU").locator("text=Carta").count() == 1, "l'acquisto con la carta dice da quale conto viene"
         pg.wait_for_timeout(300)
         shot(pg, "14-banca-proposte")
         pg.locator(".azione", has_text="dalla banca").first.locator("button[aria-label='Conferma']").click()

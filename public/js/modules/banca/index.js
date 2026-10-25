@@ -7,7 +7,7 @@ import { doc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.3.0/fireb
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-functions.js";
 import { db, functions } from "../../core/firebase.js";
 import { session } from "../../core/auth.js";
-import { el, icon, toast, fab, vuoto, toDate, giornoRelativo } from "../../core/ui.js";
+import { el, icon, toast, fab, vuoto, toDate, giornoRelativo, fascia, fmtMoney, fmtDate } from "../../core/ui.js";
 import { openSheet } from "../../components/sheet.js";
 import { vaiA } from "../../core/router.js";
 
@@ -47,6 +47,18 @@ function nomeConto(a) {
 function dettaglioConto(a, nome) {
   const tipo = TIPI_CONTO[a.type];
   return [a.ibanMask || a.idMask, tipo && tipo !== nome ? tipo : "", a.currency && a.currency !== "EUR" ? a.currency : ""].filter(Boolean).join(" · ");
+}
+
+/** Uscite lette ma non proposte (saldo della carta, giroconti), col motivo: per controllare le regole. */
+function scartati(lista) {
+  if (!lista?.length) return null;
+  return el("div", {},
+    fascia("Scartati, non sono spese"),
+    ...lista.slice(0, 6).map((x) => el("div.riga", { style: "cursor:default" },
+      el("div.testo", {}, el("b", {}, x.descrizione), el("span", {}, x.motivo)),
+      el("div.importo.neutro", {}, el("b", {}, fmtMoney(x.importo)), el("small", {}, fmtDate(x.giorno))),
+    )),
+  );
 }
 
 /** La banca ha chiuso il consenso prima della scadenza (vedi sessioneChiusa in enable.js). */
@@ -198,7 +210,7 @@ export function mount(container) {
       ),
       el("div.blocco", {},
         el("h3", {}, "Movimenti"),
-        el("p", {}, "Letti ogni mattina alle 7:15: ogni uscita diventa una proposta di spesa, che vedi solo tu."),
+        el("p", {}, "Letti ogni mattina alle 7:15: ogni uscita diventa una proposta di spesa, che vedi solo tu. Della carta di credito si leggono gli acquisti uno per uno; il suo addebito mensile sul conto si scarta."),
         el("p.meta", {}, fermo
           ? "Lettura sospesa: riprende dopo il rinnovo."
           : ultima
@@ -209,6 +221,7 @@ export function mount(container) {
           fermo ? null : leggi,
           el("button.pillola", { type: "button", onclick: () => vaiA("proposte") }, icon("scintilla"), "Azioni da confermare"),
         ),
+        scartati(c.scartati),
       ),
       el("div.blocco", {},
         el("h3", {}, "Consenso"),
