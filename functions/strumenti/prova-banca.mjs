@@ -54,6 +54,13 @@ assert.equal(rk.conto, "Carta");
 assert.equal(rk.letti, 5);
 assert.equal(rk.stati["DBIT PDNG"], 1);
 assert.equal(rk.ultimo, g(1));
+const esito = (uid, id) => riepilogo.find((r) => r.uid === uid).ultimi.find((m) => m.key === `eb_${id}`).esito;
+assert.equal(esito("k1", "k3"), "In attesa di contabilizzazione");
+assert.equal(esito("k1", "k4"), "Entrata: non è una spesa");
+assert.equal(esito("k1", "k1"), "Proposta");
+assert.equal(esito("c1", "a6"), "Contabilizzato prima del periodo letto");
+assert.equal(esito("c1", "a1"), "Scartato: Saldo della carta, importo abbinato");
+assert.equal(classifica([{ conto: carta, transazioni: [tx("z1", "DBIT", 9, g(1), "X", { status: "OTHR" })] }], { oggi }).riepilogo[0].ultimi[0].esito, "Stato OTHR: non considerato");
 
 // Senza la carta tra i conti letti l'addebito mensile resta: è l'unica traccia di quelle spese.
 const senzaCarta = classifica([movimenti[0]], { oggi });
@@ -97,6 +104,9 @@ assert.deepEqual(doc.scartati.map((x) => x.key), ["eb_a1", "eb_a3", "eb_a4", "eb
 assert.equal(doc.lastSyncCreated, 4);
 assert.deepEqual(doc.lettura.inAttesa.map((x) => [x.descrizione, x.importo, x.conto, x.stato]), [["IN ATTESA", 30, "Carta", "PDNG"]], "in attesa nel documento");
 assert.equal(doc.lettura.conti.length, 3);
+const ultimiCarta = doc.lettura.conti.find((r) => r.uid === "k1").ultimi;
+assert.equal(ultimiCarta.find((m) => m.key === "eb_k1").esito, "Proposta nuova");
+assert.ok(ultimiCarta.every((m) => m.esito), "ogni movimento ha un esito");
 
 console.log("prova-banca: tutto a posto");
 console.log(scartati.map((x) => `  scartato ${x.tx.remittance_information[0]} · ${x.motivo}`).join("\n"));

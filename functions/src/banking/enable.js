@@ -225,22 +225,24 @@ export function classifica(movimentiPerConto, { oggi = new Date() } = {}) {
   const out = { proposte: [], scartati: [], inAttesa: [], riepilogo: [] };
   for (const { conto, transazioni } of movimentiPerConto) {
     const da = isoGiorno(new Date(oggi - (eCarta(conto) ? GIORNI_LETTURA_CARTE : GIORNI_LETTURA) * 86400e3));
-    // Cosa ha dato la banca per questo conto, per capire che cosa manca (nessun testo dei movimenti).
-    const stati = {};
-    for (const t of transazioni) { const k = `${t.credit_debit_indicator || "?"} ${t.status || "?"}`; stati[k] = (stati[k] || 0) + 1; }
-    const giorni = transazioni.map(giornoSpesa).filter(Boolean).sort();
-    out.riepilogo.push({ uid: conto.uid, conto: etichettaConto(conto), tipo: conto.type || "", letti: transazioni.length, stati, ultimo: giorni.at(-1) || null });
+    const esiti = new Map(); // movimento → cosa ne ha fatto l'app, da mostrare nella pagina Banca
     for (const tx of transazioni) {
-      if (tx.credit_debit_indicator !== "DBIT") continue;          // solo uscite
-      if (!importoDi(tx)) continue;
+      if (tx.credit_debit_indicator !== "DBIT") {                 // solo uscite
+        esiti.set(tx, tx.credit_debit_indicator === "CRDT" ? "Entrata: non è una spesa" : `Verso sconosciuto (${tx.credit_debit_indicator || "assente"})`);
+        continue;
+      }
+      if (!importoDi(tx)) { esiti.set(tx, "Importo zero"); continue; }
       if (tx.status && tx.status !== "BOOK") {
         // Non ancora contabilizzata: può cambiare importo (preautorizzazioni) o riferimento, quindi non
         // diventa una proposta; si mostra nella pagina Banca finché la banca non la contabilizza.
-        if (["PDNG", "HOLD", "SCHD"].includes(tx.status) && (giornoSpesa(tx) || da) >= da) out.inAttesa.push({ conto, tx });
+        if (["PDNG", "HOLD", "SCHD"].includes(tx.status)) {
+          if ((giornoSpesa(tx) || da) >= da) out.inAttesa.push({ conto, tx });
+          esiti.set(tx, "In attesa di contabilizzazione");
+        } else esiti.set(tx, `Stato ${tx.status}: non considerato`);
         continue;
       }
       const g = giornoConto(tx);
-      if (g && g < da) continue;                                   // letto solo per gli abbinamenti
+      if (g && g < da) { esiti.set(tx, "Contabilizzato prima del periodo letto"); continue; } // letto solo per gli abbinamenti
       let motivo = null;
       if (!eCarta(conto)) {
         const verso = tx.creditor_account?.iban;
@@ -252,9 +254,22 @@ export function classifica(movimentiPerConto, { oggi = new Date() } = {}) {
           else if (SALDO_CARTA.test(testoDi(tx))) motivo = "Saldo della carta, dal testo";
         }
       }
-      if (motivo) out.scartati.push({ conto, tx, motivo });
-      else out.proposte.push({ conto, tx });
+      if (motivo) { out.scartati.push({ conto, tx, motivo }); esiti.set(tx, `Scartato: ${motivo}`); }
+      else { out.proposte.push({ conto, tx }); esiti.set(tx, "Proposta"); }
     }
+    // Cosa ha dato la banca per questo conto: quanti movimenti, per verso e stato, e gli ultimi con
+    // l'esito, per capire che cosa manca e perché.
+    const stati = {};
+    for (const t of transazioni) { const k = `${t.credit_debit_indicator || "?"} ${t.status || "?"}`; stati[k] = (stati[k] || 0) + 1; }
+    const recenti = [...transazioni].sort((a, b) => String(giornoSpesa(b)).localeCompare(String(giornoSpesa(a))));
+    out.riepilogo.push({
+      uid: conto.uid, conto: etichettaConto(conto), tipo: conto.type || "", letti: transazioni.length, stati,
+      ultimo: giornoSpesa(recenti[0] || {}) || null,
+      ultimi: recenti.slice(0, 12).map((tx) => ({
+        key: txKey(tx), giorno: giornoSpesa(tx), contabilizzato: tx.booking_date || null, verso: tx.credit_debit_indicator || "",
+        stato: tx.status || "", importo: importoDi(tx), descrizione: descrizioneDi(tx), esito: esiti.get(tx) || "",
+      })),
+    });
   }
   return out;
 }
@@ -280,10 +295,12 @@ export async function syncConnection(db, ref, c, defaults) {
     const { proposte, scartati, inAttesa, riepilogo } = classifica(letti, { oggi });
 
     let created = 0;
+    const giaViste = new Map(); // key → stato della proposta che c'era già
     for (const { conto, tx } of proposte) {
       const key = txKey(tx);
       const propRef = db.collection("proposals").doc(key);       // id deterministico = deduplica
-      if ((await propRef.get()).exists) continue;
+      const esistente = await propRef.get();
+      if (esistente.exists) { giaViste.set(key, esistente.data().status); continue; }
       const amount = importoDi(tx);
       const desc = descrizioneDi(tx);
       const giorno = giornoSpesa(tx);
@@ -319,9 +336,17 @@ export async function syncConnection(db, ref, c, defaults) {
         await propRef.update({ status: "discarded", explain: motivo, updatedAt: FieldValue.serverTimestamp() });
       }
     }
+    const GIA = { pending: "Già tra le azioni da confermare", accepted: "Già confermata", rejected: "Già scartata da te", discarded: "Già scartata" };
+    for (const r of riepilogo) {
+      for (const m of r.ultimi) {
+        if (m.esito !== "Proposta") continue;
+        m.esito = giaViste.has(m.key) ? (GIA[giaViste.get(m.key)] || "Già proposta") : "Proposta nuova";
+      }
+    }
     const aggiornamento = {
-      // Ultima lettura riuscita: quanti movimenti per conto e in che stato, e le uscite non ancora
-      // contabilizzate (descrizione, importo, giorno: restano in questo documento privato, non nei registri).
+      // Ultima lettura riuscita: per conto quanti movimenti, in che stato, gli ultimi con l'esito, e le
+      // uscite non ancora contabilizzate. Testi e importi restano in questo documento privato, mai nei
+      // registri (il flusso Diagnosi li pubblica, e il repository è pubblico).
       lettura: {
         conti: riepilogo,
         inAttesa: inAttesa

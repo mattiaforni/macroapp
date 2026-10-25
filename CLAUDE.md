@@ -129,6 +129,9 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
       riusciti; ipotesi: movimenti non ancora contabilizzati, che non diventano proposte. Ora la pagina
       Banca li mostra («In attesa di contabilizzazione») e dice per conto quanti movimenti ha dato la banca
       (`lettura` in bank_connections). Se la carta risulta con 0 movimenti letti, Intesa non li espone.
+      Poi: la carta dava 29 movimenti, ma gli acquisti del giorno prima né proposti né in attesa. Toccando
+      un conto ora si vedono gli ultimi 12 movimenti con l'esito di ciascuno (`lettura.conti[].ultimi`):
+      da lì si capisce se Intesa li segna come entrate, con uno stato diverso o con una data fuori periodo.
       Repository pubblico: niente testi dei movimenti nei registri (Diagnosi li pubblica).
 - [ ] **Banca, messa in funzione** (fatto, tenuto come promemoria per l'altra persona): app in **produzione**,
       modalità ristretta (gratuita, conti propri); «Allowed Redirect URLs» =

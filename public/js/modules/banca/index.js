@@ -53,6 +53,42 @@ function dettaglioConto(a, nome, stat) {
     letti, attesa ? `${attesa} in attesa` : ""].filter(Boolean).join(" · ");
 }
 
+// Verso e stato dei movimenti come li dà Enable Banking → parole.
+// [singolare, plurale]
+const VERSI = { DBIT: ["uscita", "uscite"], CRDT: ["entrata", "entrate"] };
+const STATI = { BOOK: ["contabilizzata", "contabilizzate"], PDNG: ["in attesa", "in attesa"], HOLD: ["bloccata", "bloccate"],
+  SCHD: ["programmata", "programmate"], INFO: ["informativa", "informative"], OTHR: ["con altro stato", "con altro stato"], "?": ["senza stato", "senza stato"] };
+function riassuntoStati(stati = {}) {
+  return Object.entries(stati).sort((a, b) => b[1] - a[1])
+    .map(([k, n]) => {
+      const [v, st] = k.split(" ");
+      const i = n === 1 ? 0 : 1;
+      return `${n} ${VERSI[v]?.[i] || `movimenti ${v}`} ${STATI[st]?.[i] || `in stato ${st}`}`;
+    })
+    .join(", ");
+}
+
+/** Foglio con gli ultimi movimenti letti di un conto e cosa ne ha fatto l'app: per capire cosa manca. */
+function apriDettaglioConto(nome, stat) {
+  const ultimi = stat?.ultimi || [];
+  openSheet({
+    title: nome,
+    body: [
+      el("p.muted.small", { style: "margin-top:8px" }, stat
+        ? `Nell'ultima lettura la banca ha dato ${stat.letti} ${stat.letti === 1 ? "movimento" : "movimenti"}${stat.letti ? `: ${riassuntoStati(stat.stati)}` : ""}.`
+        : "Nessuna lettura ancora."),
+      ultimi.length ? fascia("Gli ultimi, con l'esito") : stat ? el("p.meta", { style: "margin-top:12px" }, "Tocca «Leggi ora» per vedere qui i singoli movimenti.") : null,
+      ...ultimi.map((m) => {
+        const contab = m.contabilizzato && m.contabilizzato !== m.giorno ? ` · contabilizzato ${fmtDate(m.contabilizzato)}` : "";
+        return el("div.riga", { style: "cursor:default" },
+          el("div.testo", {}, el("b", {}, m.descrizione), el("span", { style: "white-space:normal" }, `${m.esito}${contab}`)),
+          el(`div.importo.${m.verso === "CRDT" ? "credito" : "neutro"}`, {}, el("b", {}, `${m.verso === "CRDT" ? "+" : ""}${fmtMoney(m.importo)}`), el("small", {}, fmtDate(m.giorno))),
+        );
+      }),
+    ],
+  });
+}
+
 /** Uscite non ancora contabilizzate (es. acquisti con la carta di ieri): si vedono, ma non sono proposte. */
 function inAttesa(lista) {
   if (!lista?.length) return null;
@@ -219,9 +255,11 @@ export function mount(container) {
         fermo ? el("p", { style: "color:var(--frutto)" }, `Collegamento interrotto${chiusoIl ? ` ${quando(chiusoIl)}` : ""}: la banca ha chiuso il consenso prima della scadenza. La lettura è ferma finché non lo rinnovi.`) : null,
         el("div", {}, ...conti.map((a) => {
           const nome = nomeConto(a);
-          return el("div.riga", { style: "cursor:default" },
+          const stat = (c.lettura?.conti || []).find((r) => r.uid === a.uid);
+          return el("div.riga", { onclick: () => apriDettaglioConto(nome, stat) },
             el("div.pallino", {}, icon("banca")),
-            el("div.testo", {}, el("b", {}, nome), el("span", {}, dettaglioConto(a, nome, (c.lettura?.conti || []).find((r) => r.uid === a.uid)) || "\u00a0")),
+            el("div.testo", {}, el("b", {}, nome), el("span", {}, dettaglioConto(a, nome, stat) || "\u00a0")),
+            icon("freccia", "freccia-riga"),
           );
         })),
       ),

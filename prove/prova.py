@@ -491,6 +491,16 @@ with sync_playwright() as p:
         pg.wait_for_selector("text=In attesa di contabilizzazione")
         pg.wait_for_selector(".riga >> text=RISTORANTE DA PINO")
         pg.wait_for_selector("text=6 movimenti letti · 2 in attesa")
+        # Toccando il conto: gli ultimi movimenti letti con l'esito di ciascuno
+        pg.click(".riga >> text=Carta")
+        pg.wait_for_selector("#foglio h2 >> text=Carta")
+        pg.wait_for_selector("#foglio >> text=la banca ha dato 6 movimenti: 3 uscite contabilizzate, 2 uscite in attesa, 1 entrata contabilizzata")
+        pg.wait_for_selector("#foglio .riga >> text=Proposta nuova")
+        pg.wait_for_selector("#foglio .riga >> text=Entrata: non è una spesa")
+        pg.wait_for_timeout(400)
+        shot(pg, "13c-banca-conto")
+        pg.click("#foglio button[aria-label='Indietro']")
+        pg.wait_for_selector("#foglio", state="hidden")
         assert pg.locator(".azione", has_text="RISTORANTE DA PINO").count() == 0
         # Il saldo della carta non diventa una proposta: compare tra gli scartati, col motivo
         pg.wait_for_selector("text=Scartati, non sono spese")

@@ -157,7 +157,12 @@ async function bankFinto(data = {}) {
     const lettura = {
       conti: [
         { uid: "conto-1", conto: "Conto corrente", tipo: "CACC", letti: 14, stati: { "DBIT BOOK": 9, "CRDT BOOK": 5 }, ultimo: ieri.toISOString().slice(0, 10) },
-        { uid: "carta-1", conto: "Carta", tipo: "CARD", letti: 6, stati: { "DBIT BOOK": 3, "DBIT PDNG": 2, "CRDT BOOK": 1 }, ultimo: ieri.toISOString().slice(0, 10) },
+        { uid: "carta-1", conto: "Carta", tipo: "CARD", letti: 6, stati: { "DBIT BOOK": 3, "DBIT PDNG": 2, "CRDT BOOK": 1 }, ultimo: ieri.toISOString().slice(0, 10),
+          ultimi: [
+            { key: "eb_p1", giorno: ieri.toISOString().slice(0, 10), contabilizzato: null, verso: "DBIT", stato: "PDNG", importo: 58, descrizione: "RISTORANTE DA PINO", esito: "In attesa di contabilizzazione" },
+            { key: "eb_prova_3", giorno: ieri.toISOString().slice(0, 10), contabilizzato: ieri.toISOString().slice(0, 10), verso: "DBIT", stato: "BOOK", importo: 24.99, descrizione: "AMAZON EU", esito: "Proposta nuova" },
+            { key: "eb_pag", giorno: "2026-10-20", contabilizzato: "2026-10-21", verso: "CRDT", stato: "BOOK", importo: 312.4, descrizione: "PAGAMENTO SALDO", esito: "Entrata: non è una spesa" },
+          ] },
       ],
       inAttesa: [
         { giorno: ieri.toISOString().slice(0, 10), descrizione: "RISTORANTE DA PINO", importo: 58, conto: "Carta", stato: "PDNG" },
