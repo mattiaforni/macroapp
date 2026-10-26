@@ -32,7 +32,8 @@ gli spostamenti, il fisico; in un altro progetto gli argomenti equivalenti. Se l
 temi, usa quelli; altrimenti scegli nomi brevi e tienili identici da una volta all'altra, perché l'app li usa
 per collegare le note ai temi. Le rubriche che le istruzioni chiedono per il riepilogo (cosa ho imparato,
 cosa funziona, su cosa lavorare…) NON sono sezioni della sintesi: vivono dentro ogni tema, come elenchi.
-Al massimo una sezione trasversale ("Nodi ricorrenti" o "Da provare"). Dentro una sezione, come prima
+Oltre ai temi, al massimo due sezioni trasversali, es. "Nodi ricorrenti" (ciò che torna
+lezione dopo lezione) e "Da provare". Dentro una sezione, come prima
 riga facoltativa, "Stato: " e due-quattro parole sul punto in cui si è (es. "migliora", "da affrontare",
 "tornato indietro"). Tieni ciò che resta valido, aggiorna ciò che cambia, togli ciò che è superato, non
 ripetere le date né raccontare le lezioni una per una. Lunghezza: quanto serve per orientarsi, non di più.
