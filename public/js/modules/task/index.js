@@ -2,8 +2,9 @@
 // prese dalla rubrica del manuale. Personali per impostazione predefinita; un progetto
 // condiviso rende condivisi i suoi task.
 //
-// projects { name, archived, istruzioni }
+// projects { name, archived, istruzioni, sintesi, sintesiAt }
 //          istruzioni = per l'agente del diario: con queste, ogni nota del progetto riceve un riepilogo
+//          sintesi = lo stato del progetto, proposto dall'agente e confermato (components/sintesi.js)
 // tasks    { text, done, doneAt, due ("AAAA-MM-GG" o null), projectId, peopleIds[], people, note }
 //          people = nomi delle persone in chiaro, copia di peopleIds per chi non vede la voce in rubrica
 import { el, icon, toast, fascia, vuoto, sceltaVisibilita, fmtDate, isoGiorno, toDate, fab } from "../../core/ui.js";
@@ -12,6 +13,7 @@ import { openSheet, campo } from "../../components/sheet.js";
 import { sceltaPersone } from "../../components/persone.js";
 import { nomiTask, suRubrica, personaDaId, modiDiContatto, canaleDa } from "../../core/rubrica.js";
 import { vaiA } from "../../core/router.js";
+import { bloccoSintesi } from "../../components/sintesi.js";
 
 export const id = "task";
 export const title = "Task";
@@ -161,7 +163,7 @@ export function apriProgetto(esistente = null, onCreato) {
       el("div.campo", {}, el("label", {}, "Visibilità"), sceltaVisibilita(visibility, (v) => { visibility = v; })),
       el("p.meta", { style: "margin:-8px 0 18px" }, "Un progetto condiviso è visibile ai due membri della casa, insieme ai suoi task. Le note del diario restano solo tue."),
       campo("Istruzioni per il diario", istruzioni),
-      el("p.meta", { style: "margin-top:-10px" }, "Facoltative. Con le istruzioni, l'AI scrive un riepilogo di ogni nota del diario di questo progetto, tenendo conto delle note precedenti."),
+      el("p.meta", { style: "margin-top:-10px" }, "Facoltative. Con le istruzioni, l'AI scrive un riepilogo di ogni nota del diario di questo progetto e ti propone la sintesi aggiornata del progetto."),
       esistente ? el("div.foglio__piede", {},
         el("button.btn", { onclick: () => { update(PROJ, esistente.id, { archived: true }); sheet.close(); toast("Progetto archiviato"); } }, "Archivia"),
         el("button.btn.btn--pericolo", { onclick: async () => {
@@ -245,6 +247,7 @@ export function mount(container) {
         // Le note del diario di questo progetto: si aprono nel Diario, già filtrato.
         el("button.btn.btn--piatto", { onclick: () => { try { localStorage.setItem(CHIAVE_DIARIO, p.id); } catch (e) {} vaiA("diario"); } }, icon("diario"), "Diario"),
         p.visibility === VIS.SHARED ? el("span.etichetta.etichetta--accento", { style: "align-self:center" }, "condiviso") : null));
+      nodi.push(bloccoSintesi(p, render));
     }
 
     if (!aperti.length) {

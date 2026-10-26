@@ -47,8 +47,10 @@ cancella quello della rubrica); il nome resta quello della rubrica. Senza colleg
 `description, amount, paidBy, split, every: "week"|"month"|"year", nextDate, active` — all'avvio l'app genera le spese scadute con id `rec_<id>_<AAAA-MM-GG>` (nessun doppione se lo fanno entrambi i telefoni).
 
 ## `projects`
-`name, archived, istruzioni?` — personali o condivisi. `istruzioni`: per l'agente del diario; con queste,
-ogni nota del progetto riceve un riepilogo (vedi `journal_entries`).
+`name, archived, istruzioni?, sintesi?, sintesiAt?` — personali o condivisi. `istruzioni`: per l'agente del
+diario; con queste, ogni nota del progetto riceve un riepilogo (vedi `journal_entries`) e l'agente propone la
+`sintesi` aggiornata (proposta `project_summary`: lo stato del progetto, ciò che è emerso finora, per temi).
+La sintesi si legge e si corregge dal Diario e dai Task filtrati sul progetto (`components/sintesi.js`).
 
 ## `expense_rules`
 `match: { description_contains }, set: { visibility, category, split, autoAccept }` — da definire con i dati reali.
@@ -65,11 +67,13 @@ stesso progetto; l'utente lo corregge dal foglio della nota. Indici: `ownerUid+c
 `ownerUid+projectId+createdAt` (Diario filtrato e note precedenti per l'agente).
 
 ## `notes`
-`text`, e per le bozze `type: "draft", channel, to, subject` — appunti e bozze salvate dalle azioni proposte.
+`text`, e per le bozze `type: "draft", channel, to, subject` — bozze salvate dalle azioni proposte (e gli appunti
+confermati prima del 26/10, quando l'agente proponeva ancora il tipo `note`). Nessuna pagina li mostra.
 
 ## `proposals`
-`kind: "task"|"shopping_item"|"expense"|"manual_entry"|"note"|"draft", source: "agent"|"bank"|"share", status: "pending"|"accepted"|"rejected"|"discarded", payload, summary, decidedBy, sourceEntryId`
+`kind: "task"|"shopping_item"|"expense"|"manual_entry"|"draft"|"project_summary"|"note", source: "agent"|"bank"|"share", status: "pending"|"accepted"|"rejected"|"discarded", payload, summary, decidedBy, sourceEntryId`
 Cosa fa la conferma, tipo per tipo: `APPLICA` in `public/js/components/proposals.js`. Le proposte dell'agente compaiono sotto la nota del diario da cui nascono; rianalizzare una nota sostituisce quelle ancora in attesa.
+`project_summary` (payload `projectId, projectName, sintesi, prima`): confermata scrive `projects.sintesi`; una nuova proposta di sintesi dello stesso progetto sostituisce quella in attesa. `note` non viene più proposto.
 
 ## `bank_connections/{uid}`
 `ownerUid, householdId, active, aspsp: { name, country }, sessionId, accounts: [{ uid, name, product, details, currency, type, ibanMask, idMask }], accountIds, consentExpiresAt, linkedAt, unlinkedAt, lastSyncAt, lastAttemptAt, lastSyncCreated, lastError, needsRenewal, sessionStatus, sessionEndedAt?, scartati: [{ key, giorno, descrizione, importo, conto, motivo }], lettura: { conti: [{ uid, conto, tipo, letti, stati, ultimo, ultimi: [{ key, giorno, contabilizzato, verso, stato, importo, descrizione, esito }] }], inAttesa: [{ giorno, descrizione, importo, conto, stato }] }, pending?: { state, authorizationId, aspsp, startedAt }`

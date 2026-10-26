@@ -38,10 +38,11 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 | `core/contatti-google.js` | Google Contatti: collegamento una tantum (ritorno su `/google-contatti`), permesso di un'ora dal server, elenco in memoria per `cercaContatti` / `contattoUnico` |
 | `components/sheet.js` | foglio a tutta altezza: in alto indietro e titolo; in basso barra con le azioni secondarie a sinistra (anche un `div.foglio__piede` nel corpo finisce lì) e il pulsante principale a destra (`confirmLabel`, «Salva»), sopra la tastiera; il tasto indietro lo chiude. Classi di movimento `foglio--entra` / `--sostituisce` / `--chiude`; `close({ subito: true })` senza dissolvenza |
 | `components/menu.js` | menu a sinistra a gruppi (Casa, Collegamenti, Account), come in Leghe Fantacalcio |
-| `components/proposals.js` | azioni proposte: `APPLICA` per tipo, `renderAzione` |
+| `components/proposals.js` | azioni proposte: `APPLICA` per tipo, `renderAzione` (la sintesi proposta si legge ripiegata) |
+| `components/sintesi.js` | sintesi di un progetto (`projects.sintesi`): blocco ripiegabile in alto nel Diario e nei Task filtrati sul progetto, foglio per correggerla |
 | `components/persone.js` | scelta delle persone di un task: suggerimenti dalla rubrica e da Google Contatti, persone nuove; una voce della rubrica non collegata e il contatto Google con lo stesso nome compaiono una volta sola, e sceglierla la collega |
 | `modules/*/index.js` | un modulo = `{ id, title, nav, icon, mount(container) → smonta }`, in `modules/registry.js` |
-| `modules/diario/index.js` | note (anche dettate o condivise), filtro per progetto (`macroapp.diario.progetto`, lo scrive anche la pagina Task), riepilogo dell'AI con la trascrizione ripiegata, proposte sotto la nota |
+| `modules/diario/index.js` | note (anche dettate o condivise), filtro per progetto (`macroapp.diario.progetto`, lo scrive anche la pagina Task), riepilogo dell'AI con la trascrizione ripiegata, proposte sotto la nota, sintesi del progetto in alto |
 | `modules/lista/index.js` | tessere a 4 colonne; quelle da comprare divise per reparto (`REPARTI` = ordine del giro, `REGOLE_REPARTO` dal nome, `reparto` scelto a mano nel foglio Modifica); recenti e «Mi serve» per frequenza, senza reparti |
 | `modules/task/index.js` | task per progetti; `apriProgetto` (nome, visibilità, istruzioni per il diario); dal progetto il pulsante Diario |
 | `modules/notifiche/index.js` | pagina Notifiche (menu → Account): stato di questo telefono, «Attiva» in basso a destra, categorie, telefoni attivi, prova |
@@ -74,6 +75,7 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 5. Niente entra nei moduli dall'AI senza conferma: l'agente scrive solo `proposals`. Unica eccezione,
    decisa da Mattia il 23/10: il riepilogo di una nota di un progetto con istruzioni
    (`journal_entries.riepilogo`), che è testo della nota stessa e si corregge dal suo foglio.
+   La sintesi del progetto invece passa dalla conferma (scelta di Mattia, 26/10).
 6. Mai nel repo chiavi o dati personali.
 
 ## Diagnosi delle functions
@@ -100,7 +102,7 @@ node functions/strumenti/prova-avvisi.mjs  # cosa dicono le notifiche e a chi
 ```
 Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggiorna `prove/finto/firebase.js`.
 
-## Stato (25 ottobre 2026) e prossimi passi
+## Stato (26 ottobre 2026) e prossimi passi
 
 - [x] Pubblicazione automatica, accesso Google (anche da app installata), service worker
 - [x] Lista (stile Bring), Spese (stile Splitwise, ricorrenti, pareggio), Diario con agente, Task per
@@ -166,9 +168,18 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
       note), riepilogo al posto del testo e «Trascrizione» ripiegata; nel progetto dei Task il pulsante
       Diario apre il Diario filtrato. Le note restano private anche in un progetto condiviso.
       Prova con l'API vera: Diagnosi con `provaai` e `istruzioni` compilato.
+- [x] **Sintesi del progetto** (26/10, scelta di Mattia). Tre livelli: la nota (log), il riepilogo della nota
+      (la lezione ripulita), la sintesi del progetto (lo stato: cosa è emerso finora, per temi, secondo le
+      istruzioni). L'agente propone la sintesi aggiornata dopo ogni nota di un progetto con istruzioni
+      (`project_summary`, sotto la nota, ripiegata); la spunta scrive `projects.sintesi`; si corregge a mano
+      dal blocco in alto nel Diario e nei Task del progetto. La prima sintesi si costruisce da tutte le note del
+      progetto (fino a 30); poi il contesto è sintesi + ultime 8 note. Il tipo di proposta «Appunto» (`note`)
+      non viene più proposto: le informazioni vanno nella sintesi, nel manuale («info») o restano nella nota.
+      Mattia prova per qualche settimana in parallelo il progetto Claude e questo diario.
 - [ ] Diario per progetto, seguiti: importare lo storico delle lezioni dalle chat del progetto Claude
       (esportazione dei dati di claude.ai); registrare nel diario con `transcribe()` (Gemini: un parlato
-      di pochi minuti passa da onCall, senza Storage); valutare con le note vere quante precedenti servono.
+      di pochi minuti passa da onCall, senza Storage); valutare con le note vere quante precedenti servono
+      e se la sintesi proposta rispetta le correzioni fatte a mano.
 - [x] **Lista per reparti** (25/10, scelta di Mattia tra tre anteprime: etichette con filetto). Reparti e
       ordine del giro sono un'ipotesi: da adattare quando Mattia dice in che ordine li trova nel suo
       supermercato. Corretta l'icona dei surgelati («gelat» prendeva anche «surgelate»).
@@ -179,8 +190,8 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
       Notifiche). Da verificare dal telefono: attivazione (menu → Notifiche → Attiva → «Manda una prova») su
       entrambi i telefoni; se `getToken` fallisce, controllare che la chiave API web non escluda le API
       «Firebase Installations» e «FCM Registration».
-- [ ] Pagina per appunti e bozze: le proposte `note` e `draft` confermate finiscono in `notes`,
-      che oggi nessuna pagina mostra
+- [ ] Bozze confermate: finiscono in `notes`, che nessuna pagina mostra (si usano dalla proposta: Copia, Apri
+      nella mail/WhatsApp). Decidere se serve una pagina o se togliere la conferma.
 - [ ] Riga di contesto per pagina, stile Leghe Fantacalcio (Task «2 in ritardo · 3 oggi»,
       Spese «Ottobre · X ti deve…»)
 - [ ] Identità visiva definitiva: da decidere con Mattia

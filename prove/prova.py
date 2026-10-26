@@ -407,6 +407,31 @@ with sync_playwright() as p:
         # Il task proposto finisce nel progetto Tennis
         pg.locator(".azione", has_text="Comprare le corde nuove").locator("button[aria-label='Conferma']").click()
         pg.wait_for_timeout(300)
+        # La sintesi del progetto è una proposta: si legge ripiegata, poi la spunta la mette nel progetto
+        assert pg.locator(".sintesi").count() == 0, "senza sintesi confermata non c'è il blocco"
+        assert "l'AI la propone" in pg.locator(".sintesi-vuota").inner_text()
+        prop = pg.locator(".azione", has_text="Prima sintesi di Tennis")
+        assert prop.locator(".sintesi-proposta").is_hidden(), "la sintesi proposta parte ripiegata"
+        prop.locator("button.nota__apri").click()
+        pg.wait_for_selector(".sintesi-proposta h4 >> text=Rovescio a due mani")
+        pg.wait_for_timeout(150)
+        shot(pg, "17b-tennis-sintesi-proposta")
+        prop.locator("button[aria-label='Conferma']").click()
+        pg.wait_for_selector(".sintesi .sintesi__testo h4 >> text=Dritto")
+        assert pg.locator(".azione", has_text="Prima sintesi di Tennis").count() == 0, "la proposta confermata sparisce"
+        assert pg.locator(".sintesi-vuota").count() == 0
+        pg.click(".sintesi button.nota__apri")
+        pg.wait_for_selector(".sintesi--aperta")
+        pg.wait_for_timeout(150)
+        shot(pg, "17c-tennis-sintesi")
+        # Si corregge a mano dal suo foglio
+        pg.click(".sintesi__testo")
+        pg.wait_for_selector("#foglio >> text=Sintesi di Tennis")
+        t = pg.locator("#foglio textarea")
+        assert "Piedi più larghi" in t.input_value()
+        t.fill(t.input_value() + "\n- Volée: racchetta davanti")
+        conferma(pg)
+        pg.wait_for_selector(".sintesi li >> text=Volée: racchetta davanti")
         # In «Tutte» la nota porta il nome del progetto; le altre note restano
         pg.click("button.pillola >> text=Tutte")
         pg.wait_for_selector(".nota .progetto >> text=Tennis")
@@ -417,6 +442,8 @@ with sync_playwright() as p:
         pg.click("button.pillola >> text=Tennis")
         pg.wait_for_selector(".riga >> text=Comprare le corde nuove")
         assert pg.locator("button.pillola", has_text="Tennis").count() == 1, "il progetto non deve duplicarsi"
+        # La stessa sintesi si legge anche dai Task del progetto
+        pg.wait_for_selector(".sintesi li >> text=Volée: racchetta davanti")
         # Il filtro del Diario torna su Tutte per il resto della prova
         pg.click(".schede a[href='#/diario']")
         pg.click("button.pillola >> text=Tutte")

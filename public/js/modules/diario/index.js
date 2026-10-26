@@ -6,17 +6,20 @@
 // Una nota può appartenere a un progetto (es. Tennis). Se il progetto ha istruzioni per il diario,
 // l'agente scrive anche un riepilogo della nota tenendo conto delle precedenti: compare al posto
 // del testo, che resta ripiegato sotto («Trascrizione»). Il riepilogo è testo correggibile, non
-// un'azione: è l'unica cosa che l'agente scrive senza la spunta.
+// un'azione: è l'unica cosa che l'agente scrive senza la spunta. La sintesi del progetto (lo stato,
+// ciò che è emerso finora) arriva invece come proposta sotto la nota e, confermata, si legge in
+// alto nel Diario filtrato sul progetto (components/sintesi.js).
 //
 // journal_entries { text, projectId, riepilogo, riepilogoAt, analyzed, analyzedAt, analysisError }
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-functions.js";
 import { functions } from "../../core/firebase.js";
-import { el, icon, toast, fascia, vuoto, toDate, giornoRelativo, fab } from "../../core/ui.js";
+import { el, icon, toast, fascia, vuoto, toDate, giornoRelativo, fab, testoRicco } from "../../core/ui.js";
 import { openSheet } from "../../components/sheet.js";
 import { create, update, remove, watchMine, watchVisible, readVisible, VIS, where } from "../../core/db.js";
 import { watchPending, renderAzione } from "../../components/proposals.js";
 import { aggiungiVoci } from "../lista/index.js";
 import { apriTask, apriProgetto } from "../task/index.js";
+import { bloccoSintesi } from "../../components/sintesi.js";
 import { apriSpesa } from "../spese/index.js";
 import { apriVoceManuale } from "../manuale/index.js";
 
@@ -34,31 +37,6 @@ const analyzeEntry = httpsCallable(functions, "analyzeEntry", { timeout: 130000 
 
 const leggi = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch (e) { return d; } };
 const scrivi = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
-
-/** Grassetti (**così**) dentro una riga, come nodi di testo: niente HTML dal modello. */
-function inline(riga) {
-  return riga.split(/\*\*(.+?)\*\*/g).map((pezzo, i) => (i % 2 ? el("b", {}, pezzo) : pezzo));
-}
-
-/** Il riepilogo è testo semplice: «## » titoli, «- » elenchi, **grassetto**. */
-function testoRicco(testo) {
-  const out = [];
-  let elenco = null;
-  for (const grezza of String(testo || "").split("\n")) {
-    const riga = grezza.trim();
-    const voce = riga.match(/^[-*•]\s+(.*)$/);
-    if (voce) {
-      if (!elenco) { elenco = el("ul"); out.push(elenco); }
-      elenco.append(el("li", {}, ...inline(voce[1])));
-      continue;
-    }
-    elenco = null;
-    if (!riga) continue;
-    const titolo = riga.match(/^#{1,4}\s+(.*)$/);
-    out.push(titolo ? el("h4", {}, titolo[1].replace(/\*\*/g, "")) : el("p", {}, ...inline(riga)));
-  }
-  return out;
-}
 
 /** Pillole per scegliere il progetto di una nota. Ritorna { node, valore() }. */
 function sceltaProgetto(progetti, iniziale) {
@@ -261,6 +239,7 @@ export function mount(container) {
       nodi.push(el("div.segmenti", { style: "padding-top:4px;align-items:center" },
         el("button.btn.btn--piatto", { onclick: () => apriProgetto(prog) }, icon("matita"), "Modifica progetto"),
         el("span.meta", {}, prog.istruzioni ? "Con riepilogo" : "Senza istruzioni, senza riepilogo")));
+      nodi.push(bloccoSintesi(prog, render));
     }
     if (!note.length) {
       nodi.push(prog

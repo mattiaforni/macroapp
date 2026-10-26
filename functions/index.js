@@ -38,7 +38,7 @@ function getDb() {
 
 /**
  * Agente: legge una nota del diario (solo del chiamante) e scrive proposte nella coda.
- * Ritorna { proposals: n }.
+ * Ritorna { proposals: n, riepilogo, sintesi }.
  */
 /** Errore del provider AI → [codice, messaggio leggibile]. */
 function spiegaErrore(msg = "") {
@@ -69,12 +69,12 @@ export const analyzeEntry = onCall(
       const entry = { id: snap.id, ...snap.data() };
       passo("nota letta");
       const { analyzeJournalEntry } = await import("./src/agent.js");
-      const { azioni, riepilogo } = await analyzeJournalEntry(db, entry, {
+      const { azioni, riepilogo, sintesi } = await analyzeJournalEntry(db, entry, {
         uid: req.auth.uid,
         passo,
         keys: { anthropic: ANTHROPIC_API_KEY.value().trim(), gemini: GEMINI_API_KEY.value().trim() },
       });
-      return { proposals: azioni, riepilogo };
+      return { proposals: azioni, riepilogo, sintesi };
     } catch (err) {
       if (err instanceof HttpsError) throw err;
       console.error("analyzeEntry", err);

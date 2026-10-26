@@ -112,6 +112,31 @@ export function vuoto(titolo, testo) {
   return el("div.vuoto", {}, el("b", {}, titolo), testo ? el("p", {}, testo) : null);
 }
 
+/** Grassetti (**così**) dentro una riga, come nodi di testo: niente HTML dal modello. */
+function inline(riga) {
+  return riga.split(/\*\*(.+?)\*\*/g).map((pezzo, i) => (i % 2 ? el("b", {}, pezzo) : pezzo));
+}
+
+/** Testo semplice scritto dall'AI (riepiloghi, sintesi): «## » titoli, «- » elenchi, **grassetto**. */
+export function testoRicco(testo) {
+  const out = [];
+  let elenco = null;
+  for (const grezza of String(testo || "").split("\n")) {
+    const riga = grezza.trim();
+    const voce = riga.match(/^[-*•]\s+(.*)$/);
+    if (voce) {
+      if (!elenco) { elenco = el("ul"); out.push(elenco); }
+      elenco.append(el("li", {}, ...inline(voce[1])));
+      continue;
+    }
+    elenco = null;
+    if (!riga) continue;
+    const titolo = riga.match(/^#{1,4}\s+(.*)$/);
+    out.push(titolo ? el("h4", {}, titolo[1].replace(/\*\*/g, "")) : el("p", {}, ...inline(riga)));
+  }
+  return out;
+}
+
 // ───────────── Icone ─────────────
 // Disegnate a mano in un quadrato 24×24, tratto sottile; il colore viene dal contenitore.
 

@@ -30,7 +30,7 @@ Scelte: nessun framework né bundler (coerente con i progetti precedenti, deploy
 
 ## Backend (`functions/`)
 
-- `analyzeEntry` (callable): legge una nota del diario del chiamante, chiama `reason()` con uno schema JSON e scrive proposte. Non modifica mai i moduli. Se la nota è di un progetto con istruzioni, scrive anche il riepilogo nella nota (unica scrittura senza conferma: è testo della nota, correggibile), con le ultime 8 note dello stesso progetto come contesto. Ritorna `{ proposals, riepilogo }`.
+- `analyzeEntry` (callable): legge una nota del diario del chiamante, chiama `reason()` con uno schema JSON e scrive proposte. Non modifica mai i moduli. Se la nota è di un progetto con istruzioni, scrive anche il riepilogo nella nota (unica scrittura senza conferma: è testo della nota, correggibile) e propone la sintesi aggiornata del progetto (`project_summary`, da confermare; solo se cambia). Contesto: la sintesi attuale e le ultime 8 note dello stesso progetto (riepilogo se c'è, se no testo); senza sintesi, fino a 30 note, per costruire la prima. Ritorna `{ proposals, riepilogo, sintesi }`.
 - `bank` (callable, `{ azione }`): `banche` (elenco per paese), `avvia` (`POST /auth` → url del consenso, `state` salvato in `bank_connections/{uid}.pending`), `concludi` (`POST /sessions` col `code`, controlla lo `state`, chiude la sessione precedente, salva conti e scadenza), `scollega` (`DELETE /sessions/{id}`), `sincronizza` (la lettura di `syncBank`, a richiesta). Scrive solo nel documento del chiamante.
 - `contatti` (callable): Google Contatti. `avvio` → pagina di Google (OAuth con codice, `access_type=offline`);
   `collega` → scambia il codice, conserva il refresh token in `google_tokens/{uid}`; `token` → permesso di un'ora

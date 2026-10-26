@@ -479,3 +479,23 @@ a.pillola { text-decoration: none; }
 
 svg.mini { width: 13px; height: 13px; vertical-align: -2px; color: var(--inchiostro-3); }
 select.pillola { appearance: none; -webkit-appearance: none; padding-right: 14px; }
+
+/* Sintesi del progetto (components/sintesi.js): in alto nel Diario e nei Task di un progetto */
+.sintesi { padding: 10px 0 8px; border-bottom: 1px solid var(--linea); }
+.sintesi__testa { display: flex; align-items: center; justify-content: space-between; }
+.sintesi__testa small { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--accento); }
+.sintesi__testa small svg { width: 15px; height: 15px; }
+.sintesi__testo { position: relative; max-height: 7.5em; overflow: hidden; cursor: pointer; }
+.sintesi__testo::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2.2em; background: linear-gradient(to bottom, transparent, var(--carta)); }
+.sintesi--aperta .sintesi__testo { max-height: none; }
+.sintesi--aperta .sintesi__testo::after { display: none; }
+.sintesi-testo { font-size: 15px; line-height: 1.5; }
+.sintesi-testo h4 { margin: 10px 0 2px; font-size: 13px; font-weight: 600; letter-spacing: .02em; color: var(--inchiostro-2); }
+.sintesi-testo h4:first-child { margin-top: 4px; }
+.sintesi-testo p { margin: 3px 0; }
+.sintesi-testo ul { margin: 2px 0 4px; padding-left: 18px; }
+.sintesi-testo li { margin: 2px 0; }
+.sintesi-testo li::marker { color: var(--inchiostro-3); }
+.sintesi-testo b { font-weight: 600; }
+.sintesi-vuota .btn--piatto { display: inline; padding: 0; font-size: inherit; }
+.sintesi-proposta { margin-top: 4px; padding-left: 10px; border-left: 1px solid var(--linea-forte); font-size: 14px; }

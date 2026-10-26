@@ -75,14 +75,17 @@ export function httpsCallable(_f, name) {
     const hid = coll("users").get(UID)?.householdId || null;
     const base = { ownerUid: UID, householdId: hid, source: "agent", status: "pending", sourceEntryId: data.entryId, createdAt: new Date() };
     const P = coll("proposals");
-    // Nota di un progetto con istruzioni: riepilogo nella nota e una sola azione.
+    // Nota di un progetto con istruzioni: riepilogo nella nota, un'azione e la sintesi del progetto proposta.
     const nota = coll("journal_entries").get(data.entryId);
     const progetto = nota?.projectId ? coll("projects").get(nota.projectId) : null;
     if (progetto?.istruzioni) {
       nota.riepilogo = "## Cosa ho imparato\n- Dritto: **chiudere prima** la spalla\n- Rovescio a due mani: piedi più larghi\n\n## Da ricordare\n- Torna la correzione sulla spalla della settimana scorsa";
       P.set("p" + (++seq), { ...base, visibility: "private", kind: "task", summary: "Comprare le corde nuove", payload: { text: "Comprare le corde nuove", due: "", project: progetto.name, people: "" } });
+      P.set("p" + (++seq), { ...base, visibility: "private", kind: "project_summary", summary: progetto.sintesi ? `Sintesi di ${progetto.name} aggiornata` : `Prima sintesi di ${progetto.name}`,
+        payload: { projectId: nota.projectId, projectName: progetto.name, prima: !progetto.sintesi,
+          sintesi: "## Dritto\n- Chiudere la spalla **prima** del colpo: correzione che torna\n\n## Rovescio a due mani\n- Piedi più larghi\n\n## Da provare\n- Servizio con il lancio più avanti" } });
       notify();
-      return { data: { proposals: 1, riepilogo: true } };
+      return { data: { proposals: 2, riepilogo: true, sintesi: true } };
     }
     P.set("p" + (++seq), { ...base, visibility: "private", kind: "task", summary: "Preparare l'assemblea del circolo entro venerdì", payload: { text: "Preparare l'assemblea", due: "2026-10-30", project: "Circolo", people: "Marco" } });
     P.set("p" + (++seq), { ...base, visibility: "shared", kind: "shopping_item", summary: "Comprare lampadine", payload: { text: "Lampadine" } });

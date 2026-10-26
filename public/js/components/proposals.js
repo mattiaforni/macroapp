@@ -2,7 +2,8 @@
 // Nel diario compaiono sotto la nota da cui nascono.
 //
 // Documento in `proposals`:
-//   kind        "task" | "shopping_item" | "manual_entry" | "note" | "expense" | "draft"
+//   kind        "task" | "shopping_item" | "manual_entry" | "expense" | "draft" | "project_summary"
+//               ("note", l'appunto, non viene più proposto dall'agente; la conferma resta per quelle vecchie)
 //   source      "agent" | "bank" | "share"
 //   status      "pending" | "accepted" | "rejected"
 //   payload     i dati dell'azione (diversi per tipo, vedi APPLICA)
@@ -10,7 +11,7 @@
 //   sourceEntryId  la nota del diario da cui nasce (se viene dall'agente)
 //   visibility  "shared" se riguarda la casa/coppia, "private" se è solo tua
 
-import { el, icon, toast, toDate, giornoRelativo } from "../core/ui.js";
+import { el, icon, toast, toDate, giornoRelativo, testoRicco } from "../core/ui.js";
 import { create, update, watchVisible, readVisible, VIS, where } from "../core/db.js";
 import { session } from "../core/auth.js";
 import { aggiungiVoci } from "../modules/lista/index.js";
@@ -28,6 +29,7 @@ export const TIPI = {
   note: { nome: "Appunto", icona: "appunto" },
   expense: { nome: "Spesa", icona: "spese" },
   draft: { nome: "Bozza", icona: "mail" },
+  project_summary: { nome: "Sintesi del progetto", icona: "diario" },
 };
 
 /** Cosa succede quando confermi, tipo per tipo. Ritorna il messaggio di conferma. */
@@ -84,6 +86,13 @@ const APPLICA = {
     create("notes", { type: "draft", channel: x.channel || "", to: x.to || "", subject: x.subject || "", text: x.body || "" }, VIS.PRIVATE);
     return "Bozza salvata tra gli appunti";
   },
+  // La sintesi proposta sostituisce quella del progetto (si legge e si corregge dal progetto).
+  async project_summary(p) {
+    const x = p.payload || {};
+    if (!x.projectId) throw new Error("progetto mancante");
+    await update("projects", x.projectId, { sintesi: x.sintesi || "", sintesiAt: new Date() });
+    return "Sintesi aggiornata";
+  },
 };
 
 export async function accept(p) {
@@ -135,6 +144,17 @@ function bozza(x) {
   );
 }
 
+/** La sintesi proposta, ripiegata: si apre per leggerla prima di confermare. */
+function sintesiProposta(x) {
+  const corpo = el("div.sintesi-proposta.sintesi-testo", { hidden: true }, ...testoRicco(x.sintesi));
+  const apri = el("button.nota__apri", { type: "button", "aria-expanded": "false", onclick: () => {
+    corpo.hidden = !corpo.hidden;
+    apri.setAttribute("aria-expanded", corpo.hidden ? "false" : "true");
+    apri.lastChild.textContent = corpo.hidden ? "Leggi" : "Nascondi";
+  } }, icon("giu"), "Leggi");
+  return el("div", {}, apri, corpo);
+}
+
 /** Una riga d'azione: icona, tipo, descrizione, conferma/scarta. */
 export function renderAzione(p) {
   const tipo = TIPI[p.kind] || { nome: p.kind, icona: "scintilla" };
@@ -158,6 +178,7 @@ export function renderAzione(p) {
       p.summary,
       ...dettagli,
       p.kind === "draft" ? bozza(p.payload || {}) : null,
+      p.kind === "project_summary" ? sintesiProposta(p.payload || {}) : null,
     ),
     el("button.sì", { type: "button", "aria-label": "Conferma", onclick: (e) => { e.currentTarget.disabled = true; accept(p); } }, icon("spunta")),
     el("button.no", { type: "button", "aria-label": "Scarta", onclick: () => reject(p) }, icon("chiudi")),
