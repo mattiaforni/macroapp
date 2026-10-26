@@ -480,15 +480,9 @@ a.pillola { text-decoration: none; }
 svg.mini { width: 13px; height: 13px; vertical-align: -2px; color: var(--inchiostro-3); }
 select.pillola { appearance: none; -webkit-appearance: none; padding-right: 14px; }
 
-/* Sintesi del progetto (components/sintesi.js): in alto nel Diario e nei Task di un progetto */
-.sintesi { padding: 10px 0 8px; border-bottom: 1px solid var(--linea); }
-.sintesi__testa { display: flex; align-items: center; justify-content: space-between; }
-.sintesi__testa small { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--accento); }
-.sintesi__testa small svg { width: 15px; height: 15px; }
-.sintesi__testo { position: relative; max-height: 7.5em; overflow: hidden; cursor: pointer; }
-.sintesi__testo::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2.2em; background: linear-gradient(to bottom, transparent, var(--carta)); }
-.sintesi--aperta .sintesi__testo { max-height: none; }
-.sintesi--aperta .sintesi__testo::after { display: none; }
+/* Pagina del progetto (modules/progetto): riga di contesto, lezioni, temi della sintesi */
+.progetto__riga { display: flex; align-items: center; gap: 4px; padding: 10px 0 0; }
+.progetto__riga .spazio { flex: 1; }
 .sintesi-testo { font-size: 15px; line-height: 1.5; }
 .sintesi-testo h4 { margin: 10px 0 2px; font-size: 13px; font-weight: 600; letter-spacing: .02em; color: var(--inchiostro-2); }
 .sintesi-testo h4:first-child { margin-top: 4px; }
@@ -497,5 +491,29 @@ select.pillola { appearance: none; -webkit-appearance: none; padding-right: 14px
 .sintesi-testo li { margin: 2px 0; }
 .sintesi-testo li::marker { color: var(--inchiostro-3); }
 .sintesi-testo b { font-weight: 600; }
-.sintesi-vuota .btn--piatto { display: inline; padding: 0; font-size: inherit; }
 .sintesi-proposta { margin-top: 4px; padding-left: 10px; border-left: 1px solid var(--linea-forte); font-size: 14px; }
+
+.lezione { display: flex; gap: 14px; width: 100%; text-align: left; padding: 12px 0; border-bottom: 1px solid var(--linea); color: inherit; }
+.lezione__giorno { width: 40px; flex: none; text-align: center; padding-top: 2px; }
+.lezione__giorno b { display: block; font-size: 21px; line-height: 1; font-weight: 400; }
+.lezione__giorno small { display: block; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--inchiostro-3); margin-top: 3px; }
+.lezione__testo { flex: 1; min-width: 0; }
+.lezione__titolo { font-size: 16px; font-weight: 500; line-height: 1.3; }
+.lezione__anteprima { font-size: 13.5px; color: var(--inchiostro-2); margin-top: 3px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.lezione__temi { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.lezione__temi .etichetta { font-size: 11.5px; }
+.lezione__riepilogo { margin-top: 10px; }
+
+.tema { border-bottom: 1px solid var(--linea); }
+.tema__testa { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 14px 0; color: inherit; }
+.tema__testa .spazio { flex: 1; }
+.tema__testa > svg { width: 16px; height: 16px; color: var(--inchiostro-3); flex: none; transition: transform .15s; }
+.tema--aperto .tema__testa > svg { transform: rotate(180deg); }
+.tema__nome { font-size: 16.5px; font-weight: 500; }
+.tema__stato { font-size: 12px; color: var(--inchiostro-3); }
+.tema__stato--bene { color: var(--verde); }
+.tema__stato--male { color: var(--frutto); }
+.tema__corpo { padding: 0 0 10px; cursor: pointer; }
+.tema > .tema__corpo:first-child { padding-top: 12px; }
+.tema__lezioni { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 0 14px; }
+.tema__lezioni .pillola { font-size: 12px; padding: 4px 10px; }

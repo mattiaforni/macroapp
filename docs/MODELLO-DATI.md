@@ -50,7 +50,8 @@ cancella quello della rubrica); il nome resta quello della rubrica. Senza colleg
 `name, archived, istruzioni?, sintesi?, sintesiAt?` — personali o condivisi. `istruzioni`: per l'agente del
 diario; con queste, ogni nota del progetto riceve un riepilogo (vedi `journal_entries`) e l'agente propone la
 `sintesi` aggiornata (proposta `project_summary`: lo stato del progetto, ciò che è emerso finora, per temi).
-La sintesi si legge e si corregge dal Diario e dai Task filtrati sul progetto (`components/sintesi.js`).
+Convenzione del testo: una sezione «## Tema» per tema, prima riga facoltativa «Stato: …». La sintesi si legge
+per temi e si corregge dalla pagina del progetto (`modules/progetto`, `components/sintesi.js`).
 
 ## `expense_rules`
 `match: { description_contains }, set: { visibility, category, split, autoAccept }` — da definire con i dati reali.
@@ -60,10 +61,12 @@ La sintesi si legge e si corregge dal Diario e dai Task filtrati sul progetto (`
 `people` è la copia in chiaro dei nomi: serve a chi non vede la voce in rubrica (voce privata dell'altro membro) e ai task vecchi, che avevano solo il testo.
 
 ## `journal_entries`
-`text, projectId?, riepilogo?, riepilogoAt?, analyzed, analyzedAt, analysisError` — sempre `private`, solo il
+`text, projectId?, riepilogo?, titolo?, temi?: [string], riepilogoAt?, analyzed, analyzedAt, analysisError` — sempre `private`, solo il
 proprietario (anche nelle regole), anche quando il progetto è condiviso. `riepilogo` lo scrive l'agente
 (`analyzeEntry`) per le note di un progetto con `istruzioni`, tenendo conto delle 8 note precedenti dello
-stesso progetto; l'utente lo corregge dal foglio della nota. Indici: `ownerUid+createdAt` e
+stesso progetto; l'utente lo corregge dal foglio della nota. Con il riepilogo arrivano `titolo` (una riga) e
+`temi` (nomi delle sezioni della sintesi che la nota tocca: la pagina del progetto collega così le lezioni ai
+temi). Indici: `ownerUid+createdAt` e
 `ownerUid+projectId+createdAt` (Diario filtrato e note precedenti per l'agente).
 
 ## `notes`

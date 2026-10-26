@@ -27,8 +27,14 @@ sintesi: le azioni restano per le cose da fare, comprare, spendere o scrivere.
 Il progetto ha anche una "sintesi": un testo vivo che raccoglie lo stato del progetto, ciò che è emerso
 finora e va tenuto presente (non la cronaca delle singole note). Nel campo "sintesi" scrivi la sintesi
 aggiornata con la nota di oggi, nello stesso formato del riepilogo, organizzata per temi secondo le
-istruzioni. Tieni ciò che resta valido, aggiorna ciò che cambia, togli ciò che è superato, non ripetere
-le date né raccontare le lezioni una per una. Lunghezza: quanto serve per orientarsi, non di più.`);
+istruzioni: una sezione "## " per tema (es. un colpo, un argomento), con nomi brevi e stabili da una
+volta all'altra, perché l'app li usa per collegare le note ai temi. Dentro una sezione, come prima
+riga facoltativa, "Stato: " e due-quattro parole sul punto in cui si è (es. "migliora", "da affrontare",
+"tornato indietro"). Tieni ciò che resta valido, aggiorna ciò che cambia, togli ciò che è superato, non
+ripetere le date né raccontare le lezioni una per una. Lunghezza: quanto serve per orientarsi, non di più.
+
+Scrivi anche un "titolo" della nota (una riga, al massimo 60 caratteri, di cosa parla: niente data) e
+"temi": i nomi esatti delle sezioni della sintesi che la nota tocca (quelle della sintesi aggiornata).`);
     if (progetto.sintesi) {
       righe.push(`
 Sintesi attuale del progetto (l'utente può averla corretta a mano: rispettane struttura e scelte):
@@ -142,13 +148,17 @@ export const SCHEMA = {
   additionalProperties: false,
 };
 
-/** Lo schema della risposta: riepilogo e sintesi solo per le note di un progetto con istruzioni. */
+/** Lo schema della risposta: riepilogo, sintesi, titolo e temi solo per le note di un progetto con istruzioni. */
 export function schema(conRiepilogo = false) {
   if (!conRiepilogo) return SCHEMA;
   return {
     ...SCHEMA,
-    properties: { riepilogo: { type: "string" }, sintesi: { type: "string" }, ...SCHEMA.properties },
-    required: ["riepilogo", "sintesi", ...SCHEMA.required],
+    properties: {
+      riepilogo: { type: "string" }, sintesi: { type: "string" }, titolo: { type: "string" },
+      temi: { type: "array", items: { type: "string" } },
+      ...SCHEMA.properties,
+    },
+    required: ["riepilogo", "sintesi", "titolo", "temi", ...SCHEMA.required],
   };
 }
 
@@ -245,7 +255,7 @@ function visibilita(a) {
 
 /**
  * Legge la nota, scrive le proposte e, per le note di un progetto con istruzioni, il riepilogo
- * nella nota stessa (testo correggibile, non un'azione: vedi CLAUDE.md, regola 5) e la proposta
+ * (con titolo e temi) nella nota stessa (testo correggibile, non un'azione: vedi CLAUDE.md, regola 5) e la proposta
  * di sintesi aggiornata del progetto (quella sì da confermare: sostituisce `projects.sintesi`).
  * Ritorna { azioni, riepilogo, sintesi }: quante proposte, se ha scritto il riepilogo, se ha proposto la sintesi.
  */
@@ -261,6 +271,8 @@ export async function analyzeJournalEntry(db, entry, { uid, keys, provider, pass
   passo(`risposta dell'AI (${Array.isArray(out.actions) ? out.actions.length : 0} azioni)`);
   const actions = (Array.isArray(out.actions) ? out.actions : []).filter((a) => SCHEMA.properties.actions.items.properties.kind.enum.includes(a.kind));
   const riepilogo = conRiepilogo ? s(out.riepilogo) : "";
+  const titolo = conRiepilogo ? s(out.titolo).slice(0, 80) : "";
+  const temi = conRiepilogo && Array.isArray(out.temi) ? [...new Set(out.temi.map(s).filter(Boolean))].slice(0, 12) : [];
   // La sintesi si propone solo se cambia davvero rispetto a quella del progetto.
   const sintesi = conRiepilogo ? s(out.sintesi) : "";
   const nuovaSintesi = sintesi && sintesi !== progetto.sintesi ? sintesi : "";
@@ -297,7 +309,7 @@ export async function analyzeJournalEntry(db, entry, { uid, keys, provider, pass
   }
   if (riepilogo) {
     batch.update(db.collection("journal_entries").doc(entry.id), {
-      riepilogo, riepilogoAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+      riepilogo, titolo, temi, riepilogoAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
     });
   }
   if (nuovaSintesi) {

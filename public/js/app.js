@@ -75,7 +75,8 @@ function startApp() {
         closeSheet({ fromHistory: true, subito: true });
         chiudiMenu();
         const mod = modules.find((m) => m.id === id);
-        title.textContent = mod?.title || "Debiti e Doveri";
+        // Un modulo può dare un titolo che dipende da cosa mostra (la pagina Progetto: il nome del progetto).
+        title.textContent = mod?.titoloCorrente?.() || mod?.title || "Debiti e Doveri";
         renderNav(id);
         renderActions(id);
         window.scrollTo(0, 0);

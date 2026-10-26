@@ -80,10 +80,12 @@ export function httpsCallable(_f, name) {
     const progetto = nota?.projectId ? coll("projects").get(nota.projectId) : null;
     if (progetto?.istruzioni) {
       nota.riepilogo = "## Cosa ho imparato\n- Dritto: **chiudere prima** la spalla\n- Rovescio a due mani: piedi più larghi\n\n## Da ricordare\n- Torna la correzione sulla spalla della settimana scorsa";
+      nota.titolo = "Spalla chiusa sul dritto, piedi larghi sul rovescio";
+      nota.temi = ["Dritto", "Rovescio a due mani"];
       P.set("p" + (++seq), { ...base, visibility: "private", kind: "task", summary: "Comprare le corde nuove", payload: { text: "Comprare le corde nuove", due: "", project: progetto.name, people: "" } });
       P.set("p" + (++seq), { ...base, visibility: "private", kind: "project_summary", summary: progetto.sintesi ? `Sintesi di ${progetto.name} aggiornata` : `Prima sintesi di ${progetto.name}`,
         payload: { projectId: nota.projectId, projectName: progetto.name, prima: !progetto.sintesi,
-          sintesi: "## Dritto\n- Chiudere la spalla **prima** del colpo: correzione che torna\n\n## Rovescio a due mani\n- Piedi più larghi\n\n## Da provare\n- Servizio con il lancio più avanti" } });
+          sintesi: "## Dritto\nStato: migliora\n- Chiudere la spalla **prima** del colpo: correzione che torna\n\n## Rovescio a due mani\nStato: da consolidare\n- Piedi più larghi\n\n## Da provare\n- Servizio con il lancio più avanti" } });
       notify();
       return { data: { proposals: 2, riepilogo: true, sintesi: true } };
     }

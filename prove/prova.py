@@ -408,8 +408,6 @@ with sync_playwright() as p:
         pg.locator(".azione", has_text="Comprare le corde nuove").locator("button[aria-label='Conferma']").click()
         pg.wait_for_timeout(300)
         # La sintesi del progetto è una proposta: si legge ripiegata, poi la spunta la mette nel progetto
-        assert pg.locator(".sintesi").count() == 0, "senza sintesi confermata non c'è il blocco"
-        assert "l'AI la propone" in pg.locator(".sintesi-vuota").inner_text()
         prop = pg.locator(".azione", has_text="Prima sintesi di Tennis")
         assert prop.locator(".sintesi-proposta").is_hidden(), "la sintesi proposta parte ripiegata"
         prop.locator("button.nota__apri").click()
@@ -417,21 +415,61 @@ with sync_playwright() as p:
         pg.wait_for_timeout(150)
         shot(pg, "17b-tennis-sintesi-proposta")
         prop.locator("button[aria-label='Conferma']").click()
-        pg.wait_for_selector(".sintesi .sintesi__testo h4 >> text=Dritto")
+        pg.wait_for_timeout(300)
         assert pg.locator(".azione", has_text="Prima sintesi di Tennis").count() == 0, "la proposta confermata sparisce"
-        assert pg.locator(".sintesi-vuota").count() == 0
-        pg.click(".sintesi button.nota__apri")
-        pg.wait_for_selector(".sintesi--aperta")
+        # ── Pagina del progetto: Sintesi per temi, Lezioni con titolo, Da fare ──
+        step[0] = "pagina del progetto"
+        pg.click("button.btn--piatto >> text=Pagina del progetto")
+        pg.wait_for_selector("#page-title >> text=Tennis")
+        pg.wait_for_selector(".tema__nome >> text=Dritto")
+        assert pg.locator(".tema", has_text="Dritto").locator(".tema__stato--bene >> text=migliora").count() == 1, "stato del tema"
+        assert "1 lezione" in pg.locator(".tema", has_text="Dritto").inner_text(), "la nota è collegata al tema"
+        assert pg.locator(".tema", has_text="Da provare").locator(".meta").count() == 0, "tema senza lezioni"
+        pg.click(".tema__testa >> text=Dritto")
+        pg.wait_for_selector(".tema--aperto .tema__corpo li >> text=Chiudere la spalla")
+        pg.wait_for_timeout(200)
+        shot(pg, "17c-progetto-sintesi")
+        # Dal tema alla lezione: foglio di lettura con riepilogo e trascrizione ripiegata
+        pg.click(".tema--aperto .tema__lezioni button.pillola")
+        pg.wait_for_selector("#foglio >> text=Spalla chiusa sul dritto")
+        assert pg.locator("#foglio .lezione__riepilogo h4 >> text=Cosa ho imparato").count() == 1
+        assert pg.locator("#foglio .nota__testo--trascrizione").is_hidden()
+        pg.click("#foglio button.nota__apri")
+        pg.wait_for_selector("#foglio .nota__testo--trascrizione >> text=oggi il maestro")
         pg.wait_for_timeout(150)
-        shot(pg, "17c-tennis-sintesi")
-        # Si corregge a mano dal suo foglio
-        pg.click(".sintesi__testo")
+        shot(pg, "17d-progetto-lezione")
+        pg.click("#foglio .btn--conferma")  # Modifica: apre il foglio della nota
+        pg.wait_for_selector("#foglio label >> text=Riepilogo")
+        r = pg.locator("#foglio .campo textarea")
+        r.fill(r.input_value() + "\n- Servizio: lancio più avanti")
+        conferma(pg)
+        pg.wait_for_timeout(200)
+        # Vista Lezioni: giorno grande, titolo, temi
+        pg.click("button.pillola >> text=Lezioni")
+        pg.wait_for_selector(".lezione__titolo >> text=Spalla chiusa sul dritto")
+        assert pg.locator(".lezione__temi .etichetta >> text=Rovescio a due mani").count() == 1
+        assert pg.locator(".fascia").count() >= 1, "fascia del mese"
+        pg.wait_for_timeout(200)
+        shot(pg, "17e-progetto-lezioni")
+        # Vista Da fare: il task confermato è qui
+        pg.click("button.pillola >> text=Da fare")
+        pg.wait_for_selector(".riga >> text=Comprare le corde nuove")
+        # Sintesi corretta a mano dal suo foglio
+        pg.click("button.pillola >> text=Sintesi")
+        pg.click("button.btn--piatto >> text=Modifica la sintesi")
         pg.wait_for_selector("#foglio >> text=Sintesi di Tennis")
         t = pg.locator("#foglio textarea")
         assert "Piedi più larghi" in t.input_value()
-        t.fill(t.input_value() + "\n- Volée: racchetta davanti")
+        t.fill(t.input_value() + "\n\n## Volée\n- Racchetta davanti")
         conferma(pg)
-        pg.wait_for_selector(".sintesi li >> text=Volée: racchetta davanti")
+        pg.wait_for_selector(".tema__nome >> text=Volée")
+        # Dal menu si torna alla pagina; il Diario del progetto dal pulsante
+        menu(pg, "Tennis")
+        pg.wait_for_selector("#page-title >> text=Tennis")
+        pg.click("button.btn--piatto >> text=Diario")
+        pg.wait_for_selector(".schede a[aria-current='page'][href='#/diario']")
+        pg.wait_for_selector("button.pillola.on >> text=Tennis")
+        pg.wait_for_selector(".nota__riepilogo li >> text=Servizio: lancio più avanti")
         # In «Tutte» la nota porta il nome del progetto; le altre note restano
         pg.click("button.pillola >> text=Tutte")
         pg.wait_for_selector(".nota .progetto >> text=Tennis")
@@ -442,8 +480,7 @@ with sync_playwright() as p:
         pg.click("button.pillola >> text=Tennis")
         pg.wait_for_selector(".riga >> text=Comprare le corde nuove")
         assert pg.locator("button.pillola", has_text="Tennis").count() == 1, "il progetto non deve duplicarsi"
-        # La stessa sintesi si legge anche dai Task del progetto
-        pg.wait_for_selector(".sintesi li >> text=Volée: racchetta davanti")
+        assert pg.locator("button.btn--piatto", has_text="Progetto").filter(has_not_text="Modifica").count() == 1, "dai Task si va alla pagina del progetto"
         # Il filtro del Diario torna su Tutte per il resto della prova
         pg.click(".schede a[href='#/diario']")
         pg.click("button.pillola >> text=Tutte")

@@ -37,12 +37,13 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 | `core/rubrica.js` | voci del manuale in memoria, aggiornate in tempo reale: `trovaPersona`, `risolviPersone` (crea quelle che mancano, collegate a Google se il nome è univoco), `nomiTask`, `sincronizzaDaGoogle` (all'avvio) |
 | `core/contatti-google.js` | Google Contatti: collegamento una tantum (ritorno su `/google-contatti`), permesso di un'ora dal server, elenco in memoria per `cercaContatti` / `contattoUnico` |
 | `components/sheet.js` | foglio a tutta altezza: in alto indietro e titolo; in basso barra con le azioni secondarie a sinistra (anche un `div.foglio__piede` nel corpo finisce lì) e il pulsante principale a destra (`confirmLabel`, «Salva»), sopra la tastiera; il tasto indietro lo chiude. Classi di movimento `foglio--entra` / `--sostituisce` / `--chiude`; `close({ subito: true })` senza dissolvenza |
-| `components/menu.js` | menu a sinistra a gruppi (Casa, Collegamenti, Account), come in Leghe Fantacalcio |
+| `components/menu.js` | menu a sinistra a gruppi (Progetti — quelli con istruzioni, letti all'apertura —, Casa, Collegamenti, Account), come in Leghe Fantacalcio |
 | `components/proposals.js` | azioni proposte: `APPLICA` per tipo, `renderAzione` (la sintesi proposta si legge ripiegata) |
-| `components/sintesi.js` | sintesi di un progetto (`projects.sintesi`): blocco ripiegabile in alto nel Diario e nei Task filtrati sul progetto, foglio per correggerla |
+| `components/sintesi.js` | sintesi di un progetto (`projects.sintesi`): `sezioniSintesi` (una sezione «## » per tema, prima riga «Stato: …» facoltativa), `tonoStato`, foglio per correggerla |
 | `components/persone.js` | scelta delle persone di un task: suggerimenti dalla rubrica e da Google Contatti, persone nuove; una voce della rubrica non collegata e il contatto Google con lo stesso nome compaiono una volta sola, e sceglierla la collega |
 | `modules/*/index.js` | un modulo = `{ id, title, nav, icon, mount(container) → smonta }`, in `modules/registry.js` |
-| `modules/diario/index.js` | note (anche dettate o condivise), filtro per progetto (`macroapp.diario.progetto`, lo scrive anche la pagina Task), riepilogo dell'AI con la trascrizione ripiegata, proposte sotto la nota, sintesi del progetto in alto |
+| `modules/diario/index.js` | note (anche dettate o condivise), filtro per progetto (`macroapp.diario.progetto`, lo scrive anche la pagina Task), riepilogo dell'AI con la trascrizione ripiegata, proposte sotto la nota. Esporta `apriNota`, `analizzaNota`, `titoloDi` (li usa la pagina Progetto) |
+| `modules/progetto/index.js` | pagina di un progetto con istruzioni (`macroapp.progetto` = quale; menu → Progetti, o dal Diario e dai Task): viste Sintesi (righe per tema con stato e lezioni collegate via `journal_entries.temi`), Lezioni (giorno, titolo, anteprima, temi; foglio di lettura con Modifica e Rianalizza), Da fare. Titolo in testata = nome del progetto (`titoloCorrente`, letto da app.js) |
 | `modules/lista/index.js` | tessere a 4 colonne; quelle da comprare divise per reparto (`REPARTI` = ordine del giro, `REGOLE_REPARTO` dal nome, `reparto` scelto a mano nel foglio Modifica); recenti e «Mi serve» per frequenza, senza reparti |
 | `modules/task/index.js` | task per progetti; `apriProgetto` (nome, visibilità, istruzioni per il diario); dal progetto il pulsante Diario |
 | `modules/notifiche/index.js` | pagina Notifiche (menu → Account): stato di questo telefono, «Attiva» in basso a destra, categorie, telefoni attivi, prova |
@@ -172,10 +173,18 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
       (la lezione ripulita), la sintesi del progetto (lo stato: cosa è emerso finora, per temi, secondo le
       istruzioni). L'agente propone la sintesi aggiornata dopo ogni nota di un progetto con istruzioni
       (`project_summary`, sotto la nota, ripiegata); la spunta scrive `projects.sintesi`; si corregge a mano
-      dal blocco in alto nel Diario e nei Task del progetto. La prima sintesi si costruisce da tutte le note del
-      progetto (fino a 30); poi il contesto è sintesi + ultime 8 note. Il tipo di proposta «Appunto» (`note`)
-      non viene più proposto: le informazioni vanno nella sintesi, nel manuale («info») o restano nella nota.
+      dalla pagina del progetto. La prima sintesi si costruisce da tutte le note del progetto (fino a 30); poi
+      il contesto è sintesi + ultime 8 note. Il tipo di proposta «Appunto» (`note`) non viene più proposto: le
+      informazioni vanno nella sintesi, nel manuale («info») o restano nella nota.
       Mattia prova per qualche settimana in parallelo il progetto Claude e questo diario.
+- [x] **Pagina del progetto** (26/10, scelte C+D tra quattro schermate): menu → Progetti → Tennis. Sintesi per
+      temi (le sezioni «## » del testo, con «Stato: …» come etichetta colorata e le lezioni in cui il tema è
+      emerso), Lezioni (giorno grande, titolo e temi scritti dall'AI con il riepilogo: `journal_entries.titolo`,
+      `temi`; foglio di lettura con riepilogo intero e trascrizione ripiegata), Da fare. La struttura per temi è
+      una convenzione sul testo, non uno schema annidato (che l'output strutturato non regge): il collegamento
+      tema → lezioni lo fa l'app incrociando `temi` con i nomi delle sezioni. Le note analizzate prima del 26/10
+      non hanno titolo né temi finché non si rianalizzano (titolo di ripiego dalla prima riga del riepilogo).
+      Da verificare con le note vere: che i nomi dei temi restino stabili da una lezione all'altra.
 - [ ] Diario per progetto, seguiti: importare lo storico delle lezioni dalle chat del progetto Claude
       (esportazione dei dati di claude.ai); registrare nel diario con `transcribe()` (Gemini: un parlato
       di pochi minuti passa da onCall, senza Storage); valutare con le note vere quante precedenti servono

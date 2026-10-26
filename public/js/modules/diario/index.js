@@ -7,10 +7,10 @@
 // l'agente scrive anche un riepilogo della nota tenendo conto delle precedenti: compare al posto
 // del testo, che resta ripiegato sotto («Trascrizione»). Il riepilogo è testo correggibile, non
 // un'azione: è l'unica cosa che l'agente scrive senza la spunta. La sintesi del progetto (lo stato,
-// ciò che è emerso finora) arriva invece come proposta sotto la nota e, confermata, si legge in
-// alto nel Diario filtrato sul progetto (components/sintesi.js).
+// ciò che è emerso finora) arriva invece come proposta sotto la nota e, confermata, si legge nella
+// pagina del progetto (modules/progetto), dove le note si sfogliano per titolo e per tema.
 //
-// journal_entries { text, projectId, riepilogo, riepilogoAt, analyzed, analyzedAt, analysisError }
+// journal_entries { text, projectId, riepilogo, titolo, temi, riepilogoAt, analyzed, analyzedAt, analysisError }
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-functions.js";
 import { functions } from "../../core/firebase.js";
 import { el, icon, toast, fascia, vuoto, toDate, giornoRelativo, fab, testoRicco } from "../../core/ui.js";
@@ -19,7 +19,7 @@ import { create, update, remove, watchMine, watchVisible, readVisible, VIS, wher
 import { watchPending, renderAzione } from "../../components/proposals.js";
 import { aggiungiVoci } from "../lista/index.js";
 import { apriTask, apriProgetto } from "../task/index.js";
-import { bloccoSintesi } from "../../components/sintesi.js";
+import { vaiA } from "../../core/router.js";
 import { apriSpesa } from "../spese/index.js";
 import { apriVoceManuale } from "../manuale/index.js";
 
@@ -33,6 +33,7 @@ const COLL = "journal_entries";
 const CHIAVE_AUTO = "macroapp.diario.auto";
 const CHIAVE_AI = "macroapp.diario.ai"; // "on" | "off": esito dell'ultima analisi
 const CHIAVE_FILTRO = "macroapp.diario.progetto"; // "tutte" o id del progetto (lo scrive anche la pagina Task)
+const CHIAVE_PAGINA = "macroapp.progetto"; // progetto aperto nella pagina Progetto (modules/progetto)
 const analyzeEntry = httpsCallable(functions, "analyzeEntry", { timeout: 130000 }); // la funzione ha 120 s
 
 const leggi = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch (e) { return d; } };
@@ -55,7 +56,7 @@ function sceltaProgetto(progetti, iniziale) {
  * subito il testo in task, voce di lista, spesa o voce del manuale, senza passare dall'AI.
  * Invio va a capo: una nota può avere più paragrafi.
  */
-function apriNota({ esistente = null, testo = "", progetti = [], projectId = null, onSalva }) {
+export function apriNota({ esistente = null, testo = "", progetti = [], projectId = null, onSalva }) {
   const area = el("textarea", { placeholder: "Scrivi o detta…", rows: 6, autofocus: !esistente?.riepilogo });
   area.value = esistente?.text || testo;
   const attivi = progetti.filter((p) => !p.archived || p.id === esistente?.projectId).sort((a, b) => a.name.localeCompare(b.name));
@@ -107,6 +108,42 @@ function apriNota({ esistente = null, testo = "", progetti = [], projectId = nul
   });
 }
 
+/**
+ * Manda una nota all'agente e segna l'esito sulla nota. Ritorna la risposta della funzione
+ * ({ proposals, riepilogo, sintesi }) o null se non è riuscita (l'errore è già stato mostrato).
+ * `attesa`: la scrittura da aspettare prima (la nota appena creata o modificata).
+ */
+export async function analizzaNota(entryId, attesa) {
+  try {
+    if (attesa) await attesa;
+    const res = await analyzeEntry({ entryId });
+    const n = res.data?.proposals ?? 0;
+    scrivi(CHIAVE_AI, "on");
+    update(COLL, entryId, { analyzed: true, analyzedAt: new Date(), analysisError: null });
+    if (!n && !res.data?.riepilogo) toast("Nessuna azione da proporre");
+    return res.data || {};
+  } catch (err) {
+    console.warn("analisi", err);
+    const chiave = err.code === "functions/failed-precondition" && /non configurata/.test(err.message || "");
+    if (chiave) scrivi(CHIAVE_AI, "off");
+    update(COLL, entryId, { analysisError: err.message || err.code || "errore" });
+    toast(chiave ? "AI non ancora collegata: la nota è salvata" : `${err.message || "Analisi non riuscita"}. La nota è salvata.`, { ms: 7000 });
+    return null;
+  }
+}
+
+/** Analisi automatica attiva (scelta sul telefono, pillola in alto nel Diario). */
+export const analisiAutomatica = () => leggi(CHIAVE_AUTO, "1") === "1";
+
+/** Titolo di una nota: quello scritto dall'AI, se no la prima riga utile del riepilogo o del testo. */
+export function titoloDi(n) {
+  if (n.titolo) return n.titolo;
+  const righe = String(n.riepilogo || n.text || "").split("\n").map((r) => r.trim()).filter(Boolean);
+  const prima = righe.find((r) => !/^#/.test(r)) || righe[0] || "";
+  const pulita = prima.replace(/^[-*•]\s+/, "").replace(/\*\*/g, "");
+  return pulita.length > 70 ? `${pulita.slice(0, 68).trimEnd()}…` : pulita;
+}
+
 export function mount(container) {
   let note = [];
   let proposte = [];
@@ -138,24 +175,10 @@ export function mount(container) {
   async function analizza(entryId, attesa) {
     inCorso.add(entryId);
     render();
-    try {
-      if (attesa) await attesa;
-      const res = await analyzeEntry({ entryId });
-      const n = res.data?.proposals ?? 0;
-      scrivi(CHIAVE_AI, "on");
-      update(COLL, entryId, { analyzed: true, analyzedAt: new Date(), analysisError: null });
-      if (!n && !res.data?.riepilogo) toast("Nessuna azione da proporre");
-    } catch (err) {
-      console.warn("analisi", err);
-      const chiave = err.code === "functions/failed-precondition" && /non configurata/.test(err.message || "");
-      if (chiave) scrivi(CHIAVE_AI, "off");
-      update(COLL, entryId, { analysisError: err.message || err.code || "errore" });
-      toast(chiave ? "AI non ancora collegata: la nota è salvata" : `${err.message || "Analisi non riuscita"}. La nota è salvata.`, { ms: 7000 });
-    } finally {
-      inCorso.delete(entryId);
-      disegnaStato();
-      render();
-    }
+    await analizzaNota(entryId, attesa);
+    inCorso.delete(entryId);
+    disegnaStato();
+    render();
   }
 
   function nuova(testo = "") {
@@ -237,9 +260,10 @@ export function mount(container) {
     const nodi = [];
     if (prog) {
       nodi.push(el("div.segmenti", { style: "padding-top:4px;align-items:center" },
-        el("button.btn.btn--piatto", { onclick: () => apriProgetto(prog) }, icon("matita"), "Modifica progetto"),
-        el("span.meta", {}, prog.istruzioni ? "Con riepilogo" : "Senza istruzioni, senza riepilogo")));
-      nodi.push(bloccoSintesi(prog, render));
+        prog.istruzioni
+          ? el("button.btn.btn--piatto", { onclick: () => { scrivi(CHIAVE_PAGINA, prog.id); vaiA("progetto"); } }, icon("cartella"), "Pagina del progetto")
+          : el("button.btn.btn--piatto", { onclick: () => apriProgetto(prog) }, icon("matita"), "Modifica progetto"),
+        el("span.meta", {}, prog.istruzioni ? "Con riepilogo e sintesi" : "Senza istruzioni, senza riepilogo")));
     }
     if (!note.length) {
       nodi.push(prog

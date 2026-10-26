@@ -5,7 +5,10 @@ import { el, icon } from "../core/ui.js";
 import { session, logout } from "../core/auth.js";
 import { getHousehold } from "../core/household.js";
 import { vaiA } from "../core/router.js";
+import { readVisible } from "../core/db.js";
 import { VERSION } from "../version.js";
+
+const CHIAVE_PAGINA = "macroapp.progetto"; // progetto aperto nella pagina Progetto (modules/progetto)
 
 const GRUPPI = [
   ["Casa", [
@@ -59,8 +62,20 @@ export function apriMenu() {
 
   const voce = (v) => el("button.menu__voce", {
     type: "button", disabled: !v.vai,
-    onclick: () => v.vai && chiudi({ poi: () => vaiA(...v.vai) }),
+    onclick: () => v.vai && chiudi({ poi: () => { v.prima?.(); vaiA(...v.vai); } }),
   }, icon(v.icona), el("span", {}, v.testo), v.nota ? el("small", {}, v.nota) : null);
+
+  // I progetti con le istruzioni per il diario hanno una pagina loro: compaiono qui, quando arrivano.
+  const progetti = el("div.menu__gruppo", { hidden: true });
+  readVisible("projects").then((docs) => {
+    const conPagina = docs.filter((p) => !p.archived && p.istruzioni).sort((a, b) => a.name.localeCompare(b.name));
+    if (!conPagina.length) return;
+    progetti.replaceChildren(
+      el("div.menu__titolo", {}, "Progetti"),
+      ...conPagina.map((p) => voce({ icona: "cartella", testo: p.name, vai: ["progetto"], prima: () => { try { localStorage.setItem(CHIAVE_PAGINA, p.id); } catch (e) {} } })),
+    );
+    progetti.hidden = false;
+  }).catch(() => {});
 
   const pannello = el("nav.menu__pannello", { "aria-label": "Menu" },
     el("div.menu__testa", {},
@@ -69,6 +84,7 @@ export function apriMenu() {
       el("span", {}, nomeCasa),
       el("button.btn.btn--piatto", { type: "button", onclick: () => chiudi({ poi: () => logout() }) }, icon("esci"), "Esci"),
     ),
+    progetti,
     ...GRUPPI.map(([titolo, voci]) => el("div.menu__gruppo", {},
       el("div.menu__titolo", {}, titolo),
       ...voci.map(voce),
