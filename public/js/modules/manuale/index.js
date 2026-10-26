@@ -14,7 +14,7 @@ import {
   statoContatti, contattiCollegati, collegaContatti, scollegaContatti, collegamentoInCorso, caricaContatti,
   cercaContatti, contattoDaId, linkGoogle, dettaglioContatto, messaggioContatti, suContatti,
 } from "../../core/contatti-google.js";
-import { personaDaGoogle, trovaPersona, datiDaContatto, differenzeDaGoogle } from "../../core/rubrica.js";
+import { personaDaGoogle, trovaPersona, datiDaContatto, differenzeDaGoogle, rubricaPronta } from "../../core/rubrica.js";
 import { openSheet, campo } from "../../components/sheet.js";
 import { rigaTask } from "../task/index.js";
 
@@ -403,7 +403,8 @@ function foglioContatti() {
     } }, icon("esci"), "Scollega")],
   });
 
-  caricaContatti().then((c) => { contatti = c; disegna(); }, (err) => {
+  // Anche la rubrica: senza, chi è già in rubrica sembrerebbe nuovo (e toccandolo si duplicherebbe).
+  Promise.all([caricaContatti(), rubricaPronta()]).then(([c]) => { contatti = c; disegna(); }, (err) => {
     const m = messaggioContatti(err);
     if (err.motivo === "scaduto") { sheet.close(); foglioDaCollegare(err); return; }
     elenco.replaceChildren(vuoto(m.titolo, m.testo));
@@ -412,6 +413,7 @@ function foglioContatti() {
 
 export function mount(container) {
   let entries = [];
+  let caricate = false; // prima delle voci la pagina mostra solo ricerca e sezioni, senza dire «vuoto»
   let filtro = "";
   let segmento = "tutto";
   try { segmento = localStorage.getItem(CHIAVE_SEGMENTO) || "tutto"; } catch (e) {}
@@ -459,6 +461,7 @@ export function mount(container) {
     const persone = visti.filter((e) => e.type === "person");
     const info = visti.filter((e) => e.type === "info");
     const nodi = [];
+    if (!caricate) { elenco.replaceChildren(); return; }
 
     if (segmento === "negozi") {
       // Negozi divisi per categoria, nell'ordine delle categorie della casa.
@@ -490,6 +493,7 @@ export function mount(container) {
   }
 
   container.append(cerca, segmenti, elenco, piu);
-  const stop = watchVisible(COLL, { order: ["name", "asc"] }, (docs) => { entries = docs; render(); });
+  render();
+  const stop = watchVisible(COLL, { order: ["name", "asc"] }, (docs) => { entries = docs; caricate = true; render(); });
   return () => { stop(); piu.remove(); };
 }

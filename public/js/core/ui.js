@@ -112,6 +112,28 @@ export function vuoto(titolo, testo) {
   return el("div.vuoto", {}, el("b", {}, titolo), testo ? el("p", {}, testo) : null);
 }
 
+/**
+ * Prima comparsa di una pagina con più fonti di dati: si disegna quando sono arrivate tutte
+ * (o dopo `ms`, se una tarda o non arriva), così non compare a pezzi. «Vuoto» si dice solo di una
+ * fonte arrivata (`ha`): prima dei dati la pagina tace. Dopo, ogni arrivo ridisegna come sempre.
+ *   const dati = attesa(["spese", "modelli"], render);
+ *   watchVisible(…, (docs) => { spese = docs; dati.arriva("spese"); render(); });
+ *   function render() { if (!dati.pronta()) return; … if (dati.ha("spese") && !spese.length) vuoto(…) }
+ *   e nello smontaggio dati.ferma().
+ */
+export function attesa(fonti, ridisegna, ms = 400) {
+  const arrivate = new Set();
+  let scaduta = false;
+  const tutte = () => fonti.every((f) => arrivate.has(f));
+  const timer = setTimeout(() => { scaduta = true; ridisegna(); }, ms);
+  return {
+    arriva(f) { arrivate.add(f); if (tutte()) clearTimeout(timer); },
+    pronta: () => scaduta || tutte(),
+    ha: (f) => arrivate.has(f),
+    ferma: () => clearTimeout(timer),
+  };
+}
+
 /** Grassetti (**così**) dentro una riga, come nodi di testo: niente HTML dal modello. */
 function inline(riga) {
   return riga.split(/\*\*(.+?)\*\*/g).map((pezzo, i) => (i % 2 ? el("b", {}, pezzo) : pezzo));

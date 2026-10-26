@@ -12,7 +12,7 @@
 
 import {
   collection, doc, addDoc, setDoc, getDoc, updateDoc, deleteDoc, query, where, or, and, orderBy,
-  onSnapshot, serverTimestamp, limit as qLimit,
+  onSnapshot, queryEqual, serverTimestamp, limit as qLimit,
 } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js";
 import { db } from "./firebase.js";
 import { session } from "./auth.js";
@@ -83,6 +83,62 @@ function visibleCondition() {
     : where("ownerUid", "==", uid);
 }
 
+// Ascolti condivisi. Se ogni pagina, aprendosi, chiedesse i suoi dati da capo, Firestore li
+// rileggerebbe dalla cache del telefono (~100 ms) e nel frattempo la pagina sarebbe vuota
+// («Il diario è vuoto», poi le note). Invece l'ascolto di una query resta aperto per qualche minuto
+// dopo che la pagina è stata lasciata: tornandoci, o rimettendo un filtro già usato, i dati ci sono
+// già, aggiornati, e la pagina si disegna piena al primo fotogramma. Due pagine con la stessa query
+// (es. Manuale e rubrica) condividono un solo ascolto.
+const RESTA_APERTO = 10 * 60e3;
+const ascolti = []; // { q, snap, cbs: Set, stop, timer }
+const docsDi = (snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() })); // oggetti nuovi per ciascuno
+
+function chiudi(a) {
+  clearTimeout(a.timer);
+  a.stop?.();
+  const i = ascolti.indexOf(a);
+  if (i >= 0) ascolti.splice(i, 1);
+}
+
+/** All'uscita dall'account: niente ascolti rimasti aperti con l'utente di prima. */
+export function chiudiAscolti() { for (const a of [...ascolti]) chiudi(a); }
+
+function ascolta(q, nome, cb) {
+  let a = ascolti.find((x) => queryEqual(x.q, q));
+  if (!a) {
+    const nuovo = { q, snap: null, cbs: new Set(), timer: null, stop: null };
+    a = nuovo;
+    ascolti.push(nuovo);
+    nuovo.stop = onSnapshot(q, (snap) => {
+      nuovo.snap = snap;
+      for (const f of [...nuovo.cbs]) {
+        try { f(docsDi(snap)); } catch (e) { console.error(nome, e); } // l'errore di una pagina non ferma le altre
+      }
+    }, (err) => {
+      console.error(nome, err);
+      chiudi(nuovo); // un ascolto fallito non resta: la prossima volta si riprova
+    });
+  }
+  const mio = a;
+  clearTimeout(mio.timer);
+  mio.cbs.add(cb);
+  // Dati già noti: arrivano appena finito il mount, prima che lo schermo si ridisegni.
+  if (mio.snap) {
+    const snap = mio.snap;
+    queueMicrotask(() => {
+      if (!mio.cbs.has(cb) || mio.snap !== snap) return; // già smesso, o è arrivato un aggiornamento
+      try { cb(docsDi(snap)); } catch (e) { console.error(nome, e); }
+    });
+  }
+  let fermo = false;
+  return () => {
+    if (fermo) return;
+    fermo = true;
+    mio.cbs.delete(cb);
+    if (!mio.cbs.size && ascolti.includes(mio)) mio.timer = setTimeout(() => chiudi(mio), RESTA_APERTO);
+  };
+}
+
 /**
  * Sottoscrizione in tempo reale a ciò che l'utente può vedere in una collezione:
  * i documenti condivisi della casa + i propri documenti personali.
@@ -91,9 +147,7 @@ function visibleCondition() {
  */
 export function watchVisible(coll, { extra = [], order = ["createdAt", "desc"], max = 500 } = {}, cb) {
   const q = query(collection(db, coll), and(visibleCondition(), ...extra), orderBy(order[0], order[1]), qLimit(max));
-  return onSnapshot(q, (snap) => {
-    cb(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-  }, (err) => console.error(`watchVisible(${coll})`, err));
+  return ascolta(q, `watchVisible(${coll})`, cb);
 }
 
 /** Sottoscrizione ai soli documenti personali dell'utente (es. diario). */
@@ -104,9 +158,7 @@ export function watchMine(coll, { extra = [], order = ["createdAt", "desc"], max
     orderBy(order[0], order[1]),
     qLimit(max),
   );
-  return onSnapshot(q, (snap) => {
-    cb(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-  }, (err) => console.error(`watchMine(${coll})`, err));
+  return ascolta(q, `watchMine(${coll})`, cb);
 }
 
 /** Lettura una tantum di ciò che è visibile (stessa condizione di watchVisible). */

@@ -448,6 +448,33 @@ with sync_playwright() as p:
         pg.click(".schede a[href='#/diario']")
         pg.click("button.pillola >> text=Tutte")
 
+        # ── Niente «vuoto» di passaggio: cambiando filtro o sezione la pagina non dice «vuoto»
+        # nemmeno per un fotogramma prima che arrivino i dati (video di Mattia, 26/10) ──
+        step[0] = "niente vuoto di passaggio"
+        pg.wait_for_selector(".nota .progetto >> text=Tennis")
+        pg.evaluate("""() => { window.lampi = []; new MutationObserver((ms) => { for (const m of ms) for (const n of m.addedNodes) {
+            if (n.nodeType !== 1) continue;
+            const v = n.matches('.vuoto') ? n : n.querySelector('.vuoto');
+            if (v) lampi.push(location.hash + ' ' + v.querySelector('b').textContent); } })
+          .observe(document.getElementById('view'), { childList: true, subtree: true }); }""")
+        for f in ["Tennis", "Tutte", "Tennis", "Tutte"]:
+            pg.click(f"button.pillola >> text={f}")
+            pg.wait_for_selector(f"button.pillola.on >> text={f}")
+            pg.wait_for_timeout(150)
+        for sezione in ["task", "spese", "lista", "diario", "task", "diario"]:
+            pg.click(f".schede a[href='#/{sezione}']")
+            pg.wait_for_selector(f".schede a[aria-current='page'][href='#/{sezione}']")
+            pg.wait_for_timeout(150)
+        lampi = pg.evaluate("lampi")
+        assert not lampi, f"«vuoto» comparso per un attimo: {lampi}"
+        # Tornando a una sezione già vista, la pagina è piena al primo fotogramma (ascolti condivisi in db.js)
+        for sezione, sel in [("task", ".riga"), ("lista", ".tessera"), ("spese", ".riga"), ("diario", ".nota")]:
+            piena = pg.evaluate("""([s, sel]) => new Promise((ok) => {
+                addEventListener('hashchange', () => requestAnimationFrame(() => ok(!!document.querySelector('#view ' + sel))), { once: true });
+                document.querySelector(`.schede a[href='#/${s}']`).click(); })""", [sezione, sel])
+            assert piena, f"{sezione}: pagina vuota al primo fotogramma"
+            pg.wait_for_timeout(100)
+
         # ── Scollegare Google Contatti ──
         step[0] = "scollega"
         menu(pg, "Google Contatti")
