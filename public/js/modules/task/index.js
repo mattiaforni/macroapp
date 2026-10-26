@@ -7,7 +7,7 @@
 //          sintesi = lo stato del progetto, proposto dall'agente e confermato; si legge in modules/progetto
 // tasks    { text, done, doneAt, due ("AAAA-MM-GG" o null), projectId, peopleIds[], people, note }
 //          people = nomi delle persone in chiaro, copia di peopleIds per chi non vede la voce in rubrica
-import { el, icon, toast, fascia, vuoto, sceltaVisibilita, fmtDate, isoGiorno, toDate, fab } from "../../core/ui.js";
+import { el, icon, toast, fascia, vuoto, attesa, sceltaVisibilita, fmtDate, isoGiorno, toDate, fab } from "../../core/ui.js";
 import { create, update, remove, watchVisible, readVisible, VIS } from "../../core/db.js";
 import { openSheet, campo } from "../../components/sheet.js";
 import { sceltaPersone } from "../../components/persone.js";
@@ -214,6 +214,9 @@ export function mount(container) {
   let scelto = "tutti";
   let mostraFatti = false;
   try { scelto = localStorage.getItem(CHIAVE_PROGETTO) || "tutti"; } catch (e) {}
+  // La pagina compare con task e progetti insieme: senza i progetti il filtro scelto sembrerebbe
+  // sparito e si vedrebbe «Niente da fare» prima dei task.
+  const dati = attesa(["task", "progetti"], () => render());
 
   const chips = el("div.segmenti");
   const elenco = el("div");
@@ -225,8 +228,9 @@ export function mount(container) {
     || (toDate(a.createdAt)?.getTime() || 0) - (toDate(b.createdAt)?.getTime() || 0);
 
   function render() {
+    if (!dati.pronta()) return;
     const attivi = progetti.filter((p) => !p.archived).sort((a, b) => a.name.localeCompare(b.name));
-    if (scelto !== "tutti" && !attivi.some((p) => p.id === scelto)) scelto = "tutti";
+    if (scelto !== "tutti" && dati.ha("progetti") && !attivi.some((p) => p.id === scelto)) scelto = "tutti";
 
     chips.replaceChildren(
       el("button.pillola", { class: scelto === "tutti" ? "on" : "", onclick: () => scegli("tutti") }, "Tutti"),
@@ -250,7 +254,7 @@ export function mount(container) {
         p.visibility === VIS.SHARED ? el("span.etichetta.etichetta--accento", { style: "align-self:center" }, "condiviso") : null));
     }
 
-    if (!aperti.length) {
+    if (!aperti.length && dati.ha("task")) {
       nodi.push(scelto === "tutti"
         ? vuoto("Niente da fare", "Tocca + per aggiungere un task.")
         : vuoto("Niente da fare qui", "Tocca + per aggiungere un task a questo progetto."));
@@ -270,8 +274,8 @@ export function mount(container) {
   }
 
   container.append(chips, elenco, piu);
-  const stop1 = watchVisible(PROJ, {}, (docs) => { progetti = docs; render(); });
-  const stop2 = watchVisible(TASKS, {}, (docs) => { tasks = docs; render(); });
+  const stop1 = watchVisible(PROJ, {}, (docs) => { progetti = docs; dati.arriva("progetti"); render(); });
+  const stop2 = watchVisible(TASKS, {}, (docs) => { tasks = docs; dati.arriva("task"); render(); });
   const stop3 = suRubrica(render); // nomi delle persone aggiornati se cambiano in rubrica
-  return () => { stop1(); stop2(); stop3(); piu.remove(); };
+  return () => { stop1(); stop2(); stop3(); dati.ferma(); piu.remove(); };
 }

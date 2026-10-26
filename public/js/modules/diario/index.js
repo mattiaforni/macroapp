@@ -13,7 +13,7 @@
 // journal_entries { text, projectId, riepilogo, titolo, temi, riepilogoAt, analyzed, analyzedAt, analysisError }
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-functions.js";
 import { functions } from "../../core/firebase.js";
-import { el, icon, toast, fascia, vuoto, toDate, giornoRelativo, fab, testoRicco } from "../../core/ui.js";
+import { el, icon, toast, fascia, vuoto, attesa, toDate, giornoRelativo, fab, testoRicco } from "../../core/ui.js";
 import { openSheet } from "../../components/sheet.js";
 import { create, update, remove, watchMine, watchVisible, readVisible, VIS, where } from "../../core/db.js";
 import { watchPending, renderAzione } from "../../components/proposals.js";
@@ -153,6 +153,10 @@ export function mount(container) {
   const conNote = new Set(); // progetti che hanno note tra quelle viste
   let auto = leggi(CHIAVE_AUTO, "1") === "1";
   let filtro = leggi(CHIAVE_FILTRO, "tutte");
+  let caricate = false; // le note del filtro scelto sono arrivate: solo allora si può dire «vuoto»
+  let tutte = null;     // le ultime note senza filtro: anteprima immediata quando si cambia filtro
+  // La pagina compare quando ci sono note e progetti (pillole, nomi): intera, non a pezzi.
+  const dati = attesa(["note", "progetti"], () => render());
 
   const stato = el("div.stato-ai", { style: "margin-top:0" });
   const disegnaStato = () => {
@@ -255,6 +259,7 @@ export function mount(container) {
   }
 
   function render() {
+    if (!dati.pronta()) return;
     disegnaFiltri();
     const prog = filtro !== "tutte" ? progettoDi(filtro) : null;
     const nodi = [];
@@ -265,7 +270,7 @@ export function mount(container) {
           : el("button.btn.btn--piatto", { onclick: () => apriProgetto(prog) }, icon("matita"), "Modifica progetto"),
         el("span.meta", {}, prog.istruzioni ? "Con riepilogo e sintesi" : "Senza istruzioni, senza riepilogo")));
     }
-    if (!note.length) {
+    if (!note.length && caricate) {
       nodi.push(prog
         ? vuoto("Nessuna nota in questo progetto", "Tocca + e scrivi o incolla: la nota finisce qui.")
         : vuoto("Il diario è vuoto", "Tocca + e scrivi o detta: un'idea, cosa devi fare, cosa hai speso. Le note sono visibili solo a te."));
@@ -283,17 +288,25 @@ export function mount(container) {
   let stopNote = () => {};
   function segui() {
     stopNote();
-    const extra = filtro !== "tutte" ? [where("projectId", "==", filtro)] : [];
-    stopNote = watchMine(COLL, { extra, max: filtro !== "tutte" ? 300 : 100 }, (docs) => {
+    const f = filtro;
+    const extra = f !== "tutte" ? [where("projectId", "==", f)] : [];
+    stopNote = watchMine(COLL, { extra, max: f !== "tutte" ? 300 : 100 }, (docs) => {
       note = docs;
+      caricate = true;
+      if (f === "tutte") tutte = docs;
       for (const n of docs) if (n.projectId) conNote.add(n.projectId);
+      dati.arriva("note");
       render();
     });
   }
+  // Cambiando filtro non si svuota l'elenco: finché arrivano le note del filtro nuovo (di solito
+  // subito, se è già stato usato) si vedono quelle già note, filtrate. Mai «Nessuna nota» per un attimo.
   function scegli(v) {
     if (v === filtro) return;
     filtro = v; scrivi(CHIAVE_FILTRO, v);
-    note = []; render(); segui();
+    note = !tutte ? [] : v === "tutte" ? tutte : tutte.filter((n) => n.projectId === v);
+    caricate = false;
+    render(); segui();
   }
 
   container.append(
@@ -310,10 +323,11 @@ export function mount(container) {
   segui();
   const stop1 = watchVisible("projects", {}, (docs) => {
     progetti = docs;
+    dati.arriva("progetti");
     // Un progetto archiviato o eliminato non resta come filtro.
     if (filtro !== "tutte" && !docs.some((p) => p.id === filtro && !p.archived)) { scegli("tutte"); return; }
     render();
   });
   const stop2 = watchPending((docs) => { proposte = docs; render(); });
-  return () => { stopNote(); stop1(); stop2(); piu.remove(); };
+  return () => { stopNote(); stop1(); stop2(); dati.ferma(); piu.remove(); };
 }

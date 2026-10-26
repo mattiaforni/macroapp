@@ -10,7 +10,7 @@
 // se entrambi i telefoni ci provano, la seconda volta non succede niente.
 import {
   el, icon, iconaDa, toast, fascia, vuoto, toDate, fmtMoney, parseImporto, meseBreve, meseLungo,
-  isoGiorno, stessoGiorno, fmtDate, fab,
+  isoGiorno, stessoGiorno, fmtDate, fab, attesa,
 } from "../../core/ui.js";
 import { create, createWithId, update, remove, watchVisible, readVisible, VIS } from "../../core/db.js";
 import { session } from "../../core/auth.js";
@@ -288,12 +288,15 @@ export function mount(container) {
   let spese = [];
   let modelli = [];
   let h = null;
+  // Saldo, ricorrenti e nomi compaiono insieme; senza le spese non si dice nulla (né «in pari» né «Nessuna spesa»).
+  const dati = attesa(["spese", "modelli", "casa"], () => render());
 
   const testa = el("div");
   const elenco = el("div");
   const piu = fab("Aggiungi spesa", () => apriSpesa());
 
   function render() {
+    if (!dati.pronta() || !dati.ha("spese")) return;
     const netto = Math.round(saldo(spese, me) * 100) / 100;
     const altroUid = h?.members?.find((m) => m !== me);
     const altro = { uid: altroUid || "altro", nome: nomeDi(altroUid, h) };
@@ -329,12 +332,12 @@ export function mount(container) {
   }
 
   container.append(testa, elenco, piu);
-  getHousehold().then((x) => { h = x; render(); });
+  getHousehold().then((x) => { h = x; dati.arriva("casa"); render(); });
   // Dal menu: «Spese ricorrenti» apre subito il foglio.
   if (richiesto("spese", "ricorrenti")) {
     Promise.all([readVisible(REC, { order: ["createdAt", "desc"] }), getHousehold()]).then(([m, x]) => apriRicorrenti(m, x));
   }
-  const stop1 = watchVisible(COLL, { order: ["date", "desc"], max: 400 }, (docs) => { spese = docs; render(); });
-  const stop2 = watchVisible(REC, { order: ["createdAt", "desc"] }, (docs) => { modelli = docs; render(); });
-  return () => { stop1(); stop2(); piu.remove(); };
+  const stop1 = watchVisible(COLL, { order: ["date", "desc"], max: 400 }, (docs) => { spese = docs; dati.arriva("spese"); render(); });
+  const stop2 = watchVisible(REC, { order: ["createdAt", "desc"] }, (docs) => { modelli = docs; dati.arriva("modelli"); render(); });
+  return () => { stop1(); stop2(); dati.ferma(); piu.remove(); };
 }

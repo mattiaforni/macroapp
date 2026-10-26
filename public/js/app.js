@@ -5,6 +5,7 @@ import { el, clear, icon, toast } from "./core/ui.js";
 import { applicaTema } from "./core/theme.js";
 import { ensureMyName } from "./core/household.js";
 import { avviaRubrica, fermaRubrica, sincronizzaDaGoogle } from "./core/rubrica.js";
+import { chiudiAscolti } from "./core/db.js";
 import { ritornoDaGoogle } from "./core/contatti-google.js";
 import { aggiornaAllAvvio as aggiornaNotifiche } from "./core/notifiche.js";
 import { modules, navModules, DEFAULT_ROUTE } from "./modules/registry.js";
@@ -100,7 +101,7 @@ function startApp() {
 }
 
 onSession((s) => {
-  if (!s.user) { fermaRubrica(); renderLogin(); return; }
+  if (!s.user) { fermaRubrica(); chiudiAscolti(); renderLogin(); return; }
   if (s.error) {
     menuBtn.hidden = true; clear(nav); clear(actions); title.textContent = "Errore";
     view.replaceChildren(

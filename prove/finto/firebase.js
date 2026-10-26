@@ -133,6 +133,7 @@ export function and(...c) { return { and: c }; }
 export function orderBy(f, dir) { return { orderBy: f, dir }; }
 export function limit(n) { return { limit: n }; }
 export function query(c, ...parts) { return { coll: c.coll, parts }; }
+export function queryEqual(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
 // Function `bank` finta: elenco di banche, consenso che torna subito su /banca?code=…, conti e movimenti inventati.
 async function bankFinto(data = {}) {
   const B = coll("bank_connections");
@@ -209,11 +210,15 @@ function matches(d, cond) {
   if (cond.f) return d[cond.f] === cond.v;
   return true;
 }
+// Come Firestore sul telefono, la prima consegna di una query arriva un po' dopo (lettura della
+// cache, ~60 ms), mai nello stesso istante: così le prove vedono le pagine che compaiono a pezzi.
+const PRIMA_CONSEGNA = 60;
+function primaVolta(run) { setTimeout(() => { if (listeners.has(run)) run(); }, PRIMA_CONSEGNA); }
 export function onSnapshot(q, cb) {
   // Su un singolo documento (es. bank_connections/{uid}): snapshot con exists() e data().
   if (!q.parts && q.coll && q.id) {
     const run = () => { const d = coll(q.coll).get(q.id); cb({ id: q.id, exists: () => !!d, data: () => d }); };
-    listeners.add(run); run();
+    listeners.add(run); primaVolta(run);
     return () => listeners.delete(run);
   }
   const run = () => {
@@ -223,7 +228,7 @@ export function onSnapshot(q, cb) {
     if (ord) docs.sort(([, a], [, b]) => { const x = a[ord.orderBy], y = b[ord.orderBy]; const r = x > y ? 1 : x < y ? -1 : 0; return ord.dir === "desc" ? -r : r; });
     cb({ docs: docs.map(([id, d]) => ({ id, data: () => d })) });
   };
-  listeners.add(run); run();
+  listeners.add(run); primaVolta(run);
   return () => listeners.delete(run);
 }
 export function getRedirectResult() { return Promise.resolve(null); }

@@ -30,8 +30,8 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 |---|---|
 | `app.js` | guscio: accesso, barra in basso, pulsante del menu, router, service worker, ricorrenti all'avvio |
 | `core/router.js` | router a hash; `vaiA(id, apri)` + `richiesto(id, apri)`: il menu chiede a una pagina di aprire un suo foglio. Passaggi tra le pagine con View Transitions (`<html data-passaggio>` = `entra` / `torna`): vaiA entra sempre, il resto lo decide `transizione(da, a)` in app.js |
-| `core/ui.js` | `el()`, icone disegnate a mano (`D`), date, importi, pillole |
-| `core/db.js` | `create` (non aspetta il server, ritorna `{id, saved}`), `update`, `watchVisible`, `readVisible`; dopo le scritture condivise di spese, task e lista chiama `segnala` (notifiche) |
+| `core/ui.js` | `el()`, icone disegnate a mano (`D`), date, importi, pillole; `attesa(fonti, render)`: prima comparsa di una pagina quando sono arrivate tutte le sue fonti (max 400 ms), e «vuoto» solo per una fonte arrivata |
+| `core/db.js` | `create` (non aspetta il server, ritorna `{id, saved}`), `update`, `watchVisible`, `readVisible`; dopo le scritture condivise di spese, task e lista chiama `segnala` (notifiche). Ascolti condivisi: la stessa query è un solo `onSnapshot`, che resta aperto 10 minuti dopo l'uscita dalla pagina; i dati già noti arrivano subito (microtask), quindi una pagina rimontata o un filtro già usato si disegnano pieni al primo fotogramma. `chiudiAscolti` all'uscita dall'account |
 | `core/notifiche.js` | notifiche push: `attiva`/`disattiva` su questo telefono (token in `users.dispositivi`), categorie (`users.notifiche`), `prova`, `segnala` → funzione `avvisa`; il disegno e il tocco della notifica stanno in `sw.js` |
 | `core/household.js` | casa, nomi dei membri (`memberNames`), `nomeDi`, `updateHousehold` (es. categorie del manuale) |
 | `core/rubrica.js` | voci del manuale in memoria, aggiornate in tempo reale: `trovaPersona`, `risolviPersone` (crea quelle che mancano, collegate a Google se il nome è univoco), `nomiTask`, `sincronizzaDaGoogle` (all'avvio) |
@@ -59,6 +59,10 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
    della barra in basso nessun passaggio; menu, pulsanti che portano altrove e fogli entrano sfumando
    sul fondo (uscita breve, poi entrata); indietro e chiusura con una dissolvenza breve. Niente
    dissolvenze sull'arrivo dei dati. Con «riduci movimento» tutto cambia di colpo.
+   **Mai «vuoto» prima dei dati** (26/10, dal video di Mattia): una pagina o un filtro non mostrano
+   «Il diario è vuoto», «Niente da fare»… finché i dati non sono arrivati, e non compaiono a pezzi
+   (`attesa` in ui.js); cambiando filtro non si svuota l'elenco. Le prove lo controllano
+   (step «niente vuoto di passaggio»; il Firebase finto consegna la prima volta dopo 60 ms, come il telefono).
 2. Inserimento uniforme: in ogni pagina un + tondo in basso a destra (`fab()` in ui.js) apre il foglio
    per scrivere. Invio salva appena hai scritto tutto ciò che è obbligatorio; se manca un campo
    obbligatorio, Invio ti porta lì. Quindi: spesa = descrizione → importo → salva; task, voce del
@@ -199,6 +203,10 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
       Notifiche). Da verificare dal telefono: attivazione (menu → Notifiche → Attiva → «Manda una prova») su
       entrambi i telefoni; se `getToken` fallisce, controllare che la chiave API web non escluda le API
       «Firebase Installations» e «FCM Registration».
+- [x] **Niente lampi di «vuoto»** (26/10, dal video di Mattia): cambiando filtro nel Diario compariva per
+      ~100 ms «Nessuna nota in questo progetto» / «Il diario è vuoto», e lo stesso in Task e Spese all'apertura.
+      Ora ascolti condivisi in db.js, `attesa` nelle pagine con più fonti, anteprima del filtro dalle ultime note.
+      Corretto anche il foglio di Google Contatti, che aspetta la rubrica (senza, chi c'è già sembrava nuovo).
 - [ ] Bozze confermate: finiscono in `notes`, che nessuna pagina mostra (si usano dalla proposta: Copia, Apri
       nella mail/WhatsApp). Decidere se serve una pagina o se togliere la conferma.
 - [ ] Riga di contesto per pagina, stile Leghe Fantacalcio (Task «2 in ritardo · 3 oggi»,

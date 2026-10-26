@@ -26,7 +26,7 @@ js/modules/<id>/index.js    un modulo = { id, title, nav, icon, mount(container)
 sw.js                       cache statica, installazione PWA
 ```
 
-Scelte: nessun framework né bundler (coerente con i progetti precedenti, deploy = copia di file). SDK Firebase modulare da CDN. Query in tempo reale con `onSnapshot`; cache IndexedDB per usare la lista anche senza rete.
+Scelte: nessun framework né bundler (coerente con i progetti precedenti, deploy = copia di file). SDK Firebase modulare da CDN. Query in tempo reale con `onSnapshot`; cache IndexedDB per usare la lista anche senza rete. Le query in tempo reale sono condivise e restano aperte 10 minuti dopo l'uscita da una pagina (db.js): tornandoci i dati ci sono già, senza schermo vuoto né «vuoto» di passaggio.
 
 ## Backend (`functions/`)
 

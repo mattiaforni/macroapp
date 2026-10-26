@@ -30,6 +30,9 @@ export function fermaRubrica() {
   pronta = new Promise((r) => { segnaPronta = r; });
 }
 
+/** Si risolve quando la rubrica è arrivata (per chi deve sapere chi c'è già, es. il foglio dei contatti). */
+export const rubricaPronta = () => pronta;
+
 /** fn() a ogni cambiamento; ritorna la funzione per smettere. */
 export function suRubrica(fn) { ascoltatori.add(fn); return () => ascoltatori.delete(fn); }
 
