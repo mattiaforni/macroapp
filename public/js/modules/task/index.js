@@ -124,6 +124,8 @@ export async function apriTask(esistente = null, prefill = {}, progettiNoti = nu
     body: [
       el("div.campo", { style: "margin-top:14px" }, testo),
       el("div.campo", {}, el("label", {}, "Progetto"), sceltaProgetto),
+      // Subito sotto il progetto, che la imposta: così si vede con la tastiera aperta, senza scorrere.
+      el("div.campo", {}, el("label", {}, "Visibilità"), visWrap),
       el("div.campo", {}, el("label", {}, "Scadenza"), el("div.segmenti", { style: "padding-top:0;position:relative" }, dataBtn, dataInput, togliData)),
       el("div.campo", {}, el("label", {}, "Persone"), persone.node),
       // Recapiti delle persone già collegate: un tocco per chiamare o scrivere.
@@ -132,7 +134,6 @@ export async function apriTask(esistente = null, prefill = {}, progettiNoti = nu
           el("span.meta", { style: "margin-right:4px" }, p.name),
           ...modiDiContatto(p).filter((m) => m.canale !== "sms").map((m) => linkContatto(m, p.name, "a.pillola")))),
       campo("Note", nota),
-      el("div.campo", {}, el("label", {}, "Visibilità"), visWrap),
       esistente ? el("div.foglio__piede", {},
         el("button.btn.btn--pericolo", { onclick: () => { remove(TASKS, esistente.id); sheet.close(); toast("Task eliminato"); } }, icon("cestino"), "Elimina"),
       ) : null,
