@@ -9,7 +9,7 @@
 // - Da fare: i task del progetto.
 // Il + scrive una nota nel progetto, come nel Diario. Le note restano note del diario: cambia solo
 // dove le guardi.
-import { el, icon, toast, fascia, vuoto, toDate, meseLungo, fab, testoRicco } from "../../core/ui.js";
+import { el, icon, toast, fascia, vuoto, attesa, toDate, meseLungo, fab, testoRicco } from "../../core/ui.js";
 import { create, update, remove, watchMine, watchVisible, VIS, where } from "../../core/db.js";
 import { openSheet } from "../../components/sheet.js";
 import { watchPending, renderAzione } from "../../components/proposals.js";
@@ -55,6 +55,7 @@ export function mount(container) {
   const inCorso = new Set();    // note in analisi
   const temiAperti = new Set(); // righe della sintesi aperte
   const titolo = document.getElementById("page-title");
+  const dati = attesa(["progetto", "note", "task"], () => render());
 
   const testa = el("div");
   const pillole = el("div.segmenti", { style: "padding-top:4px" });
@@ -179,7 +180,7 @@ export function mount(container) {
   }
 
   function vistaLezioni() {
-    if (!note.length) return [vuoto("Nessuna lezione ancora", "Tocca + e scrivi o detta: la nota finisce in questo progetto.")];
+    if (!note.length) return [!dati.ha("note") ? null : vuoto("Nessuna lezione ancora", "Tocca + e scrivi o detta: la nota finisce in questo progetto.")];
     const nodi = [];
     let mese = null;
     for (const n of note) {
@@ -194,7 +195,7 @@ export function mount(container) {
     const aperti = tasks.filter((t) => !t.done).sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999"));
     const fatti = tasks.filter((t) => t.done).sort((a, b) => (toDate(b.doneAt)?.getTime() || 0) - (toDate(a.doneAt)?.getTime() || 0));
     const nodi = [];
-    if (!aperti.length) nodi.push(vuoto("Niente da fare qui", "I task proposti dalle note finiscono in questo progetto."));
+    if (!aperti.length) { if (dati.ha("task")) nodi.push(vuoto("Niente da fare qui", "I task proposti dalle note finiscono in questo progetto.")); }
     else nodi.push(el("div", {}, ...aperti.map((t) => rigaTask(t, { progetti, conProgetto: false }))));
     if (fatti.length) nodi.push(fascia("Fatti"), el("div", {}, ...fatti.slice(0, 20).map((t) => rigaTask(t, { progetti, conProgetto: false }))));
     return nodi;
@@ -206,7 +207,7 @@ export function mount(container) {
   }
 
   function render() {
-    if (!progetto) return;
+    if (!progetto || !dati.pronta()) return;
     nomeCorrente = progetto.name;
     if (titolo) titolo.textContent = progetto.name;
     const aperti = tasks.filter((t) => !t.done).length;
@@ -223,7 +224,7 @@ export function mount(container) {
     ));
     const pillola = (v, testo) => el("button.pillola", { type: "button", class: vista === v ? "on" : "", onclick: () => scegli(v) }, testo);
     pillole.replaceChildren(pillola("sintesi", "Sintesi"), pillola("lezioni", "Lezioni"), pillola("dafare", "Da fare"));
-    corpo.replaceChildren(...(vista === "sintesi" ? vistaSintesi() : vista === "lezioni" ? vistaLezioni() : vistaDaFare()));
+    corpo.replaceChildren(...(vista === "sintesi" ? vistaSintesi() : vista === "lezioni" ? vistaLezioni() : vistaDaFare()).filter(Boolean));
   }
 
   container.append(testa, pillole, corpo, piu);
@@ -242,10 +243,11 @@ export function mount(container) {
       return;
     }
     progetto = p;
+    dati.arriva("progetto");
     render();
   });
-  const stop2 = watchMine(NOTE, { extra: [where("projectId", "==", progettoId)], max: 300 }, (docs) => { note = docs; render(); });
-  const stop3 = watchVisible("tasks", {}, (docs) => { tasks = docs.filter((t) => t.projectId === progettoId); render(); });
+  const stop2 = watchMine(NOTE, { extra: [where("projectId", "==", progettoId)], max: 300 }, (docs) => { note = docs; dati.arriva("note"); render(); });
+  const stop3 = watchVisible("tasks", {}, (docs) => { tasks = docs.filter((t) => t.projectId === progettoId); dati.arriva("task"); render(); });
   const stop4 = watchPending((docs) => { proposte = docs; render(); });
-  return () => { stop1(); stop2(); stop3(); stop4(); piu.remove(); };
+  return () => { dati.ferma(); stop1(); stop2(); stop3(); stop4(); piu.remove(); };
 }
