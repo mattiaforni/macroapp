@@ -13,7 +13,7 @@ import { el, icon, toast, fascia, vuoto, attesa, toDate, meseLungo, fab, testoRi
 import { create, update, remove, watchMine, watchVisible, VIS, where } from "../../core/db.js";
 import { openSheet } from "../../components/sheet.js";
 import { watchPending, renderAzione } from "../../components/proposals.js";
-import { sezioniSintesi, tonoStato, apriSintesi } from "../../components/sintesi.js";
+import { sezioniSintesi, tonoStato, apriSintesi, apriVersioni } from "../../components/sintesi.js";
 import { apriNota, analizzaNota, analisiAutomatica, titoloDi } from "../diario/index.js";
 import { apriProgetto, rigaTask } from "../task/index.js";
 import { vaiA } from "../../core/router.js";
@@ -158,6 +158,7 @@ export function mount(container) {
     const quando = toDate(progetto.sintesiAt);
     nodi.push(el("div.segmenti", { style: "padding-top:12px;align-items:center" },
       el("button.btn.btn--piatto", { onclick: () => apriSintesi(progetto) }, icon("matita"), "Modifica la sintesi"),
+      progetto.sintesiStorico?.length ? el("button.btn.btn--piatto", { onclick: () => apriVersioni(progetto) }, icon("orologio"), "Versioni") : null,
       quando ? el("span.meta", {}, `aggiornata il ${quando.toLocaleDateString("it-IT", { day: "numeric", month: "long" })}`) : null));
     return nodi;
   }

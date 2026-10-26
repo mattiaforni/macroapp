@@ -47,7 +47,7 @@ cancella quello della rubrica); il nome resta quello della rubrica. Senza colleg
 `description, amount, paidBy, split, every: "week"|"month"|"year", nextDate, active` — all'avvio l'app genera le spese scadute con id `rec_<id>_<AAAA-MM-GG>` (nessun doppione se lo fanno entrambi i telefoni).
 
 ## `projects`
-`name, archived, istruzioni?, sintesi?, sintesiAt?, colore?` — personali o condivisi. `colore`: giallo | arancio | azzurro | rosa | verde, tinge la pagina del progetto. `istruzioni`: per l'agente del
+`name, archived, istruzioni?, sintesi?, sintesiAt?, sintesiOrigine?, sintesiStorico?: [{ testo, at, origine }], colore?` — personali o condivisi. `sintesiStorico`: le ultime 10 versioni precedenti della sintesi (`salvaSintesi`). `colore`: giallo | arancio | azzurro | rosa | verde, tinge la pagina del progetto. `istruzioni`: per l'agente del
 diario; con queste, ogni nota del progetto riceve un riepilogo (vedi `journal_entries`) e l'agente propone la
 `sintesi` aggiornata (proposta `project_summary`: lo stato del progetto, ciò che è emerso finora, per temi).
 Convenzione del testo: una sezione «## Tema» per tema, prima riga facoltativa «Stato: …». La sintesi si legge

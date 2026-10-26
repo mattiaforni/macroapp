@@ -19,6 +19,7 @@ import { risolviProgetto } from "../modules/task/index.js";
 import { categoria } from "../modules/spese/index.js";
 import { separaNomi, risolviPersone, nomiDa, trovaPersona, numeroInternazionale, datiDaContatto, personaDaGoogle } from "../core/rubrica.js";
 import { caricaContatti, contattoUnico } from "../core/contatti-google.js";
+import { salvaSintesi } from "./sintesi.js";
 
 const COLL = "proposals";
 
@@ -90,7 +91,7 @@ const APPLICA = {
   async project_summary(p) {
     const x = p.payload || {};
     if (!x.projectId) throw new Error("progetto mancante");
-    await update("projects", x.projectId, { sintesi: x.sintesi || "", sintesiAt: new Date() });
+    await salvaSintesi(x.projectId, x.sintesi || "", "ai");
     return "Sintesi aggiornata";
   },
 };

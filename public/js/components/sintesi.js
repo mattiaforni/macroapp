@@ -1,14 +1,63 @@
 // Sintesi di un progetto: un testo vivo con lo stato del progetto e ciò che è emerso dalle note del
 // diario, organizzato per temi secondo le istruzioni del progetto. La scrive l'agente come proposta
 // dopo ogni nota analizzata; confermata, finisce in `projects.sintesi`. Si legge nella pagina del
-// progetto (modules/progetto), per temi, e da qui si corregge a mano.
+// progetto (modules/progetto), per temi, e da qui si corregge a mano. Ogni cambio tiene la versione
+// precedente in `sintesiStorico` (ultime 10): si rileggono e si ripristinano dal foglio «Versioni».
 //
 // Convenzione del testo (la conosce anche l'agente): una sezione «## Tema» per tema; dentro, come
 // prima riga facoltativa, «Stato: …» (due-quattro parole). Le note portano in `temi` i nomi delle
 // sezioni che toccano: così ogni tema sa in quali note è emerso.
-import { el, toast } from "../core/ui.js";
-import { update } from "../core/db.js";
+import { el, icon, toast, toDate, testoRicco } from "../core/ui.js";
+import { update, readVisible } from "../core/db.js";
 import { openSheet } from "./sheet.js";
+
+const VERSIONI = 10; // versioni precedenti tenute in projects.sintesiStorico
+
+/**
+ * Scrive la sintesi del progetto tenendo la versione precedente nello storico
+ * (`sintesiStorico`: le ultime VERSIONI, dalla più recente; { testo, at, origine }).
+ * `progetto` può essere il documento o solo l'id (allora si legge). `origine`: "ai" | "mano" | "ripristino".
+ */
+export async function salvaSintesi(progetto, nuova, origine = "mano") {
+  const p = typeof progetto === "string" ? (await readVisible("projects")).find((x) => x.id === progetto) : progetto;
+  if (!p) throw new Error("progetto non trovato");
+  const testo = String(nuova || "").trim();
+  if (testo === String(p.sintesi || "").trim()) return;
+  const storico = Array.isArray(p.sintesiStorico) ? p.sintesiStorico : [];
+  const precedente = p.sintesi ? [{ testo: p.sintesi, at: toDate(p.sintesiAt) || new Date(), origine: p.sintesiOrigine || "" }] : [];
+  await update("projects", p.id, {
+    sintesi: testo, sintesiAt: new Date(), sintesiOrigine: origine,
+    sintesiStorico: [...precedente, ...storico].slice(0, VERSIONI),
+  });
+}
+
+/** Foglio con le versioni precedenti della sintesi: si leggono e si ripristinano (l'attuale finisce nello storico). */
+export function apriVersioni(progetto) {
+  const storico = Array.isArray(progetto.sintesiStorico) ? progetto.sintesiStorico : [];
+  const aperte = new Set();
+  const elenco = el("div");
+  const disegna = () => elenco.replaceChildren(...storico.map((v, i) => {
+    const d = toDate(v.at);
+    const quando = d ? `${d.toLocaleDateString("it-IT", { day: "numeric", month: "long" })}, ${d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}` : "";
+    const origine = v.origine === "ai" ? "dall'AI" : v.origine === "ripristino" ? "ripristinata" : v.origine === "mano" ? "a mano" : "";
+    const aperta = aperte.has(i);
+    return el("div.versione", {},
+      el("button.versione__testa", { type: "button", "aria-expanded": aperta ? "true" : "false", onclick: () => { aperta ? aperte.delete(i) : aperte.add(i); disegna(); } },
+        el("span", {}, quando), origine ? el("span.meta", {}, origine) : null, el("span.spazio"), icon("giu")),
+      aperta ? el("div.sintesi-testo.versione__testo", {}, ...testoRicco(v.testo)) : null,
+      aperta ? el("div", { style: "padding: 4px 0 12px" },
+        el("button.btn", { onclick: async () => { await salvaSintesi(progetto, v.testo, "ripristino"); sheet.close(); toast("Sintesi ripristinata"); } }, icon("ripeti"), "Ripristina questa versione")) : null,
+    );
+  }));
+  disegna();
+  const sheet = openSheet({
+    title: "Versioni della sintesi",
+    body: [
+      el("p.meta", { style: "margin-top:12px" }, storico.length ? (storico.length === 1 ? "La versione prima di quella attuale. Ripristinandola, l'attuale finisce qui." : `Le ultime ${storico.length} versioni prima di quella attuale, dalla più recente. Ripristinandone una, l'attuale finisce qui.`) : "Nessuna versione precedente: lo storico parte dalla prossima modifica."),
+      elenco,
+    ],
+  });
+}
 
 /**
  * Le sezioni della sintesi: [{ nome, stato, corpo }]. Il testo prima del primo titolo è una
@@ -56,8 +105,7 @@ export function apriSintesi(progetto) {
       el("p.meta", { style: "margin-top:6px" }, "Testo semplice: «## » per ogni tema, sotto «Stato: …» se vuoi, poi «- » per gli elenchi. L'AI ne propone una versione aggiornata dopo ogni nota del diario."),
     ],
     onConfirm: () => {
-      update("projects", progetto.id, { sintesi: area.value.trim(), sintesiAt: new Date() });
-      toast("Sintesi salvata");
+      salvaSintesi(progetto, area.value, "mano").then(() => toast("Sintesi salvata"), () => toast("Non sono riuscito a salvare"));
     },
   });
 }

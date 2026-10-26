@@ -518,6 +518,14 @@ html[data-colore] .pagina-progetto .fascia > span { color: var(--c-testo); }
 html[data-colore] .pagina-progetto .tema--aperto { border-left: 2px solid var(--c-pieno); padding-left: 10px; margin-left: -12px; }
 html[data-colore] .pagina-progetto .btn--piatto svg { color: var(--c-testo); }
 
+/* Versioni della sintesi (components/sintesi.js, apriVersioni) */
+.versione { border-bottom: 1px solid var(--linea); }
+.versione__testa { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 14px 0; font-size: 15px; color: inherit; }
+.versione__testa .spazio { flex: 1; }
+.versione__testa > svg { width: 16px; height: 16px; color: var(--inchiostro-3); flex: none; }
+.versione__testa[aria-expanded="true"] > svg { transform: rotate(180deg); }
+.versione__testo { padding: 0 0 8px 10px; border-left: 1px solid var(--linea-forte); margin-bottom: 8px; }
+
 /* Pagina del progetto (modules/progetto): riga di contesto, lezioni, temi della sintesi */
 .progetto__riga { display: flex; align-items: center; gap: 4px; padding: 10px 0 0; }
 .progetto__riga .spazio { flex: 1; }

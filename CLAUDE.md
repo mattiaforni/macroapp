@@ -200,6 +200,10 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
       `<html data-colore>`) prende il posto dell'accento su pillole attive, +, giorni, etichette dei temi,
       nome del tema aperto, pallino accanto al titolo e nel menu. Variabili `--c-<colore>*` in base.css,
       chiaro e notte. Primo caso: Tennis giallo (richiesta di Mattia).
+      **Storico della sintesi** (26/10, richiesta di Mattia): ogni cambio (spunta della proposta, modifica a mano,
+      ripristino) mette la versione precedente in `projects.sintesiStorico` (ultime 10, `{ testo, at, origine }`),
+      sempre via `salvaSintesi` in components/sintesi.js. «Versioni» nella vista Sintesi: si rileggono e si
+      ripristinano (l'attuale finisce nello storico).
 - [ ] Diario per progetto, seguiti: importare lo storico delle lezioni dalle chat del progetto Claude
       (esportazione dei dati di claude.ai); registrare nel diario con `transcribe()` (Gemini: un parlato
       di pochi minuti passa da onCall, senza Storage); valutare con le note vere quante precedenti servono

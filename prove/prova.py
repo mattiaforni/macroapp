@@ -477,6 +477,24 @@ with sync_playwright() as p:
         t.fill(t.input_value() + "\n\n## Volée\n- Racchetta davanti")
         conferma(pg)
         pg.wait_for_selector(".tema__nome >> text=Volée")
+        # Storico: la versione dell'AI è tra le versioni, si rilegge e si ripristina
+        pg.click("button.btn--piatto >> text=Versioni")
+        pg.wait_for_selector("#foglio .versione")
+        assert pg.locator("#foglio .versione").count() == 1, "una versione precedente (quella dell'AI)"
+        assert "dall'AI" in pg.locator("#foglio .versione__testa").inner_text()
+        pg.click("#foglio .versione__testa")
+        pg.wait_for_selector("#foglio .versione__testo h4 >> text=Dritto")
+        assert pg.locator("#foglio .versione__testo h4 >> text=Volée").count() == 0, "la versione vecchia non ha Volée"
+        pg.wait_for_timeout(150)
+        shot(pg, "17f-sintesi-versioni")
+        pg.click("#foglio button >> text=Ripristina questa versione")
+        pg.wait_for_timeout(300)
+        assert pg.locator(".tema__nome >> text=Volée").count() == 0, "ripristinata la versione senza Volée"
+        pg.click("button.btn--piatto >> text=Versioni")
+        pg.wait_for_selector("#foglio .versione")
+        assert pg.locator("#foglio .versione").count() == 2, "l'attuale è finita nello storico"
+        pg.click("#foglio button[aria-label='Indietro']")
+        pg.wait_for_timeout(200)
         # Dal menu si torna alla pagina; il Diario del progetto dal pulsante
         menu(pg, "Tennis")
         pg.wait_for_selector("#page-title >> text=Tennis")
