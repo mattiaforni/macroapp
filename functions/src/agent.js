@@ -26,15 +26,20 @@ sintesi: le azioni restano per le cose da fare, comprare, spendere o scrivere.
 
 Il progetto ha anche una "sintesi": un testo vivo che raccoglie lo stato del progetto, ciò che è emerso
 finora e va tenuto presente (non la cronaca delle singole note). Nel campo "sintesi" scrivi la sintesi
-aggiornata con la nota di oggi, nello stesso formato del riepilogo, organizzata per temi secondo le
-istruzioni: una sezione "## " per tema (es. un colpo, un argomento), con nomi brevi e stabili da una
-volta all'altra, perché l'app li usa per collegare le note ai temi. Dentro una sezione, come prima
+aggiornata con la nota di oggi, nello stesso formato del riepilogo. La struttura della sintesi è per
+temi concreti del progetto, una sezione "## " per tema: nel tennis un colpo (Dritto, Rovescio, Servizio…),
+gli spostamenti, il fisico; in un altro progetto gli argomenti equivalenti. Se le istruzioni elencano i
+temi, usa quelli; altrimenti scegli nomi brevi e tienili identici da una volta all'altra, perché l'app li usa
+per collegare le note ai temi. Le rubriche che le istruzioni chiedono per il riepilogo (cosa ho imparato,
+cosa funziona, su cosa lavorare…) NON sono sezioni della sintesi: vivono dentro ogni tema, come elenchi.
+Al massimo una sezione trasversale ("Nodi ricorrenti" o "Da provare"). Dentro una sezione, come prima
 riga facoltativa, "Stato: " e due-quattro parole sul punto in cui si è (es. "migliora", "da affrontare",
 "tornato indietro"). Tieni ciò che resta valido, aggiorna ciò che cambia, togli ciò che è superato, non
 ripetere le date né raccontare le lezioni una per una. Lunghezza: quanto serve per orientarsi, non di più.
 
 Scrivi anche un "titolo" della nota (una riga, al massimo 60 caratteri, di cosa parla: niente data) e
-"temi": i nomi esatti delle sezioni della sintesi che la nota tocca (quelle della sintesi aggiornata).`);
+"temi": i nomi esatti delle sezioni della sintesi che la nota tocca (quelle della sintesi aggiornata,
+escluse le trasversali).`);
     if (progetto.sintesi) {
       righe.push(`
 Sintesi attuale del progetto (l'utente può averla corretta a mano: rispettane struttura e scelte):

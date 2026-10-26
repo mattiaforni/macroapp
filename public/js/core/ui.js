@@ -99,6 +99,23 @@ export function sceltaVisibilita(value, onChange) {
   return wrap;
 }
 
+/** I colori che un progetto può scegliere (variabili --c-<nome> in base.css). */
+export const COLORI = [["giallo", "Giallo pallina"], ["arancio", "Arancio"], ["azzurro", "Azzurro"], ["rosa", "Rosa"], ["verde", "Verde"]];
+
+/** Cerchietti per scegliere il colore di un progetto: nessuno + COLORI. Ritorna il nodo; onChange(valore). */
+export function sceltaColore(value, onChange) {
+  const wrap = el("div.colori");
+  function draw() {
+    wrap.replaceChildren(
+      el("button.colore.colore--nessuno", { type: "button", "aria-label": "Nessun colore", "aria-pressed": value ? "false" : "true", onclick: () => { value = ""; draw(); onChange(""); } }, icon("chiudi")),
+      ...COLORI.map(([v, l]) => el("button.colore", { type: "button", "data-colore": v, "aria-label": l, "aria-pressed": v === value ? "true" : "false",
+        onclick: () => { value = v; draw(); onChange(v); } }, v === value ? icon("spunta") : null)),
+    );
+  }
+  draw();
+  return wrap;
+}
+
 /** Il "+" in basso a destra: lo stesso in ogni pagina. */
 export function fab(label, onclick) {
   return el("button.fab.fab--tondo", { type: "button", "aria-label": label, title: label, onclick }, icon("piu"));

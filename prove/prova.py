@@ -371,6 +371,8 @@ with sync_playwright() as p:
         pg.click("button.pillola >> text=Progetto")
         pg.fill("#foglio input[placeholder='Nome del progetto']", "Tennis")
         pg.fill("#foglio textarea", "Riassumi cosa mi ha insegnato il maestro e cosa ricordare.")
+        pg.click("#foglio .colore[data-colore='giallo']")
+        assert pg.locator("#foglio .colore[data-colore='giallo'][aria-pressed='true']").count() == 1
         pg.wait_for_timeout(150)
         shot(pg, "15-progetto-istruzioni")
         conferma(pg)
@@ -421,6 +423,7 @@ with sync_playwright() as p:
         step[0] = "pagina del progetto"
         pg.click("button.btn--piatto >> text=Pagina del progetto")
         pg.wait_for_selector("#page-title >> text=Tennis")
+        pg.wait_for_selector("html[data-colore='giallo'] .pagina-progetto")
         pg.wait_for_selector(".tema__nome >> text=Dritto")
         assert pg.locator(".tema", has_text="Dritto").locator(".tema__stato--bene >> text=migliora").count() == 1, "stato del tema"
         assert "1 lezione" in pg.locator(".tema", has_text="Dritto").inner_text(), "la nota è collegata al tema"
@@ -479,6 +482,7 @@ with sync_playwright() as p:
         pg.wait_for_selector("#page-title >> text=Tennis")
         pg.click("button.btn--piatto >> text=Diario")
         pg.wait_for_selector(".schede a[aria-current='page'][href='#/diario']")
+        assert pg.locator("html[data-colore]").count() == 0, "fuori dalla pagina del progetto il colore se ne va"
         pg.wait_for_selector("button.pillola.on >> text=Tennis")
         pg.wait_for_selector(".nota__riepilogo li >> text=Servizio: lancio più avanti")
         # In «Tutte» la nota porta il nome del progetto; le altre note restano

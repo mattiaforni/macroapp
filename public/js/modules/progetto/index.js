@@ -210,6 +210,9 @@ export function mount(container) {
     if (!progetto || !dati.pronta()) return;
     nomeCorrente = progetto.name;
     if (titolo) titolo.textContent = progetto.name;
+    // Il colore del progetto: sulla pagina e, per il titolo e il +, su <html>.
+    if (progetto.colore) document.documentElement.dataset.colore = progetto.colore; else delete document.documentElement.dataset.colore;
+    container.classList.add("pagina-progetto");
     const aperti = tasks.filter((t) => !t.done).length;
     const riga = [
       `${note.length} ${note.length === 1 ? "lezione" : "lezioni"}`,
@@ -249,5 +252,5 @@ export function mount(container) {
   const stop2 = watchMine(NOTE, { extra: [where("projectId", "==", progettoId)], max: 300 }, (docs) => { note = docs; dati.arriva("note"); render(); });
   const stop3 = watchVisible("tasks", {}, (docs) => { tasks = docs.filter((t) => t.projectId === progettoId); dati.arriva("task"); render(); });
   const stop4 = watchPending((docs) => { proposte = docs; render(); });
-  return () => { dati.ferma(); stop1(); stop2(); stop3(); stop4(); piu.remove(); };
+  return () => { dati.ferma(); stop1(); stop2(); stop3(); stop4(); piu.remove(); delete document.documentElement.dataset.colore; container.classList.remove("pagina-progetto"); };
 }

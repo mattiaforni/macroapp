@@ -30,7 +30,7 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 |---|---|
 | `app.js` | guscio: accesso, barra in basso, pulsante del menu, router, service worker, ricorrenti all'avvio |
 | `core/router.js` | router a hash; `vaiA(id, apri)` + `richiesto(id, apri)`: il menu chiede a una pagina di aprire un suo foglio. Passaggi tra le pagine con View Transitions (`<html data-passaggio>` = `entra` / `torna`): vaiA entra sempre, il resto lo decide `transizione(da, a)` in app.js |
-| `core/ui.js` | `el()`, icone disegnate a mano (`D`), date, importi, pillole; `attesa(fonti, render)`: prima comparsa di una pagina quando sono arrivate tutte le sue fonti (max 400 ms), e «vuoto» solo per una fonte arrivata |
+| `core/ui.js` | `el()`, icone disegnate a mano (`D`), date, importi, pillole, `sceltaColore` (cerchietti dei colori dei progetti, `COLORI`); `attesa(fonti, render)`: prima comparsa di una pagina quando sono arrivate tutte le sue fonti (max 400 ms), e «vuoto» solo per una fonte arrivata |
 | `core/db.js` | `create` (non aspetta il server, ritorna `{id, saved}`), `update`, `watchVisible`, `readVisible`; dopo le scritture condivise di spese, task e lista chiama `segnala` (notifiche). Ascolti condivisi: la stessa query è un solo `onSnapshot`, che resta aperto 10 minuti dopo l'uscita dalla pagina; i dati già noti arrivano subito (microtask), quindi una pagina rimontata o un filtro già usato si disegnano pieni al primo fotogramma. `chiudiAscolti` all'uscita dall'account |
 | `core/notifiche.js` | notifiche push: `attiva`/`disattiva` su questo telefono (token in `users.dispositivi`), categorie (`users.notifiche`), `prova`, `segnala` → funzione `avvisa`; il disegno e il tocco della notifica stanno in `sw.js` |
 | `core/household.js` | casa, nomi dei membri (`memberNames`), `nomeDi`, `updateHousehold` (es. categorie del manuale) |
@@ -191,6 +191,15 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
       Da verificare con le note vere: che i nomi dei temi restino stabili da una lezione all'altra.
       La data di una nota si cambia dal suo foglio (pillola «Giorno», come in Spese): Mattia inserisce le
       lezioni passate per partire dalla stessa base del progetto Claude; l'ordine ovunque segue `createdAt`.
+      26/10, 11:10: la prima sintesi vera aveva come sezioni le rubriche delle istruzioni («Nodi ricorrenti»,
+      «Stato per colpo», «Su cosa lavorare», «Fisico»), quindi i temi delle note erano quelli e i contatori
+      inutili. Il prompt ora dice che le sezioni sono i temi concreti (un colpo, gli spostamenti, il fisico) e
+      che le rubriche delle istruzioni vivono dentro ogni tema; se le istruzioni elencano i temi, usa quelli.
+      **Colore del progetto** (`projects.colore`: giallo pallina, arancio, azzurro, rosa, verde; scelta nel
+      foglio del progetto, `sceltaColore` in ui.js): sulla pagina del progetto (`.pagina-progetto`, con
+      `<html data-colore>`) prende il posto dell'accento su pillole attive, +, giorni, etichette dei temi,
+      nome del tema aperto, pallino accanto al titolo e nel menu. Variabili `--c-<colore>*` in base.css,
+      chiaro e notte. Primo caso: Tennis giallo (richiesta di Mattia).
 - [ ] Diario per progetto, seguiti: importare lo storico delle lezioni dalle chat del progetto Claude
       (esportazione dei dati di claude.ai); registrare nel diario con `transcribe()` (Gemini: un parlato
       di pochi minuti passa da onCall, senza Storage); valutare con le note vere quante precedenti servono

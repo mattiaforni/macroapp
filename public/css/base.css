@@ -40,6 +40,13 @@
   --ombra: 0 1px 2px rgba(31,31,28,.05), 0 10px 30px -18px rgba(31,31,28,.4);
   --velo: rgba(31,31,28,.32);
 
+  /* Colori dei progetti (scelta nel foglio del progetto): pieno, tinta di fondo, testo leggibile sul fondo, testo sul pieno */
+  --c-giallo: #D4E600;  --c-giallo-tinta: #F2F7C4;  --c-giallo-testo: #6E7A00;  --c-giallo-su: #1F1F1C;
+  --c-arancio: #F28C28; --c-arancio-tinta: #FBE4CF; --c-arancio-testo: #A9540A; --c-arancio-su: #1F1F1C;
+  --c-azzurro: #4FA3D8; --c-azzurro-tinta: #D9ECF7; --c-azzurro-testo: #2B6E9C; --c-azzurro-su: #1F1F1C;
+  --c-rosa: #E26C8E;    --c-rosa-tinta: #F9DDE6;    --c-rosa-testo: #B23E63;    --c-rosa-su: #1F1F1C;
+  --c-verde: #2F7A55;   --c-verde-tinta: #E2F0E8;   --c-verde-testo: #2F7A55;   --c-verde-su: #FFFFFF;
+
   --ui: "Instrument Sans", system-ui, -apple-system, sans-serif;
   --display: "Instrument Serif", Georgia, serif;
   --barra: calc(58px + env(safe-area-inset-bottom));
@@ -78,6 +85,12 @@
 
   --ombra: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.7);
   --velo: rgba(0,0,0,.5);
+
+  --c-giallo: #DDF23A;  --c-giallo-tinta: #33380F;  --c-giallo-testo: #DDF23A;  --c-giallo-su: #161615;
+  --c-arancio: #F5A14F; --c-arancio-tinta: #3E2A14; --c-arancio-testo: #F5A14F; --c-arancio-su: #161615;
+  --c-azzurro: #6FB8E6; --c-azzurro-tinta: #16303E; --c-azzurro-testo: #6FB8E6; --c-azzurro-su: #161615;
+  --c-rosa: #EE86A4;    --c-rosa-tinta: #3E1F2A;    --c-rosa-testo: #EE86A4;    --c-rosa-su: #161615;
+  --c-verde: #5BB98A;   --c-verde-tinta: #1E3A2C;   --c-verde-testo: #5BB98A;   --c-verde-su: #161615;
   color-scheme: dark;
 }
 
@@ -479,6 +492,31 @@ a.pillola { text-decoration: none; }
 
 svg.mini { width: 13px; height: 13px; vertical-align: -2px; color: var(--inchiostro-3); }
 select.pillola { appearance: none; -webkit-appearance: none; padding-right: 14px; }
+
+/* Colore di un progetto: cerchietti per sceglierlo; --p* valgono sulla pagina del progetto e in testata */
+.colori { display: flex; gap: 10px; padding-top: 2px; }
+.colore { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--linea-forte); background: var(--c-pieno); color: var(--c-su); display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.colore svg { width: 15px; height: 15px; }
+.colore--nessuno { background: transparent; color: var(--inchiostro-3); }
+.colore--nessuno[aria-pressed="true"] { border-color: var(--inchiostro); color: var(--inchiostro); }
+.colore[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--carta), 0 0 0 3.5px var(--c-pieno); }
+.colore--pallino { width: 18px; height: 18px; border: 0; margin: 0 1px; }
+[data-colore="giallo"]  { --c-pieno: var(--c-giallo);  --c-tinta: var(--c-giallo-tinta);  --c-testo: var(--c-giallo-testo);  --c-su: var(--c-giallo-su); }
+[data-colore="arancio"] { --c-pieno: var(--c-arancio); --c-tinta: var(--c-arancio-tinta); --c-testo: var(--c-arancio-testo); --c-su: var(--c-arancio-su); }
+[data-colore="azzurro"] { --c-pieno: var(--c-azzurro); --c-tinta: var(--c-azzurro-tinta); --c-testo: var(--c-azzurro-testo); --c-su: var(--c-azzurro-su); }
+[data-colore="rosa"]    { --c-pieno: var(--c-rosa);    --c-tinta: var(--c-rosa-tinta);    --c-testo: var(--c-rosa-testo);    --c-su: var(--c-rosa-su); }
+[data-colore="verde"]   { --c-pieno: var(--c-verde);   --c-tinta: var(--c-verde-tinta);   --c-testo: var(--c-verde-testo);   --c-su: var(--c-verde-su); }
+/* Sulla pagina del progetto il colore prende il posto dell'accento: pillole attive, +, giorni, temi, etichette */
+html[data-colore] .testata__titolo::after { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--c-pieno); margin: 0 0 14px 8px; vertical-align: baseline; }
+html[data-colore] .pagina-progetto .pillola.on { background: var(--c-pieno); border-color: var(--c-pieno); color: var(--c-su); }
+html[data-colore] .pagina-progetto .fab { background: var(--c-pieno); color: var(--c-su); }
+html[data-colore] .pagina-progetto .lezione__giorno b { color: var(--c-testo); }
+html[data-colore] .lezione__temi .etichetta, html[data-colore] .pagina-progetto .tema__lezioni .pillola { background: var(--c-tinta); border-color: transparent; color: var(--c-testo); }
+html[data-colore] .pagina-progetto .tema__nome { color: var(--inchiostro); }
+html[data-colore] .pagina-progetto .tema--aperto .tema__nome, html[data-colore] .pagina-progetto .sintesi-testo h4 { color: var(--c-testo); }
+html[data-colore] .pagina-progetto .fascia > span { color: var(--c-testo); }
+html[data-colore] .pagina-progetto .tema--aperto { border-left: 2px solid var(--c-pieno); padding-left: 10px; margin-left: -12px; }
+html[data-colore] .pagina-progetto .btn--piatto svg { color: var(--c-testo); }
 
 /* Pagina del progetto (modules/progetto): riga di contesto, lezioni, temi della sintesi */
 .progetto__riga { display: flex; align-items: center; gap: 4px; padding: 10px 0 0; }

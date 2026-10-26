@@ -72,7 +72,11 @@ export function apriMenu() {
     if (!conPagina.length) return;
     progetti.replaceChildren(
       el("div.menu__titolo", {}, "Progetti"),
-      ...conPagina.map((p) => voce({ icona: "cartella", testo: p.name, vai: ["progetto"], prima: () => { try { localStorage.setItem(CHIAVE_PAGINA, p.id); } catch (e) {} } })),
+      ...conPagina.map((p) => {
+        const v = voce({ icona: "cartella", testo: p.name, vai: ["progetto"], prima: () => { try { localStorage.setItem(CHIAVE_PAGINA, p.id); } catch (e) {} } });
+        if (p.colore) v.firstChild.replaceWith(el("span.colore.colore--pallino", { "data-colore": p.colore }));
+        return v;
+      }),
     );
     progetti.hidden = false;
   }).catch(() => {});

@@ -2,12 +2,12 @@
 // prese dalla rubrica del manuale. Personali per impostazione predefinita; un progetto
 // condiviso rende condivisi i suoi task.
 //
-// projects { name, archived, istruzioni, sintesi, sintesiAt }
+// projects { name, archived, istruzioni, sintesi, sintesiAt, colore }
 //          istruzioni = per l'agente del diario: con queste, ogni nota del progetto riceve un riepilogo
 //          sintesi = lo stato del progetto, proposto dall'agente e confermato; si legge in modules/progetto
 // tasks    { text, done, doneAt, due ("AAAA-MM-GG" o null), projectId, peopleIds[], people, note }
 //          people = nomi delle persone in chiaro, copia di peopleIds per chi non vede la voce in rubrica
-import { el, icon, toast, fascia, vuoto, attesa, sceltaVisibilita, fmtDate, isoGiorno, toDate, fab } from "../../core/ui.js";
+import { el, icon, toast, fascia, vuoto, attesa, sceltaVisibilita, sceltaColore, fmtDate, isoGiorno, toDate, fab } from "../../core/ui.js";
 import { create, update, remove, watchVisible, readVisible, VIS } from "../../core/db.js";
 import { openSheet, campo } from "../../components/sheet.js";
 import { sceltaPersone } from "../../components/persone.js";
@@ -150,6 +150,7 @@ export async function apriTask(esistente = null, prefill = {}, progettiNoti = nu
 /** Foglio del progetto: nome, visibilità, istruzioni per l'agente del diario. Invio sul nome salva. */
 export function apriProgetto(esistente = null, onCreato) {
   let visibility = esistente?.visibility || VIS.PRIVATE;
+  let colore = esistente?.colore || "";
   const nome = el("input.linea-input", { value: esistente?.name || "", placeholder: "Nome del progetto", autofocus: true, enterkeyhint: "done", style: "font-size:19px" });
   nome.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); sheet.confirm(); } });
   const istruzioni = el("textarea", {
@@ -164,6 +165,7 @@ export function apriProgetto(esistente = null, onCreato) {
       el("p.meta", { style: "margin:-8px 0 18px" }, "Un progetto condiviso è visibile ai due membri della casa, insieme ai suoi task. Le note del diario restano solo tue."),
       campo("Istruzioni per il diario", istruzioni),
       el("p.meta", { style: "margin-top:-10px" }, "Facoltative. Con le istruzioni, l'AI scrive un riepilogo di ogni nota del diario di questo progetto e ti propone la sintesi aggiornata del progetto."),
+      el("div.campo", { style: "margin-top:18px" }, el("label", {}, "Colore della pagina"), sceltaColore(colore, (c) => { colore = c; })),
       esistente ? el("div.foglio__piede", {},
         el("button.btn", { onclick: () => { update(PROJ, esistente.id, { archived: true }); sheet.close(); toast("Progetto archiviato"); } }, "Archivia"),
         el("button.btn.btn--pericolo", { onclick: async () => {
@@ -176,7 +178,7 @@ export function apriProgetto(esistente = null, onCreato) {
     onConfirm: () => {
       const name = nome.value.trim();
       if (!name) { nome.focus(); return false; }
-      const dati = { name, istruzioni: istruzioni.value.trim() };
+      const dati = { name, istruzioni: istruzioni.value.trim(), colore };
       if (esistente) update(PROJ, esistente.id, { ...dati, visibility });
       else onCreato?.(create(PROJ, { ...dati, name: cap(name), archived: false }, visibility).id);
     },
