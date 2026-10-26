@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Sorgente dei PNG «maskable» e dell'icona Apple: fondo pieno, il disegno resta dentro la zona sicura
+       (cerchio di raggio 25,6 al centro), così il launcher può ritagliarla tonda, quadrata o a goccia. -->
+  <rect width="64" height="64" fill="#1F1F1C"/>
+  <circle cx="24" cy="32" r="16" fill="#D4E600"/>
+  <circle cx="40" cy="32" r="16" fill="#6FAE9F"/>
+  <path d="M32 18.144A16 16 0 0 1 32 45.856A16 16 0 0 1 32 18.144Z" fill="#1F1F1C"/>
+</svg>

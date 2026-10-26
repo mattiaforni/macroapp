@@ -54,7 +54,7 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 1. **Design**: Mattia è preciso. Grammatica presa dall'app cura-del-verde: Instrument Sans/Serif,
    icone a linea sottile, righe con filetti invece di riquadri, campi con la sola linea sotto,
    pillole, fogli a tutta altezza. Colori solo dalle variabili in `css/base.css`.
-   Identità visiva definitiva ancora da decidere: non inventarla senza che lo chieda.
+   Identità visiva definitiva ancora da decidere (l'icona sì, vedi Stato): non inventarla senza che lo chieda.
    Movimento come in Leghe Fantacalcio, solo opacità (durate `--t-*` in base.css): tra le sezioni
    della barra in basso nessun passaggio; menu, pulsanti che portano altrove e fogli entrano sfumando
    sul fondo (uscita breve, poi entrata); indietro e chiusura con una dissolvenza breve. Niente
@@ -226,7 +226,16 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
       nella mail/WhatsApp). Decidere se serve una pagina o se togliere la conferma.
 - [ ] Riga di contesto per pagina, stile Leghe Fantacalcio (Task «2 in ritardo · 3 oggi»,
       Spese «Ottobre · X ti deve…»)
-- [ ] Identità visiva definitiva: da decidere con Mattia
+- [x] **Icona** (26/10, scelta di Mattia tra una trentina di varianti): due palline sovrapposte, giallo pallina
+      (`--c-giallo`) a sinistra e verdolino (`--tessera-verde`) a destra, la parte in comune del colore del fondo
+      (inchiostro #1F1F1C). Le due persone e ciò che condividono; il giallo richiama il tennis. Mattia usa le
+      icone tonde: palline di raggio 16 su 64, dentro la zona sicura del ritaglio. Sorgenti `icons/icon.svg`
+      (tonda, favicon e «any») e `icons/icon-maskable.svg` (fondo pieno: PNG maskable e `apple-touch-icon.png`).
+      I PNG si rigenerano dagli SVG (Chromium, sfondo trasparente). Scartato lo sfondo carta: il giallo non si vedeva.
+      Sui telefoni: Chrome rilegge il manifest all'avvio (al più una volta al giorno) e aggiorna l'app
+      installata con nome e icona nuovi, senza reinstallarla; da Chrome 144 può chiedere conferma
+      («Rivedi aggiornamento dell'app»). Il cambio di nome del 25/10 segue la stessa strada.
+- [ ] Identità visiva definitiva (resto dell'app): da decidere con Mattia
 
 Bassa priorità (Mattia, 23/10: la revisione delle spese è meno rilevante), previste in
 `docs/ARCHITETTURA.md`: regole di spesa apprese (`expense_rules`: c'è la regola Firestore, nessuno
