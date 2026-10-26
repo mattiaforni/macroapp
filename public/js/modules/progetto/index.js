@@ -73,8 +73,8 @@ export function mount(container) {
   function nuova() {
     apriNota({
       progetti, projectId: progetto.id,
-      onSalva: ({ text, projectId }) => {
-        const { id: entryId, saved } = create(NOTE, { text, projectId, analyzed: false }, VIS.PRIVATE);
+      onSalva: ({ text, projectId, createdAt }) => {
+        const { id: entryId, saved } = create(NOTE, { text, projectId, analyzed: false, ...(createdAt ? { createdAt } : {}) }, VIS.PRIVATE);
         if (analisiAutomatica()) analizza(entryId, saved);
         if (vista !== "lezioni") scegli("lezioni");
       },

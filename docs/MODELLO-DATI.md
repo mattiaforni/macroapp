@@ -66,7 +66,7 @@ proprietario (anche nelle regole), anche quando il progetto è condiviso. `riepi
 (`analyzeEntry`) per le note di un progetto con `istruzioni`, tenendo conto delle 8 note precedenti dello
 stesso progetto; l'utente lo corregge dal foglio della nota. Con il riepilogo arrivano `titolo` (una riga) e
 `temi` (nomi delle sezioni della sintesi che la nota tocca: la pagina del progetto collega così le lezioni ai
-temi). Indici: `ownerUid+createdAt` e
+temi). `createdAt` si può cambiare dal foglio della nota (lezioni inserite dopo). Indici: `ownerUid+createdAt` e
 `ownerUid+projectId+createdAt` (Diario filtrato e note precedenti per l'agente).
 
 ## `notes`

@@ -448,6 +448,17 @@ with sync_playwright() as p:
         pg.click("button.pillola >> text=Lezioni")
         pg.wait_for_selector(".lezione__titolo >> text=Spalla chiusa sul dritto")
         assert pg.locator(".lezione__temi .etichetta >> text=Rovescio a due mani").count() == 1
+        # Una lezione passata: dal + con la data cambiata finisce in fondo, nel suo mese
+        pg.click("button.fab")
+        pg.wait_for_selector("#foglio textarea")
+        pg.fill("#foglio textarea", "prima lezione, solo palleggio da fondo")
+        assert pg.locator("#foglio button.pillola", has_text="Oggi").count() == 1
+        pg.locator("#foglio input[type=date]").evaluate("i => { i.value = '2026-09-29'; i.dispatchEvent(new Event('change')); }")
+        assert pg.locator("#foglio button.pillola", has_text="29 set").count() == 1, "la pillola mostra la data scelta"
+        conferma(pg)
+        pg.wait_for_selector(".fascia >> text=Settembre 2026")
+        assert pg.locator(".lezione").count() == 2
+        assert pg.locator(".lezione").last.locator(".lezione__giorno b").inner_text() == "29", "la nota retrodatata è in fondo, nel suo mese"
         assert pg.locator(".fascia").count() >= 1, "fascia del mese"
         pg.wait_for_timeout(200)
         shot(pg, "17e-progetto-lezioni")

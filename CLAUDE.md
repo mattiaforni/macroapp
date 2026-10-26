@@ -189,6 +189,8 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
       tema → lezioni lo fa l'app incrociando `temi` con i nomi delle sezioni. Le note analizzate prima del 26/10
       non hanno titolo né temi finché non si rianalizzano (titolo di ripiego dalla prima riga del riepilogo).
       Da verificare con le note vere: che i nomi dei temi restino stabili da una lezione all'altra.
+      La data di una nota si cambia dal suo foglio (pillola «Giorno», come in Spese): Mattia inserisce le
+      lezioni passate per partire dalla stessa base del progetto Claude; l'ordine ovunque segue `createdAt`.
 - [ ] Diario per progetto, seguiti: importare lo storico delle lezioni dalle chat del progetto Claude
       (esportazione dei dati di claude.ai); registrare nel diario con `transcribe()` (Gemini: un parlato
       di pochi minuti passa da onCall, senza Storage); valutare con le note vere quante precedenti servono

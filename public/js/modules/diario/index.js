@@ -13,7 +13,7 @@
 // journal_entries { text, projectId, riepilogo, titolo, temi, riepilogoAt, analyzed, analyzedAt, analysisError }
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-functions.js";
 import { functions } from "../../core/firebase.js";
-import { el, icon, toast, fascia, vuoto, attesa, toDate, giornoRelativo, fab, testoRicco } from "../../core/ui.js";
+import { el, icon, toast, fascia, vuoto, attesa, toDate, giornoRelativo, fab, testoRicco, isoGiorno, stessoGiorno, fmtDate } from "../../core/ui.js";
 import { openSheet } from "../../components/sheet.js";
 import { create, update, remove, watchMine, watchVisible, readVisible, VIS, where } from "../../core/db.js";
 import { watchPending, renderAzione } from "../../components/proposals.js";
@@ -65,6 +65,22 @@ export function apriNota({ esistente = null, testo = "", progetti = [], projectI
   const riepilogo = esistente?.riepilogo ? el("textarea", { rows: Math.min(16, esistente.riepilogo.split("\n").length + 1) }) : null;
   if (riepilogo) riepilogo.value = esistente.riepilogo;
 
+  // La data della nota si può cambiare (es. lezioni passate inserite dopo): pillola come in Spese.
+  // Cambiandola si tiene l'ora che la nota aveva; una nota nuova in un altro giorno sta a mezzogiorno.
+  const originale = toDate(esistente?.createdAt) || new Date();
+  let quando = originale;
+  const dataInput = el("input", { type: "date", value: isoGiorno(quando), "aria-label": "Data della nota", style: "position:absolute;opacity:0;pointer-events:none;width:1px;height:1px" });
+  const dataBtn = el("button.pillola", { type: "button" });
+  const disegnaData = () => dataBtn.replaceChildren(icon("calendario"), stessoGiorno(quando, new Date()) ? "Oggi" : fmtDate(quando));
+  dataBtn.addEventListener("click", () => { try { dataInput.showPicker(); } catch (e) { dataInput.style.pointerEvents = "auto"; dataInput.focus(); } });
+  dataInput.addEventListener("change", () => {
+    if (!dataInput.value) return;
+    const [a, m, g] = dataInput.value.split("-").map(Number);
+    quando = esistente ? new Date(a, m - 1, g, originale.getHours(), originale.getMinutes()) : new Date(a, m - 1, g, 12, 0);
+    disegnaData();
+  });
+  disegnaData();
+
   function trasforma(tipo) {
     const text = area.value.trim();
     if (!text) { toast("Scrivi prima qualcosa"); area.focus(); return; }
@@ -88,6 +104,7 @@ export function apriNota({ esistente = null, testo = "", progetti = [], projectI
       el("div.taccuino", { style: riepilogo ? "padding-top:0" : null }, area),
       esistente ? null : el("p.meta", { style: "margin-top:6px" }, "Per la voce usa il microfono della tastiera."),
       attivi.length ? el("div", { style: "margin-top:16px" }, el("div.etichetta-campo", {}, "Progetto"), progetto.node) : null,
+      el("div", { style: "margin-top:16px" }, el("div.etichetta-campo", {}, "Giorno"), el("div.segmenti", { style: "padding-top:0;position:relative" }, dataBtn, dataInput)),
       esistente ? null : el("div", { style: "margin-top:16px" },
         el("div.etichetta-campo", {}, "Oppure trasformala subito in"),
         el("div.segmenti", { style: "padding-top:4px;flex-wrap:wrap" },
@@ -103,6 +120,7 @@ export function apriNota({ esistente = null, testo = "", progetti = [], projectI
       if (!text) { area.focus(); return false; }
       const dati = { text, projectId: progetto.valore() };
       if (riepilogo) dati.riepilogo = riepilogo.value.trim();
+      if (quando.getTime() !== originale.getTime()) dati.createdAt = quando;
       onSalva(dati);
     },
   });
@@ -188,8 +206,8 @@ export function mount(container) {
   function nuova(testo = "") {
     apriNota({
       testo, progetti, projectId: filtro !== "tutte" ? filtro : null,
-      onSalva: ({ text, projectId }) => {
-        const { id: entryId, saved } = create(COLL, { text, projectId, analyzed: false }, VIS.PRIVATE);
+      onSalva: ({ text, projectId, createdAt }) => {
+        const { id: entryId, saved } = create(COLL, { text, projectId, analyzed: false, ...(createdAt ? { createdAt } : {}) }, VIS.PRIVATE);
         if (auto) analizza(entryId, saved);
       },
     });
