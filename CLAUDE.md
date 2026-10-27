@@ -270,6 +270,9 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
       ~2,5 volte. Costo stimato ~0,2 centesimi di dollaro al minuto (prezzi raddoppiati dal 2027); nel registro di
       `trascrivi` durata e token, mai il testo. Prova: Diagnosi con `provatrascrizione` (campione sintetico in functions/strumenti/campioni,
       con e senza contesto) o `node functions/strumenti/prova-trascrizione.mjs file.webm`.
+      27/10, sera: la Diagnosi ha dato `API_KEY_INVALID` per GEMINI_API_KEY (chiave in Secret Manager non valida):
+      Mattia ne crea una in AI Studio nel progetto macroapp-b9bd0 (che ha già la fatturazione per Firebase), nuova
+      versione del segreto, poi deploy e Diagnosi con `provatrascrizione`.
       **Da verificare dal telefono**: qualità rispetto all'app Claude su una lezione vera; su iPhone (audio/mp4 →
       `audio/m4a`) se Gemini lo accetta; se lo schermo si spegne, che la registrazione non si interrompa (wake lock).
       Possibile seguito, se Mattia lo vuole: salvare e analizzare subito dopo la trascrizione, senza passare dal campo.
