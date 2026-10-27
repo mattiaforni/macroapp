@@ -22,10 +22,12 @@ export async function reason({ system, user, schema, keys, provider = DEFAULT_PR
 }
 
 /**
- * transcribe({ audioBase64, mimeType, keys })
- * Oggi non usata (dettatura da tastiera). Pronta per quando si registrerà l'audio: Gemini lo accetta nativamente.
+ * transcribe({ audioBase64, mimeType, keys, contesto }) → { testo, uso }
+ * Note vocali del diario (function `trascrivi`). Claude non accetta audio: trascrive Gemini, che lo accetta
+ * nativamente. contesto = { progetto, istruzioni, temi, persone } (src/trascrizione.js) per scrivere giusti
+ * nomi e termini.
  */
-export async function transcribe({ audioBase64, mimeType, keys }) {
+export async function transcribe({ audioBase64, mimeType, keys, contesto }) {
   if (!keys.gemini) throw new Error("Trascrizione: chiave Gemini mancante");
-  return gemini.transcribe({ audioBase64, mimeType, key: keys.gemini });
+  return gemini.transcribe({ audioBase64, mimeType, key: keys.gemini, contesto });
 }

@@ -12,7 +12,8 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
   SDK Firebase dal CDN gstatic a versione fissata (11.3.0).
 - **Dati** su Firestore, progetto `macroapp-b9bd0`. Ogni documento di contenuto ha
   `ownerUid`, `householdId`, `visibility` (`shared` | `private`): vedi `docs/MODELLO-DATI.md`.
-- **Functions** in `functions/` (Node 24, europe-west1): `analyzeEntry` (agente del diario,
+- **Functions** in `functions/` (Node 24, europe-west1): `trascrivi` (nota vocale → testo con Gemini Flash e il
+  vocabolario del progetto, `src/trascrizione.js`; l'audio non si salva), `analyzeEntry` (agente del diario,
   provider AI intercambiabile in `src/ai/`; legge i documenti di Drive del progetto, `src/google/drive.js`; modello scelto dall'utente, `modelloPer` in `src/agent.js`, 300 s), `bank` (onCall con `azione`: elenco banche, avvio e
   conclusione del consenso, scollega, lettura a richiesta; `src/banking/enable.js`), `google` (account
   Google: collegamento una tantum con le spunte Contatti, Calendario e Drive, permessi di un'ora, `src/google/account.js`), `avvisa` (notifiche push,
@@ -24,8 +25,9 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
   li gestisce Mattia dalla console; dopo un aggiornamento serve un nuovo deploy.
   ANTHROPIC_API_KEY (dal 27/10) è una chiave dell'organizzazione Console dell'account col piano Max, collegata
   ai crediti API inclusi nel piano (100 $ al mese, scadono a fine mese, nessun metodo di pagamento): non
-  proporre di comprare crediti. Claude non accetta audio: una trascrizione richiederebbe un altro servizio,
-  e Mattia non vuole pagare altro (GEMINI_API_KEY è rimasta, ma `transcribe()` non è usata).
+  proporre di comprare crediti. Claude non accetta audio: le note vocali le trascrive Gemini con GEMINI_API_KEY
+  (function `trascrivi`, scelta di Mattia del 27/10: pochi centesimi al mese sul livello a pagamento di Google,
+  dove l'audio non è usato per migliorare i prodotti; sul livello gratuito sì).
   GOOGLE_OAUTH_CLIENT invece lo scrive il deploy, copiando ID e secret del client web dalla
   configurazione di Firebase Authentication (stesso client dell'accesso con Google).
 
@@ -51,6 +53,7 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 | `components/sintesi.js` | sintesi di un progetto (`projects.sintesi`): `sezioniSintesi` (una sezione «## » per tema, prima riga «Stato: …» facoltativa), `tonoStato`, foglio per correggerla |
 | `components/prodotto.js` | codice a barre: `scansiona()` (fotocamera con `BarcodeDetector`, altrimenti il codice scritto), `apriProdotto(ean, { inLista })` (scheda da Open Food Facts via function `prodotto`: indice e fascia, Nutri-Score, additivi con rischio EFSA, NOVA, bio, valori per 100 g; con `inLista` il campo «In lista come», «Preso» a destra e «Da comprare» a sinistra), `pallinoIndice`, `riassunto` |
 | `components/documenti.js` | documenti di Drive collegati a un progetto o a una voce del manuale: `sceltaDocumenti` (elenco + ricerca, in un foglio), `elencoDocumenti`, `rigaDocumento` |
+| `components/registratore.js` | nota vocale: `pulsanteRegistra({ inserisci, progetto })` per la barra del foglio della nota (Registra → tempo · Ferma → «Trascrivo…»), MediaRecorder webm/opus a 32 kbit/s, schermo acceso durante la registrazione, microfono liberato a Ferma o alla chiusura del foglio; manda a `trascrivi` |
 | `components/persone.js` | scelta delle persone di un task: suggerimenti dalla rubrica e da Google Contatti, persone nuove; una voce della rubrica non collegata e il contatto Google con lo stesso nome compaiono una volta sola, e sceglierla la collega |
 | `modules/*/index.js` | un modulo = `{ id, title, nav, icon, mount(container) → smonta }`, in `modules/registry.js` |
 | `modules/diario/index.js` | in cima «Prossimi giorni» (eventi del calendario della casa di oggi e dei due giorni dopo, non finiti, al più 4, righe di `rigaEvento`; solo se ce ne sono); note (anche dettate o condivise), filtro per progetto (`macroapp.diario.progetto`, lo scrive anche la pagina Task), riepilogo dell'AI con la trascrizione ripiegata, proposte sotto la nota. Esporta `apriNota`, `analizzaNota`, `titoloDi` (li usa la pagina Progetto) |
@@ -258,9 +261,20 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
       ripristino) mette la versione precedente in `projects.sintesiStorico` (ultime 10, `{ testo, at, origine }`),
       sempre via `salvaSintesi` in components/sintesi.js. «Versioni» nella vista Sintesi: si rileggono e si
       ripristinano (l'attuale finisce nello storico).
+- [x] **Note vocali** (27/10, richiesta di Mattia: «lo stesso flusso della dettatura nell'app Claude»). Nel foglio
+      della nota «Registra» in basso a sinistra: si parla quanto serve, «Ferma», la trascrizione si aggiunge al campo
+      e si salva come sempre (poi l'agente). Trascrive Gemini (`gemini-3.8-flash`, generateContent con l'audio in
+      linea) perché Claude non accetta audio, come nell'app Claude dove a Claude arriva il testo. Il prompt ha il
+      vocabolario: nome, istruzioni e temi della sintesi del progetto scelto nel foglio, nomi della rubrica. Scartato
+      `gemini-3.5-transcribe`: vocabolario solo come elenco di termini, audio da caricare con la Files API, costo
+      ~2,5 volte. Costo stimato ~0,2 centesimi di dollaro al minuto (prezzi raddoppiati dal 2027); nel registro di
+      `trascrivi` durata e token, mai il testo. Prova: Diagnosi con `provatrascrizione` (voce sintetica espeak-ng,
+      con e senza contesto) o `node functions/strumenti/prova-trascrizione.mjs file.webm`.
+      **Da verificare dal telefono**: qualità rispetto all'app Claude su una lezione vera; su iPhone (audio/mp4 →
+      `audio/m4a`) se Gemini lo accetta; se lo schermo si spegne, che la registrazione non si interrompa (wake lock).
+      Possibile seguito, se Mattia lo vuole: salvare e analizzare subito dopo la trascrizione, senza passare dal campo.
 - [ ] Diario per progetto, seguiti: importare lo storico delle lezioni dalle chat del progetto Claude
-      (esportazione dei dati di claude.ai); registrare nel diario con `transcribe()` (Gemini: un parlato
-      di pochi minuti passa da onCall, senza Storage); valutare con le note vere quante precedenti servono
+      (esportazione dei dati di claude.ai); valutare con le note vere quante precedenti servono
       e se la sintesi proposta rispetta le correzioni fatte a mano.
 - [x] **Lista per reparti** (25/10, scelta di Mattia tra tre anteprime: etichette con filetto). Reparti e
       ordine del giro sono un'ipotesi: da adattare quando Mattia dice in che ordine li trova nel suo

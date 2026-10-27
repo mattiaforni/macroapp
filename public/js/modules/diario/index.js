@@ -31,6 +31,7 @@ import { nomeModello } from "../../core/modelli.js";
 import { statoGoogle, suGoogle } from "../../core/google.js";
 import { calendarioCasa, leggiEventi, eventiNoti, suEventi } from "../../core/calendario.js";
 import { rigaEvento, inOrdine } from "../calendario/index.js";
+import { pulsanteRegistra } from "../../components/registratore.js";
 
 export const id = "diario";
 export const title = "Diario";
@@ -113,7 +114,7 @@ export function apriNota({ esistente = null, testo = "", progetti = [], projectI
       riepilogo ? el("div.campo", { style: "margin-top:14px" }, el("label", {}, "Riepilogo"), riepilogo) : null,
       riepilogo ? el("div.etichetta-campo", {}, "Trascrizione") : null,
       el("div.taccuino", { style: riepilogo ? "padding-top:0" : null }, area),
-      esistente ? null : el("p.meta", { style: "margin-top:6px" }, "Per la voce usa il microfono della tastiera."),
+      esistente ? null : el("p.meta", { style: "margin-top:6px" }, "Per la voce tocca «Registra» in basso: parla quanto vuoi, poi «Ferma»."),
       attivi.length ? el("div", { style: "margin-top:16px" }, el("div.etichetta-campo", {}, "Progetto"), progetto.node) : null,
       el("div", { style: "margin-top:16px" }, el("div.etichetta-campo", {}, "Giorno"), el("div.segmenti", { style: "padding-top:0;position:relative" }, dataBtn, dataInput)),
       esistente ? null : el("div", { style: "margin-top:16px" },
@@ -126,6 +127,15 @@ export function apriNota({ esistente = null, testo = "", progetti = [], projectI
         ),
       ),
     ],
+    // Nota vocale: la trascrizione si aggiunge a quello che c'è già nel campo.
+    azioni: [pulsanteRegistra({
+      progetto: () => progetto.valore(),
+      inserisci: (testo) => {
+        const prima = area.value.trimEnd();
+        area.value = prima ? `${prima}\n\n${testo}` : testo;
+        area.dispatchEvent(new Event("input", { bubbles: true }));
+      },
+    })],
     onConfirm: () => {
       const text = area.value.trim();
       if (!text) { area.focus(); return false; }

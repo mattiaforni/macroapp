@@ -103,6 +103,14 @@ export function httpsCallable(_f, name) {
   if (name === "bank") return bankFinto;
   if (name === "avvisa") return async (data) => ({ data: avvisaFinto(data) });
   if (name === "prodotto") return prodottoFinto;
+  // Trascrizione finta: segna cosa ha ricevuto (formato, dimensione, progetto) per le asserzioni della prova.
+  if (name === "trascrivi") return async (data) => {
+    await new Promise((r) => setTimeout(r, 300));
+    const viste = JSON.parse(sessionStorage.getItem("finto.trascrizioni") || "[]");
+    viste.push({ mimeType: data.mimeType, kb: Math.round((data.audio || "").length * 0.75 / 1024), projectId: data.projectId || null });
+    sessionStorage.setItem("finto.trascrizioni", JSON.stringify(viste));
+    return { data: { testo: "Lezione di oggi con Marco: rovescio a due mani e split step prima della risposta al servizio." } };
+  };
   return async (data) => {
     if (name === "google") return { data: google(data) };
     if (name !== "analyzeEntry") return { data: {} };

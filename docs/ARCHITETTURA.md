@@ -127,7 +127,9 @@ il segreto GOOGLE_OAUTH_CLIENT.
 
 ## Integrazioni previste
 
-- **Registrazione audio** del diario: `transcribe()` è già prevista (Gemini accetta audio nativo); oggi si usa la dettatura da tastiera.
+- **Note vocali** del diario (27/10): il telefono registra (components/registratore.js), la function `trascrivi` manda l'audio
+  a Gemini con il vocabolario del progetto e della rubrica (src/trascrizione.js) e restituisce il testo, che entra nel campo
+  della nota; poi tutto come una nota scritta. Claude non accetta audio. L'audio non viene salvato.
 - **Notifiche push** (FCM): lista condivisa, consensi bancari in scadenza.
 - **Web Share Target**: già dichiarato nel manifest; il contenuto condiviso diventa una proposta di appunto.
 

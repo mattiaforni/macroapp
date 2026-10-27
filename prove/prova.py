@@ -29,8 +29,9 @@ def menu(pg, voce):
     pg.click(f".menu__voce >> text={voce}")
 
 with sync_playwright() as p:
-    b = p.chromium.launch()
-    ctx = b.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=2, has_touch=False)
+    # Microfono finto (un tono) per la nota vocale, con il permesso già dato.
+    b = p.chromium.launch(args=["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"])
+    ctx = b.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=2, has_touch=False, permissions=["microphone"])
     pg = ctx.new_page()
     pg.on("pageerror", lambda e: errors.append(f"[{step[0]}] pageerror: {e}"))
     pg.on("console", lambda m: errors.append(f"[{step[0]}] console.{m.type}: {m.text}") if m.type in ("error","warning","log") else None)
@@ -969,6 +970,43 @@ with sync_playwright() as p:
         pg.fill("#foglio textarea", "Comprare il caffè")
         conferma(pg)
         pg.wait_for_selector(".nota__testa >> text=· Haiku", timeout=6000)
+
+        # ── Nota vocale: Registra in basso a sinistra, Ferma, la trascrizione entra nel campo ──
+        step[0] = "nota vocale"
+        # Si tengono i flussi del microfono per controllare che vengano chiusi.
+        pg.evaluate("""() => { const g = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices); window.__flussi = [];
+          navigator.mediaDevices.getUserMedia = async (c) => { const f = await g(c); window.__flussi.push(f); return f; }; }""")
+        liberi = "window.__flussi.length > 0 && window.__flussi.every((f) => f.getTracks().every((t) => t.readyState === 'ended'))"
+        pg.click("button.fab")
+        pg.fill("#foglio textarea", "Appunto scritto.")
+        pg.click("#foglio button.pillola >> text=Tennis")
+        registra = pg.locator("#foglio button[aria-label='Registra una nota vocale']")
+        box = registra.bounding_box()
+        assert box["y"] > 844 - 160, f"Registra nella barra in basso: {box}"
+        registra.click()
+        ferma = pg.locator("#foglio button[aria-label='Ferma la registrazione']")
+        ferma.wait_for(timeout=4000)
+        pg.wait_for_timeout(2300)
+        assert "0:02" in ferma.inner_text(), f"il tempo scorre: {ferma.inner_text()}"
+        shot(pg, "18a-registra")
+        ferma.click()
+        pg.wait_for_function("document.querySelector('#foglio textarea').value.includes('split step')", timeout=8000)
+        valore = pg.locator("#foglio textarea").input_value()
+        assert valore.startswith("Appunto scritto.\n\nLezione di oggi"), f"la trascrizione si aggiunge: {valore!r}"
+        viste = pg.evaluate("JSON.parse(sessionStorage.getItem('finto.trascrizioni') || '[]')")
+        assert len(viste) == 1 and viste[0]["mimeType"].startswith("audio/webm") and viste[0]["kb"] > 2, f"audio inviato: {viste}"
+        assert viste[0]["projectId"], f"con il progetto scelto: {viste}"
+        pg.locator("#foglio button[aria-label='Registra una nota vocale']").wait_for()
+        assert pg.evaluate(liberi), "microfono liberato dopo Ferma"
+        pg.wait_for_timeout(500)
+        shot(pg, "18-nota-vocale")
+        # Chiudendo il foglio durante la registrazione il microfono si libera e niente viene trascritto.
+        pg.locator("#foglio button[aria-label='Registra una nota vocale']").click()
+        ferma.wait_for(timeout=4000)
+        pg.click("#foglio button[aria-label='Indietro']")
+        pg.wait_for_timeout(800)
+        assert len(pg.evaluate("JSON.parse(sessionStorage.getItem('finto.trascrizioni') || '[]')")) == 1, "chiuso: niente trascrizione"
+        assert pg.evaluate(liberi), "microfono liberato chiudendo il foglio"
         print("FLUSSO COMPLETO")
     except Exception as e:
         shot(pg, "errore")

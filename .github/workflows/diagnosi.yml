@@ -23,6 +23,13 @@ on:
       istruzioni:
         description: "Istruzioni di un progetto per la prova dell'agente (vuoto = nota senza progetto)"
         default: ""
+      provatrascrizione:
+        description: "Prova la trascrizione con Gemini (chiave salvata) su un audio sintetico della frase qui sotto"
+        type: boolean
+        default: false
+      frase:
+        description: "Frase per la prova della trascrizione (letta da una voce sintetica)"
+        default: "Lezione di oggi con Marco. Abbiamo lavorato sul rovescio a due mani e sullo split step prima della risposta al servizio. Il dritto in top spin va meglio, ma devo chiudere prima la spalla."
       ripara:
         description: "Rendi la funzione chiamabile dall'app (invocatore pubblico; l'accesso lo controlla Firebase Auth nel codice)"
         type: boolean
@@ -83,13 +90,33 @@ jobs:
             ann warning "Chiave non leggibile da qui" < err.txt; exit 0
           fi
           echo "::add-mask::$K"
-          MODELLO=$(grep -oP 'const MODEL = "\K[^"]+' functions/src/ai/claude.js 2>/dev/null || echo claude-sonnet-5-5)
+          MODELLO=$(grep -oP 'sonnet: "\K[^"]+' functions/src/ai/claude.js 2>/dev/null || echo claude-sonnet-5-5)
           curl -s -o risposta.json -w "HTTP %{http_code} in %{time_total} s\n" --max-time 110 https://api.anthropic.com/v1/messages \
             -H "x-api-key: $K" -H "anthropic-version: 2023-06-01" -H "content-type: application/json" \
             -d "{\"model\":\"$MODELLO\",\"max_tokens\":200,\"messages\":[{\"role\":\"user\",\"content\":\"Rispondi solo: ok\"}],\"output_config\":{\"format\":{\"type\":\"json_schema\",\"schema\":{\"type\":\"object\",\"properties\":{\"r\":{\"type\":\"string\"}},\"required\":[\"r\"],\"additionalProperties\":false}}}}" > tempo.txt 2>&1 || true
           { echo "modello: $MODELLO"; echo "lunghezza chiave: ${#K}, inizio: ${K:0:10}…"; cat tempo.txt; head -c 600 risposta.json; } | ann notice "Prova dell'API"
           # Poi l'agente vero: stesso prompt e stesso schema della funzione.
           (cd functions && npm ci --silent > /dev/null 2>&1 && ANTHROPIC_API_KEY="$K" ISTRUZIONI="$ISTRUZIONI" node strumenti/prova-agente.mjs "$NOTA") 2>&1 | ann notice "Prova dell'agente"
+
+      # Voce sintetica (espeak-ng) → webm/opus come quello del telefono → Gemini con il prompt della funzione.
+      # Verifica chiave, modello, tempi e token; la qualità su una voce vera si giudica dal telefono.
+      - name: Prova della trascrizione
+        if: ${{ inputs.provatrascrizione }}
+        env:
+          FRASE: ${{ inputs.frase }}
+        run: |
+          ann() { echo "::$1 title=$2::$(sed -e 's/%/%25/g' -e 's/\r//g' | head -c 4000 | awk '{printf "%s%%0A", $0}')"; }
+          if ! K=$(gcloud secrets versions access latest --secret=GEMINI_API_KEY --project macroapp-b9bd0 2>err.txt); then
+            ann warning "Chiave Gemini non leggibile da qui" < err.txt; exit 0
+          fi
+          echo "::add-mask::$K"
+          sudo apt-get install -y -qq espeak-ng ffmpeg > /dev/null 2>&1 || true
+          espeak-ng -v it -s 150 -w frase.wav "$FRASE"
+          ffmpeg -loglevel error -y -i frase.wav -c:a libopus -b:a 32k frase.webm
+          (cd functions && npm ci --silent > /dev/null 2>&1 && GEMINI_API_KEY="$K" PROGETTO="Tennis" TEMI="Dritto,Rovescio a due mani,Servizio,Spostamenti" PERSONE="Marco" \
+            node strumenti/prova-trascrizione.mjs ../frase.webm audio/webm) 2>&1 | ann notice "Prova della trascrizione"
+          # Senza contesto, per vedere quanto pesa il vocabolario del progetto.
+          (cd functions && GEMINI_API_KEY="$K" node strumenti/prova-trascrizione.mjs ../frase.webm audio/webm) 2>&1 | ann notice "Trascrizione senza contesto"
 
       - name: Raccolta
         env:

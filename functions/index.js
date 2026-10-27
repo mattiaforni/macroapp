@@ -4,7 +4,8 @@
 //
 // Funzioni: analyzeEntry (agente del diario), bank (collegamento e lettura della banca), google (account Google:
 // Contatti, Calendario, Drive),
-// avvisa (notifiche push sulle cose condivise), prodotto (scheda di un prodotto da Open Food Facts), syncBank (lettura quotidiana).
+// avvisa (notifiche push sulle cose condivise), trascrivi (nota vocale → testo, con Gemini), prodotto (scheda di un
+// prodotto da Open Food Facts), syncBank (lettura quotidiana).
 // All'avvio del container si caricano solo le dichiarazioni delle funzioni.
 // firebase-admin, l'agente e il client bancario vengono importati alla prima richiesta (import dinamico):
 // avvio più rapido e nessun lavoro a livello di modulo che possa bloccare il container.
@@ -283,6 +284,51 @@ const CACHE_ASSENTE_MS = 24 * 3600 * 1000;
  * autenticato, la scrive solo il server); { aggiorna: true } la rilegge da OFF comunque.
  * Ritorna la scheda ({ trovato: false, ean } se il codice non c'è).
  */
+// ───────────── Trascrizione delle note vocali ─────────────
+
+// Formati che il telefono registra (MediaRecorder) e che Gemini accetta. Chrome: webm/opus; Safari: mp4 (= m4a).
+const FORMATI_AUDIO = { "audio/webm": "audio/webm", "audio/ogg": "audio/ogg", "audio/mp4": "audio/m4a", "audio/m4a": "audio/m4a", "audio/aac": "audio/aac", "audio/mpeg": "audio/mpeg", "audio/wav": "audio/wav" };
+const MAX_AUDIO_BASE64 = 12_000_000; // ~9 MB di audio: a 32 kbit/s più di mezz'ora
+
+/**
+ * Nota vocale → testo. data = { audio (base64), mimeType, projectId? }. Ritorna { testo }.
+ * Con projectId il prompt riceve nome, istruzioni e temi del progetto; sempre i nomi della rubrica
+ * (src/trascrizione.js). L'audio non viene salvato da nessuna parte.
+ */
+export const trascrivi = onCall(
+  { secrets: [GEMINI_API_KEY], timeoutSeconds: 120 },
+  async (req) => {
+    if (!req.auth) throw new HttpsError("unauthenticated", "Accesso richiesto");
+    const { audio, mimeType, projectId } = req.data || {};
+    if (typeof audio !== "string" || audio.length < 100) throw new HttpsError("invalid-argument", "Registrazione vuota");
+    if (audio.length > MAX_AUDIO_BASE64) throw new HttpsError("invalid-argument", "Registrazione troppo lunga: dividila in due note");
+    const tipo = FORMATI_AUDIO[String(mimeType || "").split(";")[0].trim().toLowerCase()];
+    if (!tipo) throw new HttpsError("invalid-argument", `Formato audio non previsto (${String(mimeType).slice(0, 40)})`);
+    const t0 = Date.now();
+    try {
+      const db = await getDb();
+      const { contestoTrascrizione } = await import("./src/trascrizione.js");
+      const contesto = await contestoTrascrizione(db, req.auth.uid, projectId || null);
+      const { transcribe } = await import("./src/ai/provider.js");
+      const { testo, uso } = await transcribe({ audioBase64: audio, mimeType: tipo, keys: { gemini: GEMINI_API_KEY.value().trim() }, contesto });
+      // Nel registro solo misure: niente testo (il repository è pubblico e la Diagnosi pubblica il registro).
+      console.log(`trascrivi: ${Math.round((audio.length * 0.75) / 1024)} KB ${tipo}, ${testo.length} caratteri in ${Date.now() - t0} ms`
+        + (uso ? `, token ${uso.promptTokenCount ?? "?"} in / ${uso.candidatesTokenCount ?? "?"} out / ${uso.thoughtsTokenCount ?? 0} pensiero` : "")
+        + (contesto.progetto ? ", con progetto" : ""));
+      return { testo };
+    } catch (err) {
+      if (err instanceof HttpsError) throw err;
+      const msg = String(err.message || "");
+      console.error("trascrivi", msg.slice(0, 300));
+      if (/API_KEY_INVALID|API key not valid|\b403\b/i.test(msg)) throw new HttpsError("failed-precondition", "La chiave di Gemini non è valida o non ha accesso all'API");
+      if (/\b429\b|RESOURCE_EXHAUSTED|quota/i.test(msg)) throw new HttpsError("resource-exhausted", "Limite di Gemini raggiunto: riprova tra poco (o controlla la fatturazione in AI Studio)");
+      if (/\b404\b|not found/i.test(msg)) throw new HttpsError("failed-precondition", "Modello di trascrizione non disponibile per questa chiave");
+      if (/nessuna risposta/i.test(msg)) throw new HttpsError("deadline-exceeded", "La trascrizione ci mette troppo: riprova");
+      throw new HttpsError("internal", `Trascrizione non riuscita (${msg.slice(0, 160)})`);
+    }
+  },
+);
+
 export const prodotto = onCall(
   { timeoutSeconds: 30 },
   async (req) => {

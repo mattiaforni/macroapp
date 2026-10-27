@@ -206,6 +206,11 @@ html[data-passaggio="torna"]::view-transition-new(root) { animation: compare var
 .pillola.on { background: var(--inchiostro); border-color: var(--inchiostro); color: var(--carta); }
 .pillola--accento { border-color: var(--accento); color: var(--accento); background: transparent; }
 a.pillola { text-decoration: none; }
+/* Nota vocale in registrazione (components/registratore.js): pallino che pulsa e tempo che scorre. */
+.pillola.registra--attiva { border-color: var(--frutto); color: var(--frutto); font-variant-numeric: tabular-nums; }
+.registra__punto { width: 8px; height: 8px; border-radius: 50%; background: var(--frutto); flex: none; animation: registra-punto 1.2s ease-in-out infinite; }
+@keyframes registra-punto { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .registra__punto { animation: none; } }
 
 .etichetta {
   display: inline-block; font-size: 10.5px; font-weight: 600; padding: 2px 7px; border-radius: 4px;
