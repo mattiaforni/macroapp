@@ -2,9 +2,14 @@
 // (core/calendario.js), condiviso tra i due. Il + in basso a destra apre il foglio di un evento nuovo,
 // che si scrive subito su Google; toccando un evento si legge e si modifica. Gli eventi che l'agente
 // ricava dalle note passano invece dalla conferma (proposta «event», components/proposals.js).
-import { el, icon, toast, fab, vuoto, fascia, attesa, isoGiorno, fmtDate, stessoGiorno, meseLungo } from "../../core/ui.js";
+// Aspetto (27/10, scelta di Mattia tra due schermate): come le lezioni del tennis, il giorno grande in
+// Instrument Serif a sinistra e il giorno della settimana sotto, una fascia per mese; più eventi dello stesso
+// giorno condividono il numero. `rigaEvento` la usa anche «Prossimi giorni» in cima al Diario.
+import { el, icon, toast, fab, vuoto, fascia, attesa, isoGiorno, fmtDate, meseLungo } from "../../core/ui.js";
 import { statoGoogle, messaggioGoogle, suGoogle } from "../../core/google.js";
-import { calendarioCasa, leggiEventi, eventiNoti, suEventi, creaEvento, aggiornaEvento, eliminaEvento, oraDi } from "../../core/calendario.js";
+import {
+  calendarioCasa, leggiEventi, eventiNoti, suEventi, creaEvento, aggiornaEvento, eliminaEvento, oraDi, finestra, giornoMostrato,
+} from "../../core/calendario.js";
 import { openSheet, campo } from "../../components/sheet.js";
 import { vaiA } from "../../core/router.js";
 
@@ -14,18 +19,49 @@ export const nav = false;
 const navIcon = "calendario";
 export { navIcon as icon };
 
-const GIORNI = ["domenica", "lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato"];
-const GIORNI_AVANTI = 60;
+const GIORNI_BREVI = ["dom", "lun", "mar", "mer", "gio", "ven", "sab"];
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
-/** "Oggi · martedì 27 ottobre", "Domani · …", "Giovedì 30 ottobre". */
-function titoloGiorno(d) {
-  const oggi = new Date();
-  const domani = new Date(); domani.setDate(oggi.getDate() + 1);
-  const testo = `${GIORNI[d.getDay()]} ${d.getDate()} ${meseLungo(d).split(" ")[0]}${d.getFullYear() !== oggi.getFullYear() ? ` ${d.getFullYear()}` : ""}`;
-  if (stessoGiorno(d, oggi)) return `Oggi · ${testo}`;
-  if (stessoGiorno(d, domani)) return `Domani · ${testo}`;
-  return cap(testo);
+/**
+ * Quando, in una riga: "18:00 – 19:00", "Tutto il giorno, fino al 2 nov", "Dal 25 ott, fino al 2 nov"
+ * (evento già iniziato prima del giorno in cui si mostra), più il luogo.
+ */
+export function quandoEvento(e, giorno = giornoMostrato(e)) {
+  const prima = e.giornoInizio < giorno;
+  const piuGiorni = e.giornoFine !== e.giornoInizio;
+  let t;
+  if (e.tuttoIlGiorno) {
+    t = prima ? `Dal ${fmtDate(e.inizio)}, fino al ${fmtDate(e.fine)}` : piuGiorni ? `Tutto il giorno, fino al ${fmtDate(e.fine)}` : "Tutto il giorno";
+  } else if (prima) {
+    t = `Dal ${fmtDate(e.inizio)}, fino al ${fmtDate(e.fine)} alle ${oraDi(e.fine)}`;
+  } else if (piuGiorni) {
+    t = `${oraDi(e.inizio)} – ${fmtDate(e.fine)} ${oraDi(e.fine)}`;
+  } else {
+    t = e.fine > e.inizio ? `${oraDi(e.inizio)} – ${oraDi(e.fine)}` : oraDi(e.inizio);
+  }
+  return [t, e.luogo].filter(Boolean).join(" · ");
+}
+
+/**
+ * Riga di un evento come una lezione: a sinistra il giorno (numero in serif, sotto «oggi» o il giorno della
+ * settimana), a destra titolo e quando. Con `conGiorno: false` la colonna resta vuota (stesso giorno della riga
+ * sopra). Toccandola si apre il foglio dell'evento.
+ */
+export function rigaEvento(e, { giorno = giornoMostrato(e), conGiorno = true } = {}) {
+  const d = new Date(`${giorno}T12:00:00`);
+  const oggi = giorno === isoGiorno(new Date());
+  return el("button.evento", { type: "button", onclick: () => apriEvento(e) },
+    el("div.evento__giorno", {}, conGiorno ? [el("b.display", {}, String(d.getDate())), el("small", {}, oggi ? "oggi" : GIORNI_BREVI[d.getDay()])] : null),
+    el("div.evento__testo", {},
+      el("div.evento__titolo", {}, e.titolo),
+      el("div.evento__quando", {}, quandoEvento(e, giorno))),
+  );
+}
+
+/** Eventi in ordine di elenco: per giorno in cui si mostrano, prima quelli di tutto il giorno, poi per ora. */
+export function inOrdine(eventi, oggi = isoGiorno(new Date())) {
+  return eventi.map((e) => ({ e, g: giornoMostrato(e, oggi) }))
+    .sort((x, y) => (x.g < y.g ? -1 : x.g > y.g ? 1 : x.e.tuttoIlGiorno !== y.e.tuttoIlGiorno ? (x.e.tuttoIlGiorno ? -1 : 1) : x.e.inizio - y.e.inizio));
 }
 
 /** Pillola che apre il selettore nativo di data o ora (l'input resta invisibile). */
@@ -118,12 +154,6 @@ export function mount(container) {
   const piu = fab("Nuovo evento", () => apriEvento(null));
   const mostra = (...nodi) => corpo.replaceChildren(...nodi.filter(Boolean));
 
-  const intervallo = () => {
-    const da = new Date(); da.setHours(0, 0, 0, 0);
-    const a = new Date(da); a.setDate(a.getDate() + GIORNI_AVANTI);
-    return { da, a };
-  };
-
   function render() {
     if (!dati.pronta()) { mostra(); return; }
     const g = statoGoogle();
@@ -156,50 +186,34 @@ export function mount(container) {
     }
     if (!eventi) { mostra(el("p.meta", { style: "padding:22px 0" }, "Leggo il calendario…")); return; }
 
-    // Agenda: un gruppo per giorno. Un evento di più giorni compare in ciascuno dei suoi giorni.
+    // Agenda: una fascia per mese, una riga per evento; il numero del giorno solo sulla prima riga del giorno.
+    // Un evento di più giorni compare una volta, nel suo primo giorno (o oggi, se è già iniziato).
     const oggi = isoGiorno(new Date());
-    const perGiorno = new Map([[oggi, []]]);
-    for (const e of eventi) {
-      const d = new Date(`${e.giornoInizio < oggi ? oggi : e.giornoInizio}T12:00:00`);
-      for (; isoGiorno(d) <= e.giornoFine; d.setDate(d.getDate() + 1)) {
-        const k = isoGiorno(d);
-        if (!perGiorno.has(k)) perGiorno.set(k, []);
-        perGiorno.get(k).push(e);
+    const anno = new Date().getFullYear();
+    const nodi = [el("p.meta", { style: "margin-top:12px" }, `${casa.nome} · prossimi ${finestra().giorni} giorni`)];
+    let mese = null;
+    let giorno = null;
+    for (const { e, g } of inOrdine(eventi, oggi)) {
+      const d = new Date(`${g}T12:00:00`);
+      const m = g.slice(0, 7);
+      if (m !== mese) {
+        mese = m;
+        const nome = meseLungo(d);
+        nodi.push(fascia(cap(d.getFullYear() === anno ? nome.split(" ")[0] : nome)));
+        giorno = null;
       }
+      nodi.push(rigaEvento(e, { giorno: g, conGiorno: g !== giorno }));
+      giorno = g;
     }
-    const giorni = [...perGiorno.keys()].sort();
-    mostra(
-      el("p.meta", { style: "margin-top:12px" }, `${casa.nome} · prossimi ${GIORNI_AVANTI} giorni`),
-      ...giorni.map((k) => {
-        const d = new Date(`${k}T12:00:00`);
-        const lista = perGiorno.get(k).sort((a, b) => (a.tuttoIlGiorno === b.tuttoIlGiorno ? a.inizio - b.inizio : a.tuttoIlGiorno ? -1 : 1));
-        return el("div", {},
-          fascia(titoloGiorno(d)),
-          lista.length ? el("div", {}, ...lista.map((e) => rigaEvento(e, k))) : el("p.meta", { style: "padding:6px 0 2px" }, "Niente in programma"),
-        );
-      }),
-      eventi.length ? null : el("p.meta", { style: "margin-top:18px" }, "Nessun evento nei prossimi giorni. Tocca + per aggiungerne uno."),
-    );
-  }
-
-  function rigaEvento(e, giorno) {
-    const primoGiorno = giorno === e.giornoInizio;
-    const sotto = [
-      e.tuttoIlGiorno ? (e.giornoInizio !== e.giornoFine ? `fino al ${fmtDate(e.fine)}` : "") : primoGiorno ? `fino alle ${oraDi(e.fine)}${e.giornoFine !== e.giornoInizio ? ` del ${fmtDate(e.fine)}` : ""}` : "continua",
-      e.luogo,
-    ].filter(Boolean).join(" · ");
-    return el("div.riga", { onclick: () => apriEvento(e) },
-      el("div.evento__ora", {}, e.tuttoIlGiorno || !primoGiorno ? el("small", {}, e.tuttoIlGiorno ? "tutto il giorno" : `dal ${fmtDate(e.inizio)}`) : el("b", {}, oraDi(e.inizio))),
-      el("div.testo", {}, el("b", {}, e.titolo), sotto ? el("span", {}, sotto) : null),
-    );
+    if (!eventi.length) nodi.push(el("p.meta", { style: "margin-top:18px" }, `Nessun evento nei prossimi ${finestra().giorni} giorni. Tocca + per aggiungerne uno.`));
+    mostra(...nodi);
   }
 
   async function carica({ forza = false } = {}) {
     casa = await calendarioCasa({ fresh: forza }).catch(() => null);
     if (!casa || !statoGoogle().permessi.calendario) { dati.arriva("eventi"); render(); return; }
     try {
-      const { da, a } = intervallo();
-      eventi = await leggiEventi({ da, a, forza });
+      eventi = await leggiEventi({ forza });
       errore = null;
     } catch (err) {
       console.warn("calendario", err);

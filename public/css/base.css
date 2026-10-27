@@ -567,10 +567,21 @@ html[data-colore] .pagina-progetto .btn--piatto svg { color: var(--c-testo); }
 .tema__lezioni { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 0 14px; }
 .tema__lezioni .pillola { font-size: 12px; padding: 4px 10px; }
 
-/* Calendario della casa (modules/calendario): ora a sinistra, come la data a colonna di Spese. */
-.evento__ora { width: 48px; flex: none; text-align: center; line-height: 1.15; color: var(--inchiostro-2); }
-.evento__ora b { display: block; font-size: 15px; font-weight: 500; color: var(--inchiostro); }
-.evento__ora small { display: block; font-size: 10.5px; }
+/* Eventi del calendario della casa (modules/calendario, e «Prossimi giorni» nel Diario): come le lezioni,
+   il giorno in Instrument Serif a sinistra. */
+.evento { display: flex; gap: 14px; width: 100%; text-align: left; padding: 12px 0; border-bottom: 1px solid var(--linea); color: inherit; }
+.evento__giorno { width: 40px; flex: none; text-align: center; padding-top: 2px; }
+.evento__giorno b { display: block; font-size: 21px; line-height: 1; font-weight: 400; }
+.evento__giorno small { display: block; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--inchiostro-3); margin-top: 3px; }
+.evento__testo { flex: 1; min-width: 0; }
+.evento__titolo { font-size: 16px; font-weight: 500; line-height: 1.3; overflow-wrap: anywhere; }
+.evento__quando { font-size: 13.5px; color: var(--inchiostro-2); margin-top: 2px; line-height: 1.4; }
+/* In cima al Diario: le righe un po' più strette, l'ultima senza filetto (sotto c'è la riga dell'AI). */
+.prossimi { margin-bottom: 6px; }
+.prossimi .fascia { margin-top: 10px; }
+.prossimi .evento { padding: 9px 0; }
+.prossimi > .evento:last-child { border-bottom: none; }
+.prossimi__altri { display: block; padding: 2px 0 4px 54px; font-size: 12.5px; color: var(--accento); text-align: left; }
 
 /* ───────────── Prodotti dal codice a barre (components/prodotto.js) ─────────────
    Fasce dell'indice: colori dell'app (verde, verdolino delle tessere, arancio, frutto). */

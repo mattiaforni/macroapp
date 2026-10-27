@@ -687,8 +687,8 @@ with sync_playwright() as p:
         pg.click("#foglio .riga >> text=Casa")
         pg.wait_for_selector("text=Calendario della casa: Casa")
         menu(pg, "Calendario")
-        pg.wait_for_selector(".fascia >> text=Oggi")
-        assert pg.locator("text=Niente in programma").count() == 1
+        pg.wait_for_selector("text=Nessun evento nei prossimi 60 giorni")
+        assert pg.locator("#view .vuoto").count() == 0, "calendario vuoto: una riga, non la pagina vuota"
         pg.click("button.fab")
         pg.wait_for_selector("#foglio h2 >> text=Nuovo evento")
         pg.fill("#foglio input[placeholder='Cosa']", "Lezione di tennis")
@@ -698,10 +698,14 @@ with sync_playwright() as p:
         pg.wait_for_timeout(150)
         shot(pg, "19-evento-nuovo")
         pg.keyboard.press("Enter")
-        pg.wait_for_selector(".riga >> text=Lezione di tennis")
-        riga = pg.locator(".riga", has_text="Lezione di tennis")
-        assert riga.locator(".evento__ora b").inner_text() == "18:00"
-        assert "fino alle 19:00 · Circolo" in riga.inner_text(), riga.inner_text()
+        pg.wait_for_selector(".evento >> text=Lezione di tennis")
+        riga = pg.locator(".evento", has_text="Lezione di tennis")
+        # Come le lezioni: il giorno in serif con «oggi» sotto, una fascia per mese
+        import datetime
+        assert riga.locator(".evento__giorno b.display").inner_text() == str(datetime.date.today().day), riga.inner_text()
+        assert riga.locator(".evento__giorno small").inner_text().lower() == "oggi"
+        assert riga.locator(".evento__quando").inner_text() == "18:00 – 19:00 · Circolo", riga.inner_text()
+        assert pg.locator("#view .fascia").count() == 1, "una fascia, quella del mese"
         assert cal["eventi"]["ev1"]["start"]["timeZone"] == "Europe/Rome", cal["eventi"]["ev1"]
         # Modifica: tutto il giorno, titolo nuovo
         riga.click()
@@ -709,25 +713,47 @@ with sync_playwright() as p:
         pg.fill("#foglio input[placeholder='Cosa']", "Torneo")
         pg.click("#foglio button.pillola >> text=Tutto il giorno")
         conferma(pg)
-        pg.wait_for_selector(".riga >> text=Torneo")
-        assert "tutto il giorno" in pg.locator(".riga", has_text="Torneo").inner_text()
+        pg.wait_for_selector(".evento >> text=Torneo")
+        assert pg.locator(".evento", has_text="Torneo").locator(".evento__quando").inner_text() == "Tutto il giorno · Circolo"
         assert "date" in cal["eventi"]["ev1"]["start"] and "dateTime" not in cal["eventi"]["ev1"]["start"], cal["eventi"]["ev1"]
-        pg.wait_for_timeout(200)
-        shot(pg, "19b-calendario")
         # La proposta dell'agente ora passa: l'evento compare tra tre giorni
+        step[0] = "prossimi giorni nel diario"
         pg.click(".schede a[href='#/diario']")
         pg.locator(".azione", has_text="Cena con i Rossi").locator("button[aria-label='Conferma']").click()
         pg.wait_for_selector("text=Evento nel calendario della casa")
         assert cal["eventi"]["ev2"]["summary"] == "Cena con i Rossi" and cal["eventi"]["ev2"]["location"] == "Da noi", cal["eventi"]
-        menu(pg, "Calendario")
-        pg.wait_for_selector(".riga >> text=Cena con i Rossi")
-        assert pg.locator(".riga", has_text="Cena con i Rossi").locator(".evento__ora b").inner_text() == "20:00"
+        # In cima al Diario: oggi e i due giorni dopo. Il torneo di oggi c'è, la cena tra tre giorni no.
+        pg.wait_for_selector(".prossimi .fascia >> text=Prossimi giorni")
+        assert pg.locator(".prossimi .evento", has_text="Torneo").count() == 1
+        assert pg.locator(".prossimi .evento", has_text="Cena con i Rossi").count() == 0, "oltre i due giorni non compare"
+        assert pg.locator("#view > *").first.evaluate("n => n.classList.contains('prossimi')"), "la striscia sta in cima"
+        assert "null" not in pg.locator(".prossimi").inner_text(), pg.locator(".prossimi").inner_text()
+        pg.evaluate("window.scrollTo(0, 0)")
+        pg.wait_for_timeout(200)
+        shot(pg, "19c-diario-prossimi")
+        # Dalla striscia: un evento si apre nel suo foglio, «Calendario» porta alla pagina
+        pg.click(".prossimi .evento >> text=Torneo")
+        pg.wait_for_selector("#foglio h2 >> text=Evento")
+        pg.click("#foglio button[aria-label='Indietro']")
+        pg.wait_for_timeout(200)
+        pg.click(".prossimi .fascia button >> text=Calendario")
+        pg.wait_for_selector("#page-title >> text=Calendario")
+        pg.wait_for_selector(".evento >> text=Cena con i Rossi")
+        cena = pg.locator(".evento", has_text="Cena con i Rossi")
+        assert cena.locator(".evento__quando").inner_text() == "20:00 – 21:00 · Da noi", cena.inner_text()
+        assert cena.locator(".evento__giorno b").count() == 1, "altro giorno: ha il suo numero"
+        pg.wait_for_timeout(200)
+        shot(pg, "19b-calendario")
         # Elimina
-        pg.click(".riga >> text=Torneo")
+        pg.click(".evento >> text=Torneo")
         pg.click("#foglio button >> text=Elimina")
         pg.wait_for_selector("text=Evento eliminato")
         pg.wait_for_timeout(300)
-        assert pg.locator(".riga", has_text="Torneo").count() == 0 and "ev1" not in cal["eventi"]
+        assert pg.locator(".evento", has_text="Torneo").count() == 0 and "ev1" not in cal["eventi"]
+        pg.click(".schede a[href='#/diario']")
+        pg.wait_for_selector(".stato-ai")
+        pg.wait_for_timeout(300)
+        assert pg.locator(".prossimi").is_hidden(), "senza eventi vicini la striscia non c'è"
 
         # ── Scollegare Google ──
         step[0] = "scollega"
@@ -738,6 +764,7 @@ with sync_playwright() as p:
         conferma(pg)
         pg.wait_for_selector("text=Google scollegato")
         pg.wait_for_selector("button.fab >> text=Collega")
+        assert pg.evaluate("localStorage.getItem('macroapp.calendario.eventi')") is None, "scollegando si dimenticano gli eventi"
         menu(pg, "Calendario")
         pg.wait_for_selector("#page-title >> text=Calendario")
         pg.wait_for_selector("#view .vuoto >> text=Google non collegato")

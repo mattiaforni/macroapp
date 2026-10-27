@@ -10,6 +10,10 @@
 // ciò che è emerso finora) arriva invece come proposta sotto la nota e, confermata, si legge nella
 // pagina del progetto (modules/progetto), dove le note si sfogliano per titolo e per tema.
 //
+// In cima, «Prossimi giorni»: gli eventi del calendario della casa di oggi e dei due giorni dopo (non quelli
+// già finiti), con le righe della pagina Calendario; compare solo se ce ne sono e se Google è collegato con il
+// calendario. Scelta di Mattia del 27/10 (schermata B), al posto di aprire il Calendario dal menu.
+//
 // journal_entries { text, projectId, riepilogo, titolo, temi, riepilogoAt, analyzed, analyzedAt, analysisError, modello }
 // `modello`: chi ha letto la nota l'ultima volta (haiku, sonnet, opus: scelta in menu → Modelli AI).
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-functions.js";
@@ -24,6 +28,9 @@ import { vaiA } from "../../core/router.js";
 import { apriSpesa } from "../spese/index.js";
 import { apriVoceManuale } from "../manuale/index.js";
 import { nomeModello } from "../../core/modelli.js";
+import { statoGoogle, suGoogle } from "../../core/google.js";
+import { calendarioCasa, leggiEventi, eventiNoti, suEventi } from "../../core/calendario.js";
+import { rigaEvento, inOrdine } from "../calendario/index.js";
 
 export const id = "diario";
 export const title = "Diario";
@@ -36,6 +43,8 @@ const CHIAVE_AUTO = "macroapp.diario.auto";
 const CHIAVE_AI = "macroapp.diario.ai"; // "on" | "off": esito dell'ultima analisi
 const CHIAVE_FILTRO = "macroapp.diario.progetto"; // "tutte" o id del progetto (lo scrive anche la pagina Task)
 const CHIAVE_PAGINA = "macroapp.progetto"; // progetto aperto nella pagina Progetto (modules/progetto)
+const GIORNI_PROSSIMI = 2; // «Prossimi giorni»: oggi e i due giorni dopo
+const MAX_PROSSIMI = 4;    // righe al massimo; per le altre c'è il Calendario
 const analyzeEntry = httpsCallable(functions, "analyzeEntry", { timeout: 310000 }); // la funzione ha 300 s (Opus può metterci minuti)
 
 const leggi = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch (e) { return d; } };
@@ -231,6 +240,40 @@ export function mount(container) {
   const elenco = el("div");
   const piu = fab("Nuova nota", () => nuova());
 
+  // ── Prossimi giorni, dal calendario della casa ──
+  // Si disegna con l'ultima lettura nota (anche salvata sul telefono), poi con quella fresca da Google; non
+  // prima delle note, perché la pagina non compaia a pezzi.
+  const prossimi = el("div.prossimi", { hidden: true });
+  let eventi = statoGoogle().permessi.calendario ? eventiNoti() : null;
+  function disegnaProssimi() {
+    const g = statoGoogle();
+    if (!dati.pronta() || !g.collegato || !g.permessi.calendario || !eventi) { prossimi.hidden = true; return; }
+    const ora = new Date();
+    const limite = new Date(); limite.setDate(limite.getDate() + GIORNI_PROSSIMI);
+    const fino = isoGiorno(limite);
+    const vicini = inOrdine(eventi.filter((e) => e.fine >= ora && e.giornoInizio <= fino), isoGiorno(ora));
+    prossimi.hidden = !vicini.length;
+    if (!vicini.length) { prossimi.replaceChildren(); return; }
+    let giorno = null;
+    const righe = vicini.slice(0, MAX_PROSSIMI).map(({ e, g: gg }) => {
+      const r = rigaEvento(e, { giorno: gg, conGiorno: gg !== giorno });
+      giorno = gg;
+      return r;
+    });
+    const altri = vicini.length - MAX_PROSSIMI;
+    prossimi.replaceChildren(
+      fascia("Prossimi giorni", el("button", { type: "button", onclick: () => vaiA("calendario") }, "Calendario")),
+      ...righe,
+      ...(altri > 0 ? [el("button.prossimi__altri", { type: "button", onclick: () => vaiA("calendario") }, `E ${altri === 1 ? "un altro" : `altri ${altri}`} nel calendario`)] : []),
+    ); // replaceChildren, a differenza di el(), scriverebbe «null»
+  }
+  async function caricaProssimi() {
+    if (!statoGoogle().permessi.calendario || !(await calendarioCasa().catch(() => null))) { eventi = null; disegnaProssimi(); return; }
+    // Se Google non risponde resta l'ultima lettura; perché, lo dice la pagina Calendario.
+    try { eventi = await leggiEventi(); } catch (e) { /* niente */ }
+    disegnaProssimi();
+  }
+
   function nota(n) {
     const d = toDate(n.createdAt) || new Date();
     const mie = proposte.filter((p) => p.sourceEntryId === n.id);
@@ -281,6 +324,7 @@ export function mount(container) {
 
   function render() {
     if (!dati.pronta()) return;
+    disegnaProssimi();
     disegnaFiltri();
     const prog = filtro !== "tutte" ? progettoDi(filtro) : null;
     const nodi = [];
@@ -331,6 +375,7 @@ export function mount(container) {
   }
 
   container.append(
+    prossimi,
     el("div.segmenti", { style: "align-items:center;justify-content:space-between" }, stato, autoBtn),
     filtri,
     elenco,
@@ -350,5 +395,8 @@ export function mount(container) {
     render();
   });
   const stop2 = watchPending((docs) => { proposte = docs; render(); });
-  return () => { stopNote(); stop1(); stop2(); dati.ferma(); piu.remove(); };
+  const stop3 = suEventi((lista) => { eventi = lista; disegnaProssimi(); });
+  const stop4 = suGoogle(() => caricaProssimi());
+  caricaProssimi();
+  return () => { stopNote(); stop1(); stop2(); stop3(); stop4(); dati.ferma(); piu.remove(); };
 }

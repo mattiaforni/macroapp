@@ -112,8 +112,10 @@ il segreto GOOGLE_OAUTH_CLIENT.
   (`households.calendario`) e lo condivide con l'altro da Google Calendar; ciascuno lo legge e ci scrive con il proprio
   permesso. La pagina Calendario è un'agenda dei prossimi 60 giorni (ricorrenze espanse con `singleEvents`), con il +
   per un evento nuovo (giorno, tutto il giorno o con orario, luogo, note), scritto subito su Google; un evento si
-  modifica e si elimina dal suo foglio. L'agente propone eventi dalle note (`event`), che si scrivono solo con la
-  spunta. Letture e scritture passano dal telefono; il server non tocca il calendario.
+  modifica e si elimina dal suo foglio. In cima al Diario, «Prossimi giorni» mostra gli eventi di oggi e dei due
+  giorni dopo dalla stessa lettura. L'ultima lettura resta anche nel localStorage del telefono, solo come anteprima
+  all'apertura (scollegando Google si cancella). L'agente propone eventi dalle note (`event`), che si scrivono solo
+  con la spunta. Letture e scritture passano dal telefono; il server non tocca il calendario.
 - **Drive** (`core/drive.js`, `components/documenti.js`): dal foglio di un progetto o di una voce del manuale si cercano
   file per nome in tutto il Drive dell'utente (anche nei Drive condivisi) e si collegano (`documenti`). Per un progetto
   con istruzioni, il server legge il testo dei documenti collegati con il permesso dell'utente (`tokenServer` in
