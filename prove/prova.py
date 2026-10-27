@@ -252,6 +252,51 @@ with sync_playwright() as p:
                 {"resourceName": "people/c3", "names": [{"displayName": "Giuseppe Verdi"}], "nicknames": [{"value": "Beppe"}], "phoneNumbers": [{"value": "+39 347 0000000"}]},
             ]}))
         pg.route("https://people.googleapis.com/**", people)
+        # Google Calendar finto: due calendari, eventi in memoria (GET/POST/PATCH/DELETE).
+        cal = {"eventi": {}, "n": 0}
+        def calendar(r):
+            req = r.request
+            assert req.headers.get("authorization") == "Bearer token-finto", req.headers
+            url = req.url
+            if "/users/me/calendarList" in url:
+                r.fulfill(status=200, content_type="application/json", body=json.dumps({"items": [
+                    {"id": "mattia@example.com", "summary": "Mattia", "primary": True, "accessRole": "owner"},
+                    {"id": "casa@group.calendar.google.com", "summary": "Casa", "accessRole": "owner", "backgroundColor": "#f6bf26"},
+                ]}))
+                return
+            assert "/calendars/casa%40group.calendar.google.com/events" in url, url
+            if req.method == "GET":
+                r.fulfill(status=200, content_type="application/json", body=json.dumps({"items": list(cal["eventi"].values())}))
+            elif req.method == "POST":
+                cal["n"] += 1
+                e = {**json.loads(req.post_data), "id": f"ev{cal['n']}", "htmlLink": f"https://calendar.google.com/event?eid=ev{cal['n']}", "creator": {"email": "mattia@example.com", "self": True}, "status": "confirmed"}
+                cal["eventi"][e["id"]] = e
+                r.fulfill(status=200, content_type="application/json", body=json.dumps(e))
+            elif req.method == "PATCH":
+                eid = url.rsplit("/", 1)[1]
+                e = cal["eventi"][eid]
+                for k, v in json.loads(req.post_data).items():
+                    e[k] = {kk: vv for kk, vv in v.items() if vv is not None} if isinstance(v, dict) else v
+                r.fulfill(status=200, content_type="application/json", body=json.dumps(e))
+            elif req.method == "DELETE":
+                del cal["eventi"][url.rsplit("/", 1)[1]]
+                r.fulfill(status=204, body="")
+        pg.route("https://www.googleapis.com/calendar/**", calendar)
+        # Google Drive finto: tre file, ricerca per nome.
+        drive_files = [
+            {"id": "doc1", "name": "Programma allenamenti tennis", "mimeType": "application/vnd.google-apps.document", "webViewLink": "https://docs.google.com/document/d/doc1", "modifiedTime": "2026-10-20T10:00:00Z", "owners": [{"displayName": "Mattia"}]},
+            {"id": "pdf1", "name": "Contratto caldaia", "mimeType": "application/pdf", "webViewLink": "https://drive.google.com/file/d/pdf1", "modifiedTime": "2026-09-01T10:00:00Z", "owners": [{"displayName": "Mattia"}]},
+            {"id": "doc2", "name": "Appunti programma circolo", "mimeType": "application/vnd.google-apps.document", "webViewLink": "https://docs.google.com/document/d/doc2", "modifiedTime": "2026-10-01T10:00:00Z", "owners": [{"displayName": "Giulia"}]},
+        ]
+        def drive(r):
+            req = r.request
+            assert req.headers.get("authorization") == "Bearer token-finto", req.headers
+            q = req.url
+            import urllib.parse
+            qs = urllib.parse.parse_qs(urllib.parse.urlparse(q).query).get("q", [""])[0]
+            m = [x for x in drive_files if ("name contains" not in qs) or (qs.split("'")[1].lower() in x["name"].lower())]
+            r.fulfill(status=200, content_type="application/json", body=json.dumps({"files": m}))
+        pg.route("https://www.googleapis.com/drive/v3/files**", drive)
         menu(pg, "Manuale e rubrica")
         pg.wait_for_selector("h1 >> text=Manuale")
         pg.click("button.fab")
@@ -286,14 +331,22 @@ with sync_playwright() as p:
         pg.click("button.pillola >> text=Persone")
         pg.wait_for_selector(".riga >> text=Marco")
         assert pg.locator(".riga", has_text="Marco").count() == 1, "Marco una volta sola"
-        # Google Contatti: si collega una volta, passando dalla pagina di Google, e si torna sul Manuale
-        step[0] = "collega google contatti"
+        # Google: si collega una volta dalla pagina Google (dal manuale ci si arriva da «Collega Google»),
+        # passando dalla pagina di Google, e si torna sulla pagina Google; i contatti si aprono da lì.
+        step[0] = "collega google"
         assert letture[0] == 0, "nessuna lettura prima del collegamento"
-        pg.click("text=Collega Google Contatti")
-        pg.wait_for_selector("#foglio .btn--conferma >> text=Collega")
+        pg.click("text=Collega Google")
+        pg.wait_for_selector("h1 >> text=Google")
+        pg.wait_for_selector("button.fab >> text=Collega")
         pg.wait_for_timeout(200)
-        shot(pg, "5b-contatti-da-collegare")
-        conferma(pg)
+        shot(pg, "5b-google-da-collegare")
+        pg.click("button.fab >> text=Collega")
+        pg.wait_for_selector(".blocco h3 >> text=mattia@example.com", timeout=8000)
+        assert pg.url.endswith("/#/google"), pg.url
+        pg.wait_for_selector("text=Scegli il calendario della casa")
+        pg.wait_for_timeout(200)
+        shot(pg, "5b2-google")
+        pg.click(".riga >> text=Contatti")
         pg.wait_for_selector("#foglio >> text=Collegato come mattia@example.com", timeout=8000)
         assert pg.url.endswith("/#/manuale"), pg.url
         pg.wait_for_selector("#foglio .riga >> text=Giulia Bianchi")
@@ -409,7 +462,12 @@ with sync_playwright() as p:
         pg.wait_for_timeout(400)
         pg.locator(".azione", has_text="Comprare lampadine").locator("button[aria-label='Conferma']").click()
         pg.wait_for_timeout(400)
-        assert pg.locator(".azione").count() == 1, "resta solo la bozza"
+        # L'evento proposto: senza il calendario della casa la conferma non passa e la proposta resta
+        assert "tutto il giorno" not in pg.locator(".azione", has_text="Cena con i Rossi").inner_text()
+        pg.locator(".azione", has_text="Cena con i Rossi").locator("button[aria-label='Conferma']").click()
+        pg.wait_for_selector("text=Scegli prima il calendario della casa")
+        pg.wait_for_timeout(400)
+        assert pg.locator(".azione").count() == 2, "restano la bozza e l'evento"
         pg.click(".schede a[href='#/task']")
         pg.click("button.pillola >> text=Tutti")
         pg.wait_for_selector(".riga >> text=Preparare l'assemblea")
@@ -553,6 +611,21 @@ with sync_playwright() as p:
         assert pg.locator("#foglio .versione").count() == 2, "l'attuale è finita nello storico"
         pg.click("#foglio button[aria-label='Indietro']")
         pg.wait_for_timeout(200)
+        # Documenti di Drive collegati al progetto: dal foglio del progetto si cerca per nome
+        step[0] = "documenti del progetto"
+        pg.click("button[aria-label='Modifica progetto']")
+        pg.wait_for_selector("#foglio label >> text=Documenti da Drive")
+        pg.fill("#foglio input[placeholder='Cerca nel tuo Drive per nome']", "programma")
+        pg.wait_for_selector("#foglio .etichetta-campo >> text=Risultati")
+        pg.wait_for_selector("#foglio .riga >> text=Programma allenamenti tennis")
+        assert pg.locator("#foglio .riga", has_text="Contratto caldaia").count() == 0, "la ricerca filtra per nome"
+        pg.click("#foglio .riga >> text=Programma allenamenti tennis")
+        pg.wait_for_selector("#foglio .riga >> text=l'agente ne legge il testo")
+        pg.wait_for_timeout(150)
+        shot(pg, "17g-progetto-documenti")
+        conferma(pg)
+        pg.wait_for_selector(".fascia >> text=Documenti")
+        assert pg.locator("#view .riga a", has_text="Programma allenamenti tennis").get_attribute("href") == "https://docs.google.com/document/d/doc1"
         # Dal menu si torna alla pagina; il Diario del progetto dal pulsante
         menu(pg, "Tennis")
         pg.wait_for_selector("#page-title >> text=Tennis")
@@ -603,15 +676,71 @@ with sync_playwright() as p:
             assert piena, f"{sezione}: pagina vuota al primo fotogramma"
             pg.wait_for_timeout(100)
 
-        # ── Scollegare Google Contatti ──
+        # ── Calendario della casa: scelta dalla pagina Google, agenda, evento nuovo, modifica, proposta ──
+        step[0] = "calendario"
+        menu(pg, "Calendario")
+        pg.wait_for_selector("text=Nessun calendario della casa")
+        pg.click("button.btn >> text=Scegli il calendario")
+        pg.wait_for_selector("#foglio .riga >> text=Casa")
+        assert "principale" in pg.locator("#foglio .riga", has_text="Mattia").inner_text()
+        pg.click("#foglio .riga >> text=Casa")
+        pg.wait_for_selector("text=Calendario della casa: Casa")
+        menu(pg, "Calendario")
+        pg.wait_for_selector(".fascia >> text=Oggi")
+        assert pg.locator("text=Niente in programma").count() == 1
+        pg.click("button.fab")
+        pg.wait_for_selector("#foglio h2 >> text=Nuovo evento")
+        pg.fill("#foglio input[placeholder='Cosa']", "Lezione di tennis")
+        pg.click("#foglio button.pillola >> text=Con orario")
+        pg.locator("#foglio input[type=time]").first.evaluate("i => { i.value = '18:00'; i.dispatchEvent(new Event('change')); }")
+        pg.fill("#foglio input[placeholder='Dove (facoltativo)']", "Circolo")
+        pg.wait_for_timeout(150)
+        shot(pg, "19-evento-nuovo")
+        pg.keyboard.press("Enter")
+        pg.wait_for_selector(".riga >> text=Lezione di tennis")
+        riga = pg.locator(".riga", has_text="Lezione di tennis")
+        assert riga.locator(".evento__ora b").inner_text() == "18:00"
+        assert "fino alle 19:00 · Circolo" in riga.inner_text(), riga.inner_text()
+        assert cal["eventi"]["ev1"]["start"]["timeZone"] == "Europe/Rome", cal["eventi"]["ev1"]
+        # Modifica: tutto il giorno, titolo nuovo
+        riga.click()
+        pg.wait_for_selector("#foglio h2 >> text=Evento")
+        pg.fill("#foglio input[placeholder='Cosa']", "Torneo")
+        pg.click("#foglio button.pillola >> text=Tutto il giorno")
+        conferma(pg)
+        pg.wait_for_selector(".riga >> text=Torneo")
+        assert "tutto il giorno" in pg.locator(".riga", has_text="Torneo").inner_text()
+        assert "date" in cal["eventi"]["ev1"]["start"] and "dateTime" not in cal["eventi"]["ev1"]["start"], cal["eventi"]["ev1"]
+        pg.wait_for_timeout(200)
+        shot(pg, "19b-calendario")
+        # La proposta dell'agente ora passa: l'evento compare tra tre giorni
+        pg.click(".schede a[href='#/diario']")
+        pg.locator(".azione", has_text="Cena con i Rossi").locator("button[aria-label='Conferma']").click()
+        pg.wait_for_selector("text=Evento nel calendario della casa")
+        assert cal["eventi"]["ev2"]["summary"] == "Cena con i Rossi" and cal["eventi"]["ev2"]["location"] == "Da noi", cal["eventi"]
+        menu(pg, "Calendario")
+        pg.wait_for_selector(".riga >> text=Cena con i Rossi")
+        assert pg.locator(".riga", has_text="Cena con i Rossi").locator(".evento__ora b").inner_text() == "20:00"
+        # Elimina
+        pg.click(".riga >> text=Torneo")
+        pg.click("#foglio button >> text=Elimina")
+        pg.wait_for_selector("text=Evento eliminato")
+        pg.wait_for_timeout(300)
+        assert pg.locator(".riga", has_text="Torneo").count() == 0 and "ev1" not in cal["eventi"]
+
+        # ── Scollegare Google ──
         step[0] = "scollega"
-        menu(pg, "Google Contatti")
-        pg.wait_for_selector("#foglio >> text=Collegato come")
-        pg.click("#foglio button >> text=Scollega")
-        pg.wait_for_selector("text=Google Contatti scollegato")
-        menu(pg, "Google Contatti")
-        pg.wait_for_selector("#foglio .btn--conferma >> text=Collega")
-        pg.click("#foglio button[aria-label='Indietro']")
+        menu(pg, "Google")
+        pg.wait_for_selector(".blocco h3 >> text=mattia@example.com")
+        pg.click("button.btn--pericolo >> text=Scollega")
+        pg.wait_for_selector("#foglio .btn--conferma >> text=Scollega")
+        conferma(pg)
+        pg.wait_for_selector("text=Google scollegato")
+        pg.wait_for_selector("button.fab >> text=Collega")
+        menu(pg, "Calendario")
+        pg.wait_for_selector("#page-title >> text=Calendario")
+        pg.wait_for_selector("#view .vuoto >> text=Google non collegato")
+        pg.wait_for_timeout(400)  # fine del passaggio, prima di contare i passaggi del tema
 
         # ── Tema scuro ──
         step[0] = "tema"

@@ -35,17 +35,17 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
-      # Google Contatti. La People API va attiva nel progetto (ripeterlo è innocuo). Le functions
-      # scambiano e rinnovano il permesso con lo stesso client OAuth web dell'accesso con Google:
+      # Account Google (Contatti, Calendario, Drive). Le tre API vanno attive nel progetto (ripeterlo è
+      # innocuo). Le functions scambiano e rinnovano il permesso con lo stesso client OAuth web dell'accesso con Google:
       # ID e secret si leggono dalla configurazione di Firebase Authentication e si tengono nel
       # segreto GOOGLE_OAUTH_CLIENT, aggiornato solo se cambiano. Se non si leggono, il segreto
       # resta com'è (o nasce vuoto, così il deploy passa) e la funzione dice che manca.
-      - name: Google Contatti (API e client OAuth)
+      - name: Google (API e client OAuth)
         run: |
           P=macroapp-b9bd0
           S=GOOGLE_OAUTH_CLIENT
-          gcloud services enable people.googleapis.com --project "$P" --quiet \
-            || echo "::warning title=Google Contatti::People API non attivata dal deploy: va attivata dalla console"
+          gcloud services enable people.googleapis.com calendar-json.googleapis.com drive.googleapis.com --project "$P" --quiet \
+            || echo "::warning title=Google::API di Contatti, Calendario o Drive non attivate dal deploy: vanno attivate dalla console"
           VAL=$(curl -s -H "Authorization: Bearer $(gcloud auth print-access-token)" \
             "https://identitytoolkit.googleapis.com/admin/v2/projects/$P/defaultSupportedIdpConfigs/google.com" \
             | python3 -c 'import json,sys; d=json.load(sys.stdin); print(json.dumps({"id": d["clientId"], "secret": d["clientSecret"]}) if d.get("clientId") and d.get("clientSecret") else "")' 2>/dev/null || true)
@@ -54,7 +54,7 @@ jobs:
           fi
           ATTUALE=$(gcloud secrets versions access latest --secret="$S" --project "$P" 2>/dev/null || true)
           if [ -z "$VAL" ]; then
-            echo "::warning title=Google Contatti::ID e secret del client OAuth non leggibili da Firebase Authentication: $S resta com'è"
+            echo "::warning title=Google::ID e secret del client OAuth non leggibili da Firebase Authentication: $S resta com'è"
             [ -n "$ATTUALE" ] && exit 0
             VAL='{}'
           fi
@@ -93,7 +93,7 @@ jobs:
       # creazione e una volta non c'era: senza, l'app vede «internal». Ripeterlo è innocuo.
       - name: Funzioni chiamate dall'app invocabili
         run: |
-          for S in analyzeentry bank contatti avvisa prodotto; do
+          for S in analyzeentry bank google avvisa prodotto; do
             gcloud run services add-iam-policy-binding "$S" --region europe-west1 --project macroapp-b9bd0 \
               --member=allUsers --role=roles/run.invoker --quiet > /dev/null
           done

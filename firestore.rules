@@ -136,8 +136,8 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Permessi di Google Contatti (refresh token): solo le Cloud Functions. Lo stato del
-    // collegamento che serve all'app sta in users/{uid}.contattiGoogle.
+    // Permesso duraturo dell'account Google (refresh token: contatti, calendario, Drive): solo le Cloud
+    // Functions. Lo stato del collegamento che serve all'app sta in users/{uid}.google.
     match /google_tokens/{uid} {
       allow read, write: if false;
     }

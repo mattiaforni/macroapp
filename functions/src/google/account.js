@@ -1,24 +1,33 @@
-// Google Contatti collegati una volta sola, in sola lettura.
+// Account Google collegato una volta sola: Contatti (sola lettura), Calendario (lettura e scrittura
+// degli eventi) e Drive (sola lettura).
 //
 // Il permesso si dà una volta: l'app manda alla pagina di Google, che torna su /google-contatti
-// con un codice; qui il codice diventa un refresh token, conservato in google_tokens/{uid}
-// (l'app non può leggerlo: firestore.rules). All'app si consegnano solo permessi di un'ora
-// (contacts.readonly), con cui legge i contatti direttamente dalla People API.
+// (il percorso è rimasto quello del primo collegamento, già autorizzato nel client OAuth) con un
+// codice; qui il codice diventa un refresh token, conservato in google_tokens/{uid} (l'app non può
+// leggerlo: firestore.rules). All'app si consegnano solo permessi di un'ora, con cui legge contatti,
+// calendario e Drive direttamente dalle API di Google; il server usa lo stesso permesso per leggere
+// i documenti di Drive quando l'agente analizza una nota (tokenServer).
 // Il client OAuth è quello web dell'accesso con Google: ID e secret arrivano dal segreto
 // GOOGLE_OAUTH_CLIENT, che il deploy copia dalla configurazione di Firebase Authentication.
 //
 // Azioni (data.azione):
 //   avvio    { ritorno }               → { url }    pagina di Google dove dare il permesso
-//   collega  { code, state, ritorno }  → { email, accessToken, scade }
-//   token    { rinnova? }              → { email, accessToken, scade }
+//   collega  { code, state, ritorno }  → { email, accessToken, scade, permessi }
+//   token    { rinnova? }              → { email, accessToken, scade, permessi }
 //   scollega {}                        → {}
+// permessi = { contatti, calendario, drive }: quali dei tre l'utente ha lasciato spuntati nella pagina
+// di Google (sono tutti facoltativi lì). Lo stesso sta in users/{uid}.google, che l'app legge.
 // Gli errori portano in details.motivo un codice per l'app: client, ritorno, state, scope,
 // refresh, non-collegato, scaduto, rete.
 import { HttpsError } from "firebase-functions/v2/https";
 import { randomBytes } from "node:crypto";
 
-const SCOPE_CONTATTI = "https://www.googleapis.com/auth/contacts.readonly";
-const SCOPES = ["openid", "email", SCOPE_CONTATTI];
+export const SCOPE = {
+  contatti: "https://www.googleapis.com/auth/contacts.readonly",
+  calendario: ["https://www.googleapis.com/auth/calendar.readonly", "https://www.googleapis.com/auth/calendar.events"],
+  drive: "https://www.googleapis.com/auth/drive.readonly",
+};
+const SCOPES = ["openid", "email", SCOPE.contatti, ...SCOPE.calendario, SCOPE.drive];
 const PERCORSO = "/google-contatti";
 const ORIGINI = ["https://macroapp-b9bd0.web.app", "https://macroapp-b9bd0.firebaseapp.com", "http://localhost:5000"];
 const COLL = "google_tokens";
@@ -34,6 +43,16 @@ export function ritornoValido(r) {
   } catch (e) {
     return null;
   }
+}
+
+/** Quali dei tre permessi ci sono nella stringa `scope` tornata da Google. */
+export function permessiDa(scope) {
+  const dati = String(scope || "").split(" ");
+  return {
+    contatti: dati.includes(SCOPE.contatti),
+    calendario: SCOPE.calendario.every((s) => dati.includes(s)),
+    drive: dati.includes(SCOPE.drive),
+  };
 }
 
 /** POST all'endpoint dei token di Google. Gli errori portano `oauth` (es. invalid_grant). */
@@ -63,6 +82,51 @@ function emailDa(idToken) {
 
 const scadenza = (j) => Date.now() + (Number(j.expires_in) || 3600) * 1000;
 
+const serveClient = (client) => {
+  if (!client?.id || !client?.secret) {
+    throw errore("failed-precondition", "Il server non ha ancora i dati del client Google (GOOGLE_OAUTH_CLIENT)", "client");
+  }
+};
+
+/**
+ * Permesso di un'ora dal refresh token conservato: lo stesso per l'app (azione «token») e per il
+ * server (l'agente legge i documenti di Drive). Se il permesso è stato revocato o è scaduto (app in
+ * modalità di test: 7 giorni), toglie il collegamento e lo segna nel profilo.
+ * Ritorna { email, accessToken, scade, permessi }.
+ */
+export async function tokenServer(db, uid, client, { rinnova = false } = {}) {
+  const { FieldValue } = await import("firebase-admin/firestore");
+  const ref = db.collection(COLL).doc(uid);
+  const profilo = db.collection("users").doc(uid);
+  const d = (await ref.get()).data();
+  if (!d?.refreshToken) throw errore("failed-precondition", "Google non è collegato", "non-collegato");
+  const permessi = d.permessi || permessiDa(d.scope);
+  // Lo stesso permesso vale per tutti i dispositivi finché non sta per scadere.
+  if (!rinnova && d.accessToken && d.scade > Date.now() + 5 * 60 * 1000) {
+    return { email: d.email || "", accessToken: d.accessToken, scade: d.scade, permessi };
+  }
+  serveClient(client);
+  let j;
+  try {
+    j = await chiediToken({
+      refresh_token: d.refreshToken, client_id: client.id, client_secret: client.secret, grant_type: "refresh_token",
+    });
+  } catch (e) {
+    if (e.oauth === "invalid_grant") {
+      await ref.delete();
+      await profilo.set({ google: { collegato: false, scaduto: true, email: d.email || "", permessi }, contattiGoogle: FieldValue.delete() }, { merge: true });
+      throw errore("failed-precondition", "Il collegamento con Google è scaduto: ricollegalo", "scaduto");
+    }
+    if (e.oauth === "invalid_client" || e.oauth === "unauthorized_client") {
+      throw errore("failed-precondition", `Client Google non valido (${e.message.slice(0, 120)})`, "client");
+    }
+    throw errore("unavailable", `Google non risponde (${e.message.slice(0, 120)})`, "rete");
+  }
+  const scade = scadenza(j);
+  await ref.update({ accessToken: j.access_token, scade });
+  return { email: d.email || "", accessToken: j.access_token, scade, permessi };
+}
+
 /**
  * utente: { uid, email }; data: { azione, ... }; client: { id, secret } da GOOGLE_OAUTH_CLIENT.
  */
@@ -70,11 +134,6 @@ export async function gestisci(db, utente, data, client) {
   const { FieldValue } = await import("firebase-admin/firestore");
   const ref = db.collection(COLL).doc(utente.uid);
   const profilo = db.collection("users").doc(utente.uid);
-  const serveClient = () => {
-    if (!client?.id || !client?.secret) {
-      throw errore("failed-precondition", "Il server non ha ancora i dati del client Google (GOOGLE_OAUTH_CLIENT)", "client");
-    }
-  };
   const serveRitorno = () => {
     const r = ritornoValido(data.ritorno);
     if (!r) throw errore("invalid-argument", "Indirizzo di ritorno non ammesso", "ritorno");
@@ -83,7 +142,7 @@ export async function gestisci(db, utente, data, client) {
 
   switch (data.azione) {
     case "avvio": {
-      serveClient();
+      serveClient(client);
       const redirect = serveRitorno();
       const state = randomBytes(18).toString("base64url");
       await ref.set({ ownerUid: utente.uid, state, stateAt: Date.now() }, { merge: true });
@@ -101,7 +160,7 @@ export async function gestisci(db, utente, data, client) {
     }
 
     case "collega": {
-      serveClient();
+      serveClient(client);
       const redirect = serveRitorno();
       const d = (await ref.get()).data() || {};
       if (!data.code || !data.state || data.state !== d.state || Date.now() - (d.stateAt || 0) > VALIDITA_STATE) {
@@ -116,8 +175,9 @@ export async function gestisci(db, utente, data, client) {
       } catch (e) {
         throw errore("failed-precondition", `Google non ha confermato il permesso (${e.message.slice(0, 140)})`, e.oauth || "oauth");
       }
-      if (!String(j.scope || "").split(" ").includes(SCOPE_CONTATTI)) {
-        throw errore("permission-denied", "Nella pagina di Google non è stato spuntato l'accesso ai contatti", "scope");
+      const permessi = permessiDa(j.scope);
+      if (!permessi.contatti && !permessi.calendario && !permessi.drive) {
+        throw errore("permission-denied", "Nella pagina di Google non è stato spuntato nessun accesso", "scope");
       }
       const refreshToken = j.refresh_token || d.refreshToken;
       if (!refreshToken) throw errore("failed-precondition", "Google non ha dato un permesso duraturo: riprova", "refresh");
@@ -125,42 +185,18 @@ export async function gestisci(db, utente, data, client) {
       const scade = scadenza(j);
       // set senza merge: sparisce anche lo state, che vale una volta sola.
       await ref.set({
-        ownerUid: utente.uid, refreshToken, email, accessToken: j.access_token, scade,
+        ownerUid: utente.uid, refreshToken, email, accessToken: j.access_token, scade, scope: j.scope || "", permessi,
         collegatoIl: FieldValue.serverTimestamp(),
       });
-      await profilo.set({ contattiGoogle: { collegato: true, scaduto: false, email, dal: FieldValue.serverTimestamp() } }, { merge: true });
-      return { email, accessToken: j.access_token, scade };
+      await profilo.set({
+        google: { collegato: true, scaduto: false, email, permessi, dal: FieldValue.serverTimestamp() },
+        contattiGoogle: FieldValue.delete(), // campo del vecchio collegamento ai soli contatti
+      }, { merge: true });
+      return { email, accessToken: j.access_token, scade, permessi };
     }
 
-    case "token": {
-      const d = (await ref.get()).data();
-      if (!d?.refreshToken) throw errore("failed-precondition", "Google Contatti non è collegato", "non-collegato");
-      // Lo stesso permesso vale per tutti i dispositivi finché non sta per scadere.
-      if (!data.rinnova && d.accessToken && d.scade > Date.now() + 5 * 60 * 1000) {
-        return { email: d.email || "", accessToken: d.accessToken, scade: d.scade };
-      }
-      serveClient();
-      let j;
-      try {
-        j = await chiediToken({
-          refresh_token: d.refreshToken, client_id: client.id, client_secret: client.secret, grant_type: "refresh_token",
-        });
-      } catch (e) {
-        if (e.oauth === "invalid_grant") {
-          // Permesso revocato dall'account Google, o scaduto (app in modalità di test: 7 giorni).
-          await ref.delete();
-          await profilo.set({ contattiGoogle: { collegato: false, scaduto: true, email: d.email || "" } }, { merge: true });
-          throw errore("failed-precondition", "Il collegamento con Google Contatti è scaduto: ricollegalo", "scaduto");
-        }
-        if (e.oauth === "invalid_client" || e.oauth === "unauthorized_client") {
-          throw errore("failed-precondition", `Client Google non valido (${e.message.slice(0, 120)})`, "client");
-        }
-        throw errore("unavailable", `Google non risponde (${e.message.slice(0, 120)})`, "rete");
-      }
-      const scade = scadenza(j);
-      await ref.update({ accessToken: j.access_token, scade });
-      return { email: d.email || "", accessToken: j.access_token, scade };
-    }
+    case "token":
+      return tokenServer(db, utente.uid, client, { rinnova: !!data.rinnova });
 
     case "scollega": {
       const d = (await ref.get()).data();
@@ -171,7 +207,7 @@ export async function gestisci(db, utente, data, client) {
           .catch((e) => console.warn("revoca", e.message));
       }
       await ref.delete();
-      await profilo.set({ contattiGoogle: FieldValue.delete() }, { merge: true });
+      await profilo.set({ google: FieldValue.delete(), contattiGoogle: FieldValue.delete() }, { merge: true });
       return {};
     }
 

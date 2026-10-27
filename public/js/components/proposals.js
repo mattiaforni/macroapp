@@ -2,7 +2,7 @@
 // Nel diario compaiono sotto la nota da cui nascono.
 //
 // Documento in `proposals`:
-//   kind        "task" | "shopping_item" | "manual_entry" | "expense" | "draft" | "project_summary"
+//   kind        "task" | "shopping_item" | "manual_entry" | "expense" | "event" | "draft" | "project_summary"
 //               ("note", l'appunto, non viene più proposto dall'agente; la conferma resta per quelle vecchie)
 //   source      "agent" | "bank" | "share"
 //   status      "pending" | "accepted" | "rejected"
@@ -20,6 +20,7 @@ import { categoria } from "../modules/spese/index.js";
 import { separaNomi, risolviPersone, nomiDa, trovaPersona, numeroInternazionale, datiDaContatto, personaDaGoogle } from "../core/rubrica.js";
 import { caricaContatti, contattoUnico } from "../core/contatti-google.js";
 import { salvaSintesi } from "./sintesi.js";
+import { creaEvento } from "../core/calendario.js";
 
 const COLL = "proposals";
 
@@ -29,6 +30,7 @@ export const TIPI = {
   manual_entry: { nome: "Manuale", icona: "negozio" },
   note: { nome: "Appunto", icona: "appunto" },
   expense: { nome: "Spesa", icona: "spese" },
+  event: { nome: "Calendario", icona: "calendario" },
   draft: { nome: "Bozza", icona: "mail" },
   project_summary: { nome: "Sintesi del progetto", icona: "diario" },
 };
@@ -82,6 +84,13 @@ const APPLICA = {
     }, VIS.SHARED);
     return "Spesa aggiunta";
   },
+  // L'evento va nel calendario della casa su Google Calendar (serve Google collegato e il calendario scelto).
+  async event(p) {
+    const x = p.payload || {};
+    if (!x.due) throw new Error("giorno mancante");
+    await creaEvento({ titolo: x.text || p.summary || "Evento", giorno: x.due, ora: x.time || "", luogo: x.place || "", note: "" });
+    return "Evento nel calendario della casa";
+  },
   async draft(p) {
     const x = p.payload;
     create("notes", { type: "draft", channel: x.channel || "", to: x.to || "", subject: x.subject || "", text: x.body || "" }, VIS.PRIVATE);
@@ -101,7 +110,11 @@ export async function accept(p) {
   if (!fn) { toast("Tipo di azione non gestito"); return; }
   update(COLL, p.id, { status: "accepted", decidedBy: session.user.uid });
   try { toast(await fn(p)); }
-  catch (e) { console.error(e); toast("Non sono riuscito ad applicarla"); update(COLL, p.id, { status: "pending" }); }
+  catch (e) {
+    if (!e.motivo) console.error(e); // con `motivo` è uno stato noto (Google non collegato, calendario non scelto), detto nel toast
+    toast(e.motivo === "nessun-calendario" ? e.message : /scaduto|non-collegato/.test(e.motivo || "") ? "Google non è collegato: collegalo dal menu" : "Non sono riuscito ad applicarla", { ms: 5000 });
+    update(COLL, p.id, { status: "pending" });
+  }
 }
 
 export function reject(p) {
@@ -163,6 +176,11 @@ export function renderAzione(p) {
   if (p.kind === "task") {
     const x = p.payload || {};
     const extra = [x.project && `progetto ${x.project}`, x.due && `entro ${x.due.split("-").reverse().join("/")}`, x.people].filter(Boolean).join(" · ");
+    if (extra) dettagli.push(el("span.meta", { style: "display:block" }, extra));
+  }
+  if (p.kind === "event") {
+    const x = p.payload || {};
+    const extra = [x.due && giornoRelativo(new Date(`${x.due}T12:00:00`)), x.time || "tutto il giorno", x.place].filter(Boolean).join(" · ");
     if (extra) dettagli.push(el("span.meta", { style: "display:block" }, extra));
   }
   if (p.source === "bank") {

@@ -31,9 +31,12 @@ Dettagli in [docs/ARCHITETTURA.md](docs/ARCHITETTURA.md) e [docs/MODELLO-DATI.md
    ```
    Quelli non ancora disponibili possono avere un valore fittizio: la funzione fallisce solo quando li usa.
    GOOGLE_OAUTH_CLIENT non serve impostarlo: lo scrive il deploy automatico (vedi sotto).
-8. **Google Contatti**: Google Cloud → API e servizi → Credenziali → «Web client (auto created by Google Service)»
-   → URI di reindirizzamento autorizzati → aggiungi `https://<dominio>/google-contatti`. La schermata di consenso
-   deve essere «In produzione»: in modalità di test il permesso scade dopo 7 giorni.
+8. **Google (Contatti, Calendario, Drive)**: Google Cloud → API e servizi → Credenziali → «Web client (auto created by Google Service)»
+   → URI di reindirizzamento autorizzati → aggiungi `https://<dominio>/google-contatti` (il percorso vale per tutti e
+   tre i permessi). Nella schermata di consenso OAuth vanno dichiarati gli scope usati (`contacts.readonly`,
+   `calendar.readonly`, `calendar.events`, `drive.readonly`) e, in modalità di test, i due account come utenti di prova:
+   in modalità di test il permesso scade dopo 7 giorni e si ricollega dalla pagina Google; pubblicarla con lo scope di
+   Drive richiede la verifica di sicurezza di Google.
 7. **Primo deploy**: `firebase deploy`.
 
 ## Banca (Enable Banking)

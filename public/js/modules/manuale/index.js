@@ -1,21 +1,23 @@
 // Manuale di casa e rubrica: negozi e fornitori utili, persone (anche quelle dei task),
 // informazioni di casa (codici, tecnici, istruzioni). Un solo posto per i contatti.
 //
-// manual_entries { type: "shop" | "person" | "info", name, category, address, phone, email, url, notes, googleId }
+// manual_entries { type: "shop" | "person" | "info", name, category, address, phone, email, url, notes, googleId, documenti }
 // googleId: la persona è collegata a Google Contatti; telefono, mail e indirizzo arrivano da lì.
+// documenti: file di Google Drive collegati alla voce [{ id, nome, mime, link }] (contratti, garanzie, istruzioni).
 // Le categorie sono della casa: households/{id}.manualCategories (nomi). Se mancano valgono
 // quelle predefinite; la categoria di una voce è facoltativa.
 import { el, icon, toast, fascia, vuoto, sceltaVisibilita, iconaDa, fab } from "../../core/ui.js";
 import { create, update, remove, watchVisible, readVisible, VIS } from "../../core/db.js";
 import { getHousehold, updateHousehold } from "../../core/household.js";
 import { session } from "../../core/auth.js";
-import { richiesto } from "../../core/router.js";
+import { richiesto, vaiA } from "../../core/router.js";
 import {
-  statoContatti, contattiCollegati, collegaContatti, scollegaContatti, collegamentoInCorso, caricaContatti,
+  statoContatti, contattiCollegati, caricaContatti,
   cercaContatti, contattoDaId, linkGoogle, dettaglioContatto, messaggioContatti, suContatti,
 } from "../../core/contatti-google.js";
 import { personaDaGoogle, trovaPersona, datiDaContatto, differenzeDaGoogle, rubricaPronta } from "../../core/rubrica.js";
 import { openSheet, campo } from "../../components/sheet.js";
+import { sceltaDocumenti } from "../../components/documenti.js";
 import { rigaTask } from "../task/index.js";
 
 export const id = "manuale";
@@ -120,7 +122,7 @@ export async function apriVoceManuale(esistente = null, prefill = {}) {
     if (!contattiCollegati()) {
       suggeriti.hidden = true;
       legame.replaceChildren(esistente ? null : el("div.nota-campo", {}, icon("contatto"),
-        el("button", { type: "button", onclick: () => apriContatti() }, "Collega Google Contatti"),
+        el("button", { type: "button", onclick: () => vaiA("google") }, "Collega Google"),
         el("span", {}, "per cercare tra i tuoi contatti")));
       return;
     }
@@ -222,6 +224,7 @@ export async function apriVoceManuale(esistente = null, prefill = {}) {
     });
   }
 
+  const documenti = sceltaDocumenti({ documenti: d.documenti || [] });
   const sheet = openSheet({
     title: esistente ? esistente.name : "Nuova voce",
     body: [
@@ -233,6 +236,7 @@ export async function apriVoceManuale(esistente = null, prefill = {}) {
       campi.indirizzo,
       el("div.due", {}, campi.tel, campi.mail, campi.sito),
       campo("Note", note),
+      documenti.node,
       el("div.campo", {}, el("label", {}, "Visibilità"), visWrap),
       suoiTask,
       esistente ? el("div.foglio__piede", {},
@@ -248,6 +252,7 @@ export async function apriVoceManuale(esistente = null, prefill = {}) {
         url: tipo === "person" ? "" : sito.value.trim(),
         notes: note.value.trim(),
         googleId: tipo === "person" && google ? google.googleId : null,
+        documenti: documenti.valore(),
       };
       if (!dati.name) { nome.focus(); return false; }
       if (esistente) update(COLL, esistente.id, { ...dati, visibility });
@@ -316,43 +321,13 @@ async function apriCategorie() {
 }
 
 /**
- * Google Contatti: il collegamento (una volta sola) e l'elenco dei contatti, da cui una persona
- * entra in rubrica con un tocco. Dal menu, dalla sezione Persone e al ritorno dalla pagina di Google.
+ * Google Contatti: l'elenco dei contatti, da cui una persona entra in rubrica con un tocco. Dal menu
+ * e dalla sezione Persone. Il collegamento dell'account si fa dalla pagina Google (modules/google):
+ * senza il permesso dei contatti si va lì.
  */
-async function apriContatti() {
-  const inCorso = collegamentoInCorso();
-  if (inCorso) {
-    openSheet({ title: "Google Contatti", body: el("p.meta", { style: "padding:22px 0" }, "Collego i contatti…") });
-    try {
-      await inCorso;
-      toast("Google Contatti collegato");
-    } catch (err) {
-      return foglioDaCollegare(err);
-    }
-  }
-  return contattiCollegati() ? foglioContatti() : foglioDaCollegare();
-}
-
-function foglioDaCollegare(err = null) {
-  const { scaduto, email } = statoContatti();
-  const msg = err ? messaggioContatti(err) : null;
-  const par = (testo) => el("p", { style: "margin:14px 0 0;line-height:1.5" }, testo);
-  openSheet({
-    title: "Google Contatti",
-    body: [
-      msg ? el("div.nota-campo", { style: "margin:16px 0 0;color:var(--frutto)" }, icon("avviso"), el("span", {}, el("b", {}, msg.titolo), ". ", msg.testo)) : null,
-      scaduto && !msg ? el("div.nota-campo", { style: "margin:16px 0 0;color:var(--frutto)" }, icon("avviso"), el("span", {}, `Il collegamento${email ? ` con ${email}` : ""} è scaduto.`)) : null,
-      par("Colleghi il tuo account Google una volta sola. Poi, mentre scrivi un nome in un task o in rubrica, compaiono anche i tuoi contatti."),
-      par("In rubrica entra solo chi colleghi, e telefono, mail e indirizzo restano aggiornati da Google. L'app legge soltanto: non modifica i contatti."),
-      el("p.meta", { style: "margin-top:14px" }, "Si passa dalla pagina di Google e si torna qui. Se compare l'avviso «app non verificata», si prosegue con «Avanzate»."),
-    ],
-    confirmLabel: scaduto ? "Ricollega" : "Collega",
-    onConfirm: async () => {
-      try { await collegaContatti(); } // la pagina passa a Google
-      catch (e) { const m = messaggioContatti(e); toast(`${m.titolo}: ${m.testo}`, { ms: 6000 }); }
-      return false;
-    },
-  });
+function apriContatti() {
+  if (!contattiCollegati()) { vaiA("google"); return; }
+  foglioContatti();
 }
 
 function foglioContatti() {
@@ -397,16 +372,12 @@ function foglioContatti() {
       filtro,
       elenco,
     ],
-    azioni: [el("button.btn", { type: "button", onclick: async () => {
-      try { await scollegaContatti(); sheet.close(); toast("Google Contatti scollegato"); }
-      catch (e) { toast(`Non scollegato: ${messaggioContatti(e).testo}`); }
-    } }, icon("esci"), "Scollega")],
   });
 
   // Anche la rubrica: senza, chi è già in rubrica sembrerebbe nuovo (e toccandolo si duplicherebbe).
   Promise.all([caricaContatti(), rubricaPronta()]).then(([c]) => { contatti = c; disegna(); }, (err) => {
     const m = messaggioContatti(err);
-    if (err.motivo === "scaduto") { sheet.close(); foglioDaCollegare(err); return; }
+    if (err.motivo === "scaduto") { sheet.close(); toast(`${m.titolo}: ${m.testo}`, { ms: 6000 }); vaiA("google"); return; }
     elenco.replaceChildren(vuoto(m.titolo, m.testo));
   });
 }
@@ -479,7 +450,7 @@ export function mount(container) {
     } else if (segmento === "persone") {
       nodi.push(el("div.segmenti", { style: "padding-top:6px" },
         el("button.btn.btn--piatto", { onclick: () => apriContatti() }, icon("contatto"),
-          contattiCollegati() ? "Cerca in Google Contatti" : "Collega Google Contatti")));
+          contattiCollegati() ? "Cerca in Google Contatti" : "Collega Google")));
       nodi.push(...gruppo("Persone", persone));
       if (!persone.length) nodi.push(vuoto(q ? "Nessun risultato" : "Nessuna persona", q ? null : "Le persone dei task finiscono qui da sole. Puoi anche prenderle da Google Contatti."));
     } else if (segmento === "casa") {

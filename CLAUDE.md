@@ -2,7 +2,7 @@
 
 App personale e di coppia di Mattia (PWA), nome «Debiti e Doveri», breve «D&D» (repository e
 chiavi interne restano `macroapp`): lista della spesa, spese condivise, diario con agente,
-task per progetti, manuale di casa. Due utenti (Mattia e la compagna) in una "casa".
+task per progetti, manuale di casa, calendario della casa (su Google Calendar). Due utenti (Mattia e la compagna) in una "casa".
 Interfaccia, codice e commenti in italiano. Mattia chiede modifiche spesso dal telefono:
 il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione automatica.
 
@@ -13,9 +13,9 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 - **Dati** su Firestore, progetto `macroapp-b9bd0`. Ogni documento di contenuto ha
   `ownerUid`, `householdId`, `visibility` (`shared` | `private`): vedi `docs/MODELLO-DATI.md`.
 - **Functions** in `functions/` (Node 24, europe-west1): `analyzeEntry` (agente del diario,
-  provider AI intercambiabile in `src/ai/`), `bank` (onCall con `azione`: elenco banche, avvio e
-  conclusione del consenso, scollega, lettura a richiesta; `src/banking/enable.js`), `contatti` (Google
-  Contatti: collegamento e permessi di un'ora, `src/google/contatti.js`), `avvisa` (notifiche push,
+  provider AI intercambiabile in `src/ai/`; legge i documenti di Drive del progetto, `src/google/drive.js`), `bank` (onCall con `azione`: elenco banche, avvio e
+  conclusione del consenso, scollega, lettura a richiesta; `src/banking/enable.js`), `google` (account
+  Google: collegamento una tantum con le spunte Contatti, Calendario e Drive, permessi di un'ora, `src/google/account.js`), `avvisa` (notifiche push,
   `src/avvisi.js`), `prodotto` (scheda di un prodotto da Open Food Facts con l'indice, cache in `prodotti/{ean}`;
   `src/prodotti/`), `syncBank` (lettura quotidiana alle 7:15, poi le notifiche della banca). firebase-admin, agente e banca si importano dentro i gestori, non all'avvio.
 - **Pubblicazione**: push su `main` → `.github/workflows/deploy.yml` pubblica hosting,
@@ -36,19 +36,25 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 | `core/notifiche.js` | notifiche push: `attiva`/`disattiva` su questo telefono (token in `users.dispositivi`), categorie (`users.notifiche`), `prova`, `segnala` → funzione `avvisa`; il disegno e il tocco della notifica stanno in `sw.js` |
 | `core/household.js` | casa, nomi dei membri (`memberNames`), `nomeDi`, `updateHousehold` (es. categorie del manuale) |
 | `core/rubrica.js` | voci del manuale in memoria, aggiornate in tempo reale: `trovaPersona`, `risolviPersone` (crea quelle che mancano, collegate a Google se il nome è univoco), `nomiTask`, `sincronizzaDaGoogle` (all'avvio) |
-| `core/contatti-google.js` | Google Contatti: collegamento una tantum (ritorno su `/google-contatti`), permesso di un'ora dal server, elenco in memoria per `cercaContatti` / `contattoUnico` |
+| `core/google.js` | account Google: `statoGoogle` (`users.google`: collegato, email, `permessi` {contatti, calendario, drive}), collegamento una tantum (ritorno su `/google-contatti`, poi pagina Google), permesso di un'ora dal server in localStorage, `chiamaGoogle(url, { method, query, body })` con rinnovo su 401, `messaggioGoogle` |
+| `core/contatti-google.js` | Google Contatti: elenco in memoria per `cercaContatti` / `contattoUnico`; `contattiCollegati` = Google collegato con la spunta dei contatti |
+| `core/calendario.js` | calendario «Casa» (`households.calendario`): `elencoCalendari`, `scegliCalendario`, `leggiEventi` (prossimi giorni, in memoria, `suEventi`), `creaEvento` / `aggiornaEvento` / `eliminaEvento` direttamente sull'API di Calendar. Niente copia su Firestore |
+| `core/drive.js` | ricerca per nome in tutto il Drive (`cercaDrive`, `recentiDrive`), `tipoDocumento`, `documentoDa` |
 | `components/sheet.js` | foglio a tutta altezza: in alto indietro e titolo; in basso barra con le azioni secondarie a sinistra (anche un `div.foglio__piede` nel corpo finisce lì) e il pulsante principale a destra (`confirmLabel`, «Salva»), sopra la tastiera; il tasto indietro lo chiude. Classi di movimento `foglio--entra` / `--sostituisce` / `--chiude`; `close({ subito: true })` senza dissolvenza |
 | `components/menu.js` | menu a sinistra a gruppi (Progetti — quelli con istruzioni, letti all'apertura —, Casa, Collegamenti, Account), come in Leghe Fantacalcio |
 | `components/proposals.js` | azioni proposte: `APPLICA` per tipo, `renderAzione` (la sintesi proposta si legge ripiegata) |
 | `components/sintesi.js` | sintesi di un progetto (`projects.sintesi`): `sezioniSintesi` (una sezione «## » per tema, prima riga «Stato: …» facoltativa), `tonoStato`, foglio per correggerla |
 | `components/prodotto.js` | codice a barre: `scansiona()` (fotocamera con `BarcodeDetector`, altrimenti il codice scritto), `apriProdotto(ean, { inLista })` (scheda da Open Food Facts via function `prodotto`: indice e fascia, Nutri-Score, additivi con rischio EFSA, NOVA, bio, valori per 100 g; con `inLista` il campo «In lista come», «Preso» a destra e «Da comprare» a sinistra), `pallinoIndice`, `riassunto` |
+| `components/documenti.js` | documenti di Drive collegati a un progetto o a una voce del manuale: `sceltaDocumenti` (elenco + ricerca, in un foglio), `elencoDocumenti`, `rigaDocumento` |
 | `components/persone.js` | scelta delle persone di un task: suggerimenti dalla rubrica e da Google Contatti, persone nuove; una voce della rubrica non collegata e il contatto Google con lo stesso nome compaiono una volta sola, e sceglierla la collega |
 | `modules/*/index.js` | un modulo = `{ id, title, nav, icon, mount(container) → smonta }`, in `modules/registry.js` |
 | `modules/diario/index.js` | note (anche dettate o condivise), filtro per progetto (`macroapp.diario.progetto`, lo scrive anche la pagina Task), riepilogo dell'AI con la trascrizione ripiegata, proposte sotto la nota. Esporta `apriNota`, `analizzaNota`, `titoloDi` (li usa la pagina Progetto) |
 | `modules/progetto/index.js` | pagina di un progetto con istruzioni (`macroapp.progetto` = quale; menu → Progetti, o dal Diario e dai Task): viste Sintesi (righe per tema con stato e lezioni collegate via `journal_entries.temi`), Lezioni (giorno, titolo, anteprima, temi; foglio di lettura con Modifica e Rianalizza), Da fare. Titolo in testata = nome del progetto (`titoloCorrente`, letto da app.js) |
 | `modules/lista/index.js` | tessere a 4 colonne; quelle da comprare divise per reparto (`REPARTI` = ordine del giro, `REGOLE_REPARTO` dal nome, `reparto` scelto a mano nel foglio Modifica); recenti e «Mi serve» per frequenza, senza reparti. «Scansiona» in Mi serve e in Modifica → `inserisciProdotto` (voce = tipo di prodotto, marca nel dettaglio, `ean` + `prodotto`; pallino della fascia sulla tessera) |
-| `modules/task/index.js` | task per progetti; `apriProgetto` (nome, visibilità, istruzioni per il diario); dal progetto il pulsante Diario |
+| `modules/task/index.js` | task per progetti; `apriProgetto` (nome, visibilità, istruzioni per il diario, documenti di Drive, colore); dal progetto il pulsante Diario |
 | `modules/notifiche/index.js` | pagina Notifiche (menu → Account): stato di questo telefono, «Attiva» in basso a destra, categorie, telefoni attivi, prova |
+| `modules/google/index.js` | pagina Google (menu → Collegamenti): stato del collegamento, righe Contatti / Calendario (scelta del calendario della casa, `apriSceltaCalendario`) / Drive, «Collega» in basso a destra, Ricollega e Scollega; conclude il ritorno dalla pagina di Google |
+| `modules/calendario/index.js` | pagina Calendario (menu → Casa): agenda dei prossimi 60 giorni per giorno, + per un evento nuovo (`apriEvento`: Invio sul titolo salva; giorno, tutto il giorno o con orario, luogo, note), foglio dell'evento con Modifica, Elimina e il link a Google; senza Google o senza calendario scelto rimanda alla pagina Google |
 | `modules/banca/index.js` | stato del collegamento (`bank_connections/{uid}` in tempo reale), scelta della banca, conclusione al ritorno da `/banca?code=…` (messo da parte in `app.js`), «Leggi ora», rinnovo, scollega |
 
 ## Regole di lavoro
@@ -79,7 +85,8 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 4. Nuova collezione: blocco in `firestore.rules` + indici in `firestore.indexes.json`
    (servono per `householdId+visibility+ordine` e `ownerUid+ordine`). Gli ordinamenti fini
    si fanno nel modulo, per non moltiplicare gli indici.
-5. Niente entra nei moduli dall'AI senza conferma: l'agente scrive solo `proposals`. Unica eccezione,
+5. Niente entra nei moduli dall'AI senza conferma: l'agente scrive solo `proposals` (anche gli eventi
+   del calendario: proposta `event`, scritta su Google solo con la spunta). Unica eccezione,
    decisa da Mattia il 23/10: il riepilogo di una nota di un progetto con istruzioni
    (`journal_entries.riepilogo`), che è testo della nota stessa e si corregge dal suo foglio.
    La sintesi del progetto invece passa dalla conferma (scelta di Mattia, 26/10).
@@ -111,7 +118,7 @@ python3 prove/additivi.py                   # rigenera la tabella degli additivi
 ```
 Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggiorna `prove/finto/firebase.js`.
 
-## Stato (27 ottobre 2026) e prossimi passi
+## Stato (27 ottobre 2026, sera) e prossimi passi
 
 - [x] Pubblicazione automatica, accesso Google (anche da app installata), service worker
 - [x] Lista (stile Bring), Spese (stile Splitwise, ricorrenti, pareggio), Diario con agente, Task per
@@ -160,6 +167,31 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
       `entry_reference` (deduplica), descrizioni dei movimenti (`descrizioneDi` in enable.js), MCC,
       quali conti espone la banca. La compagna, per collegare il suo conto, lo aggiunge con «Link
       accounts» nello stesso Control Panel (una sola app per la casa).
+- [x] **Google, collegamento unico** (27/10, scelta di Mattia: calendario condiviso «completamente» su Google
+      Calendar e accesso completo in lettura al suo Drive). La function `contatti` è diventata `google`
+      (deploy.yml la rende invocabile; `firebase deploy --force` toglie la vecchia); scope aggiunti
+      `calendar.readonly` + `calendar.events` e `drive.readonly`, tre spunte facoltative nella pagina di Google
+      (`users.google.permessi`). Chi aveva collegato solo i contatti (`users.contattiGoogle`) resta collegato
+      con quel solo permesso finché non ricollega dalla pagina Google. L'URI di ritorno resta
+      `/google-contatti`, così non c'è niente da aggiungere nel client OAuth. Gli scope sono «sensibili» (Calendar)
+      e «ristretto» (Drive): in modalità di test il permesso scade dopo 7 giorni per entrambi.
+      **Da verificare dal telefono**: il primo ricollegamento con le tre spunte; se la pagina di Google blocca
+      lo scope di Drive («app non verificata» non basta), togliere `drive.readonly` da SCOPES in account.js e
+      tenere i documenti come link.
+      **Calendario** (27/10): menu → Google → Calendario → scelta tra i propri calendari (`households.calendario`);
+      Mattia crea «Casa» su Google Calendar e lo condivide con la compagna (permesso di modificare), lei lo vede
+      con il suo account una volta collegato Google. Pagina Calendario (menu → Casa): agenda dei prossimi 60
+      giorni, + per un evento (scritto subito su Google), modifica ed eliminazione dal foglio; l'agente propone
+      `event` dalle note con giorno, ora e luogo (conferma → evento nel calendario della casa; senza calendario
+      scelto la conferma dice di sceglierlo e la proposta resta). Le prove fingono le API di Calendar e Drive
+      con `pg.route`. Da verificare con l'API vera: che il PATCH con `date`/`dateTime` a `null` cambi davvero un
+      evento da orario a giorno intero e viceversa; i colori del calendario non si usano.
+      **Drive** (27/10): dal foglio del progetto e della voce del manuale, «Documenti da Drive» (ricerca per nome in
+      tutto il Drive, anche condivisi; `documenti` [{ id, nome, mime, link }]); nella pagina del progetto in fondo alla
+      Sintesi; per i progetti con istruzioni l'agente legge il testo (Docs/Sheets/Slides esportati, file di testo; PDF solo
+      per nome; limiti in `functions/src/google/drive.js`) con il permesso dell'utente (`tokenServer`). Non c'è una ricerca
+      libera dell'agente su tutto il Drive (troppo rumore per il prompt). Da valutare: lettura dei PDF (serve una libreria
+      nelle functions), cache del testo per `modifiedTime`.
 - [x] **Google Contatti, integrazione vera**: permesso dato una volta (refresh token in `google_tokens`,
       solo server), ricerca nei contatti mentre si scrive un nome (task, persona nuova del manuale),
       in rubrica solo le persone collegate (`googleId`), telefono/mail/indirizzo aggiornati da Google

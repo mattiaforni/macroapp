@@ -90,15 +90,40 @@ del prodotto, anche per completarla quando è incompleta.
 - `expense_rules`: regole apprese dalle scelte ("ESSELUNGA → condivisa, categoria spesa"). Da applicare in `syncBank` prima di creare la proposta: se una regola corrisponde, la proposta nasce già classificata (o viene accettata automaticamente, se la regola lo prevede).
 - Bonifici tra i due membri: da riconoscere come pareggi, non come spese.
 
+## Google (Contatti, Calendario, Drive)
+
+Un solo collegamento dell'account Google per persona, dato una volta (pagina Google nel menu → Collegamenti): la
+pagina di Google chiede tre spunte facoltative e torna su `/google-contatti` (percorso del primo collegamento, già
+autorizzato nel client OAuth). Il refresh token resta sul server (`google_tokens/{uid}`, `functions/src/google/account.js`);
+l'app riceve permessi di un'ora (`core/google.js` → `chiamaGoogle`) e con quelli chiama direttamente le API di Google.
+Scope: `contacts.readonly`, `calendar.readonly` + `calendar.events`, `drive.readonly`. Google considera i primi due
+«sensibili» e Drive «ristretto»: finché la schermata di consenso OAuth è in modalità di test il permesso scade dopo
+7 giorni (per entrambi gli utenti) e l'app mostra «Collegamento scaduto»; pubblicarla per Drive richiederebbe la
+verifica di sicurezza di Google, che per un'app di due persone non ha senso. Il deploy attiva le tre API e scrive
+il segreto GOOGLE_OAUTH_CLIENT.
+
+- **Contatti** (People API, sola lettura, `core/contatti-google.js`): l'elenco dei contatti si legge tutto e resta in
+  memoria per cercare mentre scrivi un nome (task, persona nuova del manuale). In rubrica (voci `person` del manuale)
+  entrano solo le persone che colleghi, con `googleId`; all'avvio e all'apertura della scheda i loro recapiti si
+  aggiornano da Google. Un nome proposto dall'AI si collega da solo se corrisponde a un solo contatto.
+- **Calendario** (`core/calendario.js`, pagina `modules/calendario`): Google resta il contenitore, l'app non copia
+  gli eventi. Uno dei due sceglie dalla pagina Google quale dei suoi calendari è quello della casa
+  (`households.calendario`) e lo condivide con l'altro da Google Calendar; ciascuno lo legge e ci scrive con il proprio
+  permesso. La pagina Calendario è un'agenda dei prossimi 60 giorni (ricorrenze espanse con `singleEvents`), con il +
+  per un evento nuovo (giorno, tutto il giorno o con orario, luogo, note), scritto subito su Google; un evento si
+  modifica e si elimina dal suo foglio. L'agente propone eventi dalle note (`event`), che si scrivono solo con la
+  spunta. Letture e scritture passano dal telefono; il server non tocca il calendario.
+- **Drive** (`core/drive.js`, `components/documenti.js`): dal foglio di un progetto o di una voce del manuale si cercano
+  file per nome in tutto il Drive dell'utente (anche nei Drive condivisi) e si collegano (`documenti`). Per un progetto
+  con istruzioni, il server legge il testo dei documenti collegati con il permesso dell'utente (`tokenServer` in
+  account.js, `functions/src/google/drive.js`: Documenti, Fogli e Presentazioni esportati come testo, file di testo
+  così come sono, fino a 6 documenti, 6000 caratteri l'uno e 20000 in tutto) e li dà all'agente come contesto della
+  nota; PDF e altri formati si elencano solo per nome. Nel manuale i documenti servono a ritrovare contratti e
+  garanzie con un tocco. Una ricerca libera dell'agente su tutto il Drive non c'è: su un Drive intero la rilevanza per
+  parole chiave è troppo rumorosa per finire nel prompt senza una scelta dell'utente.
+
 ## Integrazioni previste
 
-- **Google Contatti** (People API, sola lettura), collegato una volta sola. Il refresh token resta sul server;
-  l'app riceve permessi di un'ora e legge l'elenco dei contatti, che tiene solo in memoria per cercare mentre
-  scrivi un nome (task, persona nuova del manuale). In rubrica (voci `person` del manuale) entrano solo le
-  persone che colleghi, con `googleId`; all'avvio e all'apertura della scheda i loro recapiti si aggiornano
-  da Google. Un nome proposto dall'AI si collega da solo se corrisponde a un solo contatto.
-  Il deploy attiva la People API e scrive il segreto GOOGLE_OAUTH_CLIENT; l'URI di ritorno
-  `https://macroapp-b9bd0.web.app/google-contatti` va autorizzato a mano nel client OAuth.
 - **Registrazione audio** del diario: `transcribe()` è già prevista (Gemini accetta audio nativo); oggi si usa la dettatura da tastiera.
 - **Notifiche push** (FCM): lista condivisa, consensi bancari in scadenza.
 - **Web Share Target**: già dichiarato nel manifest; il contenuto condiviso diventa una proposta di appunto.

@@ -2,15 +2,17 @@
 // prese dalla rubrica del manuale. Personali per impostazione predefinita; un progetto
 // condiviso rende condivisi i suoi task.
 //
-// projects { name, archived, istruzioni, sintesi, sintesiAt, colore }
+// projects { name, archived, istruzioni, sintesi, sintesiAt, colore, documenti }
 //          istruzioni = per l'agente del diario: con queste, ogni nota del progetto riceve un riepilogo
 //          sintesi = lo stato del progetto, proposto dall'agente e confermato; si legge in modules/progetto
+//          documenti = file di Google Drive [{ id, nome, mime, link }] che l'agente legge come contesto
 // tasks    { text, done, doneAt, due ("AAAA-MM-GG" o null), projectId, peopleIds[], people, note }
 //          people = nomi delle persone in chiaro, copia di peopleIds per chi non vede la voce in rubrica
 import { el, icon, toast, fascia, vuoto, attesa, sceltaVisibilita, sceltaColore, fmtDate, isoGiorno, toDate, fab } from "../../core/ui.js";
 import { create, update, remove, watchVisible, readVisible, VIS } from "../../core/db.js";
 import { openSheet, campo } from "../../components/sheet.js";
 import { sceltaPersone } from "../../components/persone.js";
+import { sceltaDocumenti } from "../../components/documenti.js";
 import { nomiTask, suRubrica, personaDaId, modiDiContatto, canaleDa } from "../../core/rubrica.js";
 import { vaiA } from "../../core/router.js";
 
@@ -148,7 +150,7 @@ export async function apriTask(esistente = null, prefill = {}, progettiNoti = nu
   });
 }
 
-/** Foglio del progetto: nome, visibilità, istruzioni per l'agente del diario. Invio sul nome salva. */
+/** Foglio del progetto: nome, visibilità, istruzioni per l'agente del diario, documenti di Drive. Invio sul nome salva. */
 export function apriProgetto(esistente = null, onCreato) {
   let visibility = esistente?.visibility || VIS.PRIVATE;
   let colore = esistente?.colore || "";
@@ -158,6 +160,7 @@ export function apriProgetto(esistente = null, onCreato) {
     value: esistente?.istruzioni || "", rows: 5,
     placeholder: "Es. Riassumi cosa mi ha insegnato il maestro, cosa ha funzionato, cosa no, cosa ricordare la prossima volta.",
   });
+  const documenti = sceltaDocumenti({ documenti: esistente?.documenti || [], perAgente: true });
   const sheet = openSheet({
     title: esistente ? "Progetto" : "Nuovo progetto",
     body: [
@@ -166,6 +169,8 @@ export function apriProgetto(esistente = null, onCreato) {
       el("p.meta", { style: "margin:-8px 0 18px" }, "Un progetto condiviso è visibile ai due membri della casa, insieme ai suoi task. Le note del diario restano solo tue."),
       campo("Istruzioni per il diario", istruzioni),
       el("p.meta", { style: "margin-top:-10px" }, "Facoltative. Con le istruzioni, l'AI scrive un riepilogo di ogni nota del diario di questo progetto e ti propone la sintesi aggiornata del progetto."),
+      documenti.node,
+      el("p.meta", { style: "margin-top:-6px" }, "Facoltativi. L'agente legge Documenti, Fogli, Presentazioni e file di testo di Google come contesto quando analizza una nota del progetto (con le istruzioni); degli altri formati tiene solo il nome."),
       el("div.campo", { style: "margin-top:18px" }, el("label", {}, "Colore della pagina"), sceltaColore(colore, (c) => { colore = c; })),
       esistente ? el("div.foglio__piede", {},
         el("button.btn", { onclick: () => { update(PROJ, esistente.id, { archived: true }); sheet.close(); toast("Progetto archiviato"); } }, "Archivia"),
@@ -179,7 +184,7 @@ export function apriProgetto(esistente = null, onCreato) {
     onConfirm: () => {
       const name = nome.value.trim();
       if (!name) { nome.focus(); return false; }
-      const dati = { name, istruzioni: istruzioni.value.trim(), colore };
+      const dati = { name, istruzioni: istruzioni.value.trim(), colore, documenti: documenti.valore() };
       if (esistente) update(PROJ, esistente.id, { ...dati, visibility });
       else onCreato?.(create(PROJ, { ...dati, name: cap(name), archived: false }, visibility).id);
     },

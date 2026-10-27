@@ -34,20 +34,22 @@ export function reauthenticateWithRedirect() { return Promise.resolve(); }
 export function getFirestore() { return {}; }
 export function enableIndexedDbPersistence() { return Promise.resolve(); }
 export function getFunctions() { return {}; }
-// Google Contatti: «avvio» rimanda a /google-contatti come farebbe Google dopo il consenso.
-function contatti(data) {
+// Account Google (contatti, calendario, Drive): «avvio» rimanda a /google-contatti come farebbe Google
+// dopo il consenso; tutti e tre i permessi sono dati. Le API di Google le finge la prova (pg.route).
+function google(data) {
   const utenti = coll("users");
   const u = utenti.get(UID) || {};
   const errore = (motivo) => Object.assign(new Error(motivo), { code: "functions/failed-precondition", details: { motivo } });
-  const token = { email: "mattia@example.com", accessToken: "token-finto", scade: Date.now() + 3600 * 1000 };
+  const permessi = { contatti: true, calendario: true, drive: true };
+  const token = { email: "mattia@example.com", accessToken: "token-finto", scade: Date.now() + 3600 * 1000, permessi };
   if (data.azione === "avvio") return { url: `${location.origin}/google-contatti?code=codice-finto&state=s1` };
   if (data.azione === "collega") {
     if (data.code !== "codice-finto" || data.state !== "s1") throw errore("state");
-    utenti.set(UID, { ...u, contattiGoogle: { collegato: true, scaduto: false, email: token.email } }); notify();
+    utenti.set(UID, { ...u, google: { collegato: true, scaduto: false, email: token.email, permessi, dal: new Date() } }); notify();
     return token;
   }
-  if (data.azione === "token") { if (!u.contattiGoogle?.collegato) throw errore("non-collegato"); return token; }
-  if (data.azione === "scollega") { const { contattiGoogle, ...resto } = u; utenti.set(UID, resto); notify(); return {}; }
+  if (data.azione === "token") { if (!u.google?.collegato) throw errore("non-collegato"); return token; }
+  if (data.azione === "scollega") { const { google: _g, ...resto } = u; utenti.set(UID, resto); notify(); return {}; }
   throw errore("azione");
 }
 
@@ -102,7 +104,7 @@ export function httpsCallable(_f, name) {
   if (name === "avvisa") return async (data) => ({ data: avvisaFinto(data) });
   if (name === "prodotto") return prodottoFinto;
   return async (data) => {
-    if (name === "contatti") return { data: contatti(data) };
+    if (name === "google") return { data: google(data) };
     if (name !== "analyzeEntry") return { data: {} };
     const hid = coll("users").get(UID)?.householdId || null;
     const base = { ownerUid: UID, householdId: hid, source: "agent", status: "pending", sourceEntryId: data.entryId, createdAt: new Date() };
@@ -123,9 +125,12 @@ export function httpsCallable(_f, name) {
     }
     P.set("p" + (++seq), { ...base, visibility: "private", kind: "task", summary: "Preparare l'assemblea del circolo entro venerdì", payload: { text: "Preparare l'assemblea", due: "2026-10-30", project: "Circolo", people: "Marco" } });
     P.set("p" + (++seq), { ...base, visibility: "shared", kind: "shopping_item", summary: "Comprare lampadine", payload: { text: "Lampadine" } });
+    const traTre = new Date(); traTre.setDate(traTre.getDate() + 3);
+    const giorno = `${traTre.getFullYear()}-${String(traTre.getMonth() + 1).padStart(2, "0")}-${String(traTre.getDate()).padStart(2, "0")}`;
+    P.set("p" + (++seq), { ...base, visibility: "shared", kind: "event", summary: "Cena con i Rossi alle 20", payload: { text: "Cena con i Rossi", due: giorno, time: "20:00", place: "Da noi" } });
     P.set("p" + (++seq), { ...base, visibility: "private", kind: "draft", summary: "Mail a Marco per l'assemblea", payload: { channel: "email", to: "Marco", subject: "Assemblea del circolo", body: "Ciao Marco,\nti propongo di vederci venerdì alle 21 per preparare l'assemblea.\n\nMattia" } });
     notify();
-    return { data: { proposals: 3 } };
+    return { data: { proposals: 4 } };
   };
 }
 export function signInWithPopup() { return Promise.resolve(); }

@@ -567,6 +567,11 @@ html[data-colore] .pagina-progetto .btn--piatto svg { color: var(--c-testo); }
 .tema__lezioni { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 0 14px; }
 .tema__lezioni .pillola { font-size: 12px; padding: 4px 10px; }
 
+/* Calendario della casa (modules/calendario): ora a sinistra, come la data a colonna di Spese. */
+.evento__ora { width: 48px; flex: none; text-align: center; line-height: 1.15; color: var(--inchiostro-2); }
+.evento__ora b { display: block; font-size: 15px; font-weight: 500; color: var(--inchiostro); }
+.evento__ora small { display: block; font-size: 10.5px; }
+
 /* ───────────── Prodotti dal codice a barre (components/prodotto.js) ─────────────
    Fasce dell'indice: colori dell'app (verde, verdolino delle tessere, arancio, frutto). */
 .indice--eccellente { --indice: var(--verde); }

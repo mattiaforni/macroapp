@@ -2,7 +2,8 @@
 // Segreti (Secret Manager): firebase functions:secrets:set ANTHROPIC_API_KEY, GEMINI_API_KEY, ENABLE_BANKING_APP_ID, ENABLE_BANKING_PRIVATE_KEY
 // GOOGLE_OAUTH_CLIENT ({"id","secret"} del client web dell'accesso con Google) lo scrive il deploy.
 //
-// Funzioni: analyzeEntry (agente del diario), bank (collegamento e lettura della banca), contatti (Google Contatti),
+// Funzioni: analyzeEntry (agente del diario), bank (collegamento e lettura della banca), google (account Google:
+// Contatti, Calendario, Drive),
 // avvisa (notifiche push sulle cose condivise), prodotto (scheda di un prodotto da Open Food Facts), syncBank (lettura quotidiana).
 // All'avvio del container si caricano solo le dichiarazioni delle funzioni.
 // firebase-admin, l'agente e il client bancario vengono importati alla prima richiesta (import dinamico):
@@ -50,7 +51,7 @@ function spiegaErrore(msg = "") {
 }
 
 export const analyzeEntry = onCall(
-  { secrets: [ANTHROPIC_API_KEY, GEMINI_API_KEY], timeoutSeconds: 120 },
+  { secrets: [ANTHROPIC_API_KEY, GEMINI_API_KEY, GOOGLE_OAUTH_CLIENT], timeoutSeconds: 120 },
   async (req) => {
     if (!req.auth) throw new HttpsError("unauthenticated", "Accesso richiesto");
     const { entryId } = req.data || {};
@@ -73,6 +74,7 @@ export const analyzeEntry = onCall(
         uid: req.auth.uid,
         passo,
         keys: { anthropic: ANTHROPIC_API_KEY.value().trim(), gemini: GEMINI_API_KEY.value().trim() },
+        clientGoogle: clientGoogle(), // per leggere i documenti di Drive del progetto
       });
       return { proposals: azioni, riepilogo, sintesi };
     } catch (err) {
@@ -223,24 +225,28 @@ export const bank = onCall(
   },
 );
 
+/** ID e secret del client OAuth web, dal segreto che il deploy scrive; null se mancano. */
+function clientGoogle() {
+  try { return JSON.parse(GOOGLE_OAUTH_CLIENT.value() || "{}"); } catch (e) { return null; }
+}
+
 /**
- * Google Contatti: collegamento una tantum e permessi di un'ora per leggere i contatti.
- * Il refresh token resta in google_tokens/{uid}, che l'app non legge. Vedi src/google/contatti.js.
+ * Account Google: collegamento una tantum (Contatti, Calendario, Drive) e permessi di un'ora con cui
+ * l'app legge e scrive direttamente sulle API di Google. Il refresh token resta in google_tokens/{uid},
+ * che l'app non legge. Vedi src/google/account.js.
  */
-export const contatti = onCall(
+export const google = onCall(
   { secrets: [GOOGLE_OAUTH_CLIENT], timeoutSeconds: 30 },
   async (req) => {
     if (!req.auth) throw new HttpsError("unauthenticated", "Accesso richiesto");
-    let client = null;
-    try { client = JSON.parse(GOOGLE_OAUTH_CLIENT.value() || "{}"); } catch (e) { client = null; }
     try {
       const db = await getDb();
-      const { gestisci } = await import("./src/google/contatti.js");
-      return await gestisci(db, { uid: req.auth.uid, email: req.auth.token?.email || "" }, req.data || {}, client);
+      const { gestisci } = await import("./src/google/account.js");
+      return await gestisci(db, { uid: req.auth.uid, email: req.auth.token?.email || "" }, req.data || {}, clientGoogle());
     } catch (err) {
       if (err instanceof HttpsError) throw err;
-      console.error("contatti", err);
-      throw new HttpsError("internal", `Contatti non raggiungibili (${String(err.message).slice(0, 160)})`);
+      console.error("google", err);
+      throw new HttpsError("internal", `Google non raggiungibile (${String(err.message).slice(0, 160)})`);
     }
   },
 );

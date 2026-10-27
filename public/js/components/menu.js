@@ -12,13 +12,14 @@ const CHIAVE_PAGINA = "macroapp.progetto"; // progetto aperto nella pagina Proge
 
 const GRUPPI = [
   ["Casa", [
+    { icona: "calendario", testo: "Calendario", vai: ["calendario"] },
     { icona: "manuale", testo: "Manuale e rubrica", vai: ["manuale"] },
     { icona: "ripeti", testo: "Spese ricorrenti", vai: ["spese", "ricorrenti"] },
     { icona: "cartella", testo: "Categorie del manuale", vai: ["manuale", "categorie"] },
     { icona: "scintilla", testo: "Azioni da confermare", vai: ["proposte"] },
   ]],
   ["Collegamenti", [
-    { icona: "contatto", testo: "Google Contatti", vai: ["manuale", "contatti"] },
+    { icona: "collegamento", testo: "Google", vai: ["google"], nota: "contatti, calendario, Drive" },
     { icona: "banca", testo: "Banca", vai: ["banca"] },
   ]],
   ["Account", [

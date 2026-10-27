@@ -6,7 +6,7 @@ import { applicaTema } from "./core/theme.js";
 import { ensureMyName } from "./core/household.js";
 import { avviaRubrica, fermaRubrica, sincronizzaDaGoogle } from "./core/rubrica.js";
 import { chiudiAscolti } from "./core/db.js";
-import { ritornoDaGoogle } from "./core/contatti-google.js";
+import { ritornoDaGoogle } from "./core/google.js";
 import { aggiornaAllAvvio as aggiornaNotifiche } from "./core/notifiche.js";
 import { modules, navModules, DEFAULT_ROUTE } from "./modules/registry.js";
 import { renderOnboarding } from "./components/onboarding.js";
@@ -58,9 +58,8 @@ title.before(menuBtn);
 
 function startApp() {
   menuBtn.hidden = false;
-  // Ritorno dalla pagina di Google dopo il permesso per i contatti: si va sul Manuale, dove il
-  // foglio di Google Contatti mostra com'è andata.
-  if (ritornoDaGoogle()) vaiA("manuale", "contatti");
+  // Ritorno dalla pagina di Google dopo il permesso: si va sulla pagina Google, che mostra com'è andata.
+  if (ritornoDaGoogle()) vaiA("google");
   if (!routerStarted) {
     for (const m of modules) addRoute(m.id, m.mount);
     routerStarted = true;
@@ -92,7 +91,7 @@ function startApp() {
   avviaRubrica(); // persone del manuale, per riconoscerle nei task
   // Contatti Google (se collegati): elenco pronto per le ricerche e recapiti aggiornati in rubrica.
   sincronizzaDaGoogle().catch((e) => {
-    if (e.motivo === "scaduto") toast("Google Contatti: il collegamento è scaduto, ricollegalo dal menu", { ms: 5000 });
+    if (e.motivo === "scaduto") toast("Google: il collegamento è scaduto, ricollegalo dal menu", { ms: 5000 });
     else console.warn("contatti", e);
   });
   ensureMyName().catch((e) => console.warn("ensureMyName", e));

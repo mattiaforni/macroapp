@@ -7,6 +7,8 @@
 //   temi; toccandole si legge il riepilogo intero, con la trascrizione ripiegata; da lì Modifica
 //   e Rianalizza.
 // - Da fare: i task del progetto.
+// In fondo alla Sintesi, i documenti di Drive collegati al progetto (si aprono in Drive; si scelgono
+// dal foglio del progetto).
 // Il + scrive una nota nel progetto, come nel Diario. Le note restano note del diario: cambia solo
 // dove le guardi.
 import { el, icon, toast, fascia, vuoto, attesa, toDate, meseLungo, fab, testoRicco } from "../../core/ui.js";
@@ -16,6 +18,7 @@ import { watchPending, renderAzione } from "../../components/proposals.js";
 import { sezioniSintesi, tonoStato, apriSintesi, apriVersioni } from "../../components/sintesi.js";
 import { apriNota, analizzaNota, analisiAutomatica, titoloDi } from "../diario/index.js";
 import { apriProgetto, rigaTask } from "../task/index.js";
+import { elencoDocumenti } from "../../components/documenti.js";
 import { vaiA } from "../../core/router.js";
 
 export const id = "progetto";
@@ -124,10 +127,13 @@ export function mount(container) {
     return note.filter((x) => Array.isArray(x.temi) && x.temi.some((t) => norm(t) === n));
   }
 
+  const documenti = () => (progetto.documenti?.length ? [fascia("Documenti"), elencoDocumenti(progetto.documenti)] : []);
+
   function vistaSintesi() {
     if (!progetto.sintesi) {
       return [vuoto("Nessuna sintesi ancora", "L'AI la propone dopo la prossima nota analizzata: la trovi sotto la nota, da confermare."),
-        el("div", { style: "text-align:center" }, el("button.btn", { onclick: () => apriSintesi(progetto) }, icon("matita"), "Scrivila tu"))];
+        el("div", { style: "text-align:center" }, el("button.btn", { onclick: () => apriSintesi(progetto) }, icon("matita"), "Scrivila tu")),
+        ...documenti()];
     }
     const sezioni = sezioniSintesi(progetto.sintesi);
     const nodi = [];
@@ -160,6 +166,7 @@ export function mount(container) {
       el("button.btn.btn--piatto", { onclick: () => apriSintesi(progetto) }, icon("matita"), "Modifica la sintesi"),
       progetto.sintesiStorico?.length ? el("button.btn.btn--piatto", { onclick: () => apriVersioni(progetto) }, icon("orologio"), "Versioni") : null,
       quando ? el("span.meta", {}, `aggiornata il ${quando.toLocaleDateString("it-IT", { day: "numeric", month: "long" })}`) : null));
+    nodi.push(...documenti());
     return nodi;
   }
 

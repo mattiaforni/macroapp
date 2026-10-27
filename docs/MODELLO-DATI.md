@@ -10,19 +10,25 @@ Campi comuni a tutte le collezioni di contenuto, compilati da `core/db.js`:
 | `createdAt`, `updatedAt` | timestamp | server |
 
 ## `users/{uid}`
-`displayName, email, photoURL, householdId, createdAt, contattiGoogle?: { collegato, scaduto, email, dal }, dispositivi?: { <id>: { token, nome, aggiornato } }, notifiche?: { spese, task, lista, banca }`
-`contattiGoogle` lo scrive la funzione `contatti`: dice all'app se Google Contatti è collegato e con quale account.
+`displayName, email, photoURL, householdId, createdAt, google?: { collegato, scaduto, email, dal, permessi: { contatti, calendario, drive } }, dispositivi?: { <id>: { token, nome, aggiornato } }, notifiche?: { spese, task, lista, banca }`
+`google` lo scrive la funzione `google`: dice all'app se l'account Google è collegato, con quale account e quali
+delle tre spunte (contatti, calendario, Drive) sono state date. Il vecchio campo `contattiGoogle` (collegamento ai
+soli contatti, prima del 27/10) vale come `google` con il solo permesso dei contatti finché non si ricollega.
 `dispositivi`: i telefoni con le notifiche attive (id casuale tenuto nel telefono, token di Cloud Messaging);
 la funzione `avvisa` toglie quelli il cui token non vale più. `notifiche`: categorie per la persona, su tutti
 i suoi telefoni; `false` = spenta, assente = accesa.
 
 ## `google_tokens/{uid}`
-`ownerUid, refreshToken, accessToken, scade, email, collegatoIl, state?, stateAt?` — solo Cloud Functions
-(le regole negano ogni accesso dall'app). `state` vale per un solo ritorno dalla pagina di Google.
+`ownerUid, refreshToken, accessToken, scade, email, scope, permessi, collegatoIl, state?, stateAt?` — solo Cloud Functions
+(le regole negano ogni accesso dall'app). `state` vale per un solo ritorno dalla pagina di Google; `scope` è la
+stringa dei permessi concessi da Google, `permessi` la sua lettura a tre voci.
 
 ## `households/{id}`
-`name, members: [uid, uid], memberNames: { uid: "Nome Cognome" }, manualCategories: [nomi], createdBy, createdAt` — l'id è il codice di invito.
+`name, members: [uid, uid], memberNames: { uid: "Nome Cognome" }, manualCategories: [nomi], calendario?: { id, nome }, createdBy, createdAt` — l'id è il codice di invito.
 `manualCategories`: categorie del manuale, uguali per tutta la casa; se mancano valgono quelle predefinite (`PREDEFINITE` in `modules/manuale`).
+`calendario`: il calendario di Google Calendar della casa (`id` = id del calendario, `nome`), scelto da uno dei due
+nella pagina Google. Gli eventi stanno solo su Google: l'app li legge e li scrive con il permesso di ciascun membro,
+quindi chi l'ha scelto deve condividerlo con l'account Google dell'altro (con il permesso di modificare).
 
 ## `shopping_items`
 `text, detail, done, addedAt, addedBy, boughtAt, count, doneBy, reparto?` — sempre `shared`. `addedBy` = chi l'ha
@@ -42,12 +48,14 @@ a tutte le case: l'id è il codice a barre, senza `ownerUid` né `householdId`. 
 `alto` / `moderato` / `nessuno` secondo l'EFSA, `null` = non valutato.
 
 ## `manual_entries`
-`type: "shop"|"person"|"info", name, category, address, phone, email, url, notes, googleId?`
+`type: "shop"|"person"|"info", name, category, address, phone, email, url, notes, googleId?, documenti?: [{ id, nome, mime, link }]`
 Manuale e rubrica insieme: le persone dei task sono voci `person` (private se non dici altrimenti).
 `category` è facoltativa (vuota = nessuna; il vecchio "Altro" vale come nessuna). Il link a Google Maps
 non si salva: si costruisce da nome e indirizzo. `googleId` = `resourceName` del contatto Google collegato
 (`people/c…`): per quelle voci telefono, mail e indirizzo arrivano da Google (un campo vuoto in Google non
 cancella quello della rubrica); il nome resta quello della rubrica. Senza collegamento: `null` o assente.
+`documenti`: file di Google Drive collegati alla voce (contratti, garanzie, istruzioni), scelti cercandoli per
+nome dal foglio della voce; si aprono in Drive con un tocco. `mime` è il tipo del file, `link` il `webViewLink`.
 
 ## `expenses`
 `amount, description, paidBy, split: "equal"|"full", date, category, source: "manual"|"recurring"|"agent"|"bank", type?: "settlement", recurringId?, bankTxId?`
@@ -57,11 +65,14 @@ cancella quello della rubrica); il nome resta quello della rubrica. Senza colleg
 `description, amount, paidBy, split, every: "week"|"month"|"year", nextDate, active` — all'avvio l'app genera le spese scadute con id `rec_<id>_<AAAA-MM-GG>` (nessun doppione se lo fanno entrambi i telefoni).
 
 ## `projects`
-`name, archived, istruzioni?, sintesi?, sintesiAt?, sintesiOrigine?, sintesiStorico?: [{ testo, at, origine }], colore?` — personali o condivisi. `sintesiStorico`: le ultime 10 versioni precedenti della sintesi (`salvaSintesi`). `colore`: giallo | arancio | azzurro | rosa | verde, tinge la pagina del progetto. `istruzioni`: per l'agente del
+`name, archived, istruzioni?, sintesi?, sintesiAt?, sintesiOrigine?, sintesiStorico?: [{ testo, at, origine }], colore?, documenti?: [{ id, nome, mime, link }]` — personali o condivisi. `sintesiStorico`: le ultime 10 versioni precedenti della sintesi (`salvaSintesi`). `colore`: giallo | arancio | azzurro | rosa | verde, tinge la pagina del progetto. `istruzioni`: per l'agente del
 diario; con queste, ogni nota del progetto riceve un riepilogo (vedi `journal_entries`) e l'agente propone la
 `sintesi` aggiornata (proposta `project_summary`: lo stato del progetto, ciò che è emerso finora, per temi).
 Convenzione del testo: una sezione «## Tema» per tema, prima riga facoltativa «Stato: …». La sintesi si legge
 per temi e si corregge dalla pagina del progetto (`modules/progetto`, `components/sintesi.js`).
+`documenti`: file di Google Drive collegati al progetto (`components/documenti.js`, dal foglio del progetto). Con le
+istruzioni, l'agente ne legge il testo come contesto quando analizza una nota (Documenti, Fogli e Presentazioni di Google
+esportati come testo, file di testo così come sono; PDF e altri formati solo per nome): `functions/src/google/drive.js`.
 
 ## `expense_rules`
 `match: { description_contains }, set: { visibility, category, split, autoAccept }` — da definire con i dati reali.
@@ -84,9 +95,12 @@ temi). `createdAt` si può cambiare dal foglio della nota (lezioni inserite dopo
 confermati prima del 26/10, quando l'agente proponeva ancora il tipo `note`). Nessuna pagina li mostra.
 
 ## `proposals`
-`kind: "task"|"shopping_item"|"expense"|"manual_entry"|"draft"|"project_summary"|"note", source: "agent"|"bank"|"share", status: "pending"|"accepted"|"rejected"|"discarded", payload, summary, decidedBy, sourceEntryId`
+`kind: "task"|"shopping_item"|"expense"|"manual_entry"|"event"|"draft"|"project_summary"|"note", source: "agent"|"bank"|"share", status: "pending"|"accepted"|"rejected"|"discarded", payload, summary, decidedBy, sourceEntryId`
 Cosa fa la conferma, tipo per tipo: `APPLICA` in `public/js/components/proposals.js`. Le proposte dell'agente compaiono sotto la nota del diario da cui nascono; rianalizzare una nota sostituisce quelle ancora in attesa.
 `project_summary` (payload `projectId, projectName, sintesi, prima`): confermata scrive `projects.sintesi`; una nuova proposta di sintesi dello stesso progetto sostituisce quella in attesa. `note` non viene più proposto.
+`event` (payload `text, due "AAAA-MM-GG", time "HH:MM" o vuoto = tutto il giorno, place`): confermata crea l'evento nel
+calendario della casa su Google Calendar (serve Google collegato con il permesso del calendario e `households.calendario`
+scelto; altrimenti la conferma non passa e la proposta resta). Sempre `shared`.
 
 ## `bank_connections/{uid}`
 `ownerUid, householdId, active, aspsp: { name, country }, sessionId, accounts: [{ uid, name, product, details, currency, type, ibanMask, idMask }], accountIds, consentExpiresAt, linkedAt, unlinkedAt, lastSyncAt, lastAttemptAt, lastSyncCreated, lastError, needsRenewal, sessionStatus, sessionEndedAt?, scartati: [{ key, giorno, descrizione, importo, conto, motivo }], lettura: { conti: [{ uid, conto, tipo, letti, stati, ultimo, ultimi: [{ key, giorno, contabilizzato, verso, stato, importo, descrizione, esito }] }], inAttesa: [{ giorno, descrizione, importo, conto, stato }] }, pending?: { state, authorizationId, aspsp, startedAt }`

@@ -2,6 +2,7 @@
 // Non modifica mai i moduli direttamente: ogni azione passa dalla conferma dell'utente.
 import { FieldValue } from "firebase-admin/firestore";
 import { reason } from "./ai/provider.js";
+import { leggiDocumenti, sezioneDocumenti } from "./google/drive.js";
 
 /**
  * Sezione del prompt per una nota collegata a un progetto. Con le istruzioni del progetto
@@ -52,6 +53,7 @@ Se la nota di oggi non cambia nulla della sintesi, restituiscila identica.`);
       righe.push(`
 Il progetto non ha ancora una sintesi: costruiscila da tutte le note che seguono e dalla nota di oggi.`);
     }
+    righe.push(sezioneDocumenti(progetto.documenti));
     righe.push(progetto.precedenti.length
       ? `
 Note precedenti dello stesso progetto, dalla più vecchia alla più recente. Servono a collegare la nota
@@ -68,7 +70,7 @@ ${progetto.precedenti.map((n) => `<nota data="${n.data}">\n${n.testo}\n</nota>`)
 
 export function system({ oggi, altro, progetti, persone, categorie, progetto = null }) {
   return `Sei l'assistente di un'app personale e di coppia (lista della spesa, spese condivise, task per progetti,
-manuale di casa, appunti). Ricevi una nota scritta o dettata dall'utente: può contenere errori di dettatura
+manuale di casa, calendario della casa, appunti). Ricevi una nota scritta o dettata dall'utente: può contenere errori di dettatura
 e poca punteggiatura. Estrai SOLO le azioni concrete che la nota contiene o chiede, senza inventarne.
 
 Oggi è ${oggi}. L'altra persona della casa si chiama ${altro || "(non ancora indicata)"}.
@@ -87,6 +89,12 @@ Tipi di azione:
   recapiti ("person", solo se la nota dà un telefono o una mail o chiede di salvarla), oppure un'informazione di
   casa da ricordare ("info"). payload.type, payload.name, payload.category (una di: ${categorie.join(", ")};
   vuota se nessuna è adatta), payload.notes, payload.phone, payload.email.
+- event: un appuntamento o impegno con un giorno preciso (visita, lezione, cena, partenza, consegna, scadenza
+  da segnare), da mettere nel calendario condiviso della casa. payload.text (titolo breve dell'evento),
+  payload.due (AAAA-MM-GG, obbligatorio: senza un giorno chiaro non è un evento ma al più un task),
+  payload.time (HH:MM di inizio se la nota la dice, altrimenti vuoto = tutto il giorno), payload.place
+  (luogo se indicato). Un impegno con un orario è un event, non un task; una cosa da fare "entro" un
+  giorno è un task.
 - draft: SOLO se la nota chiede di scrivere, rispondere, mandare o preparare un messaggio, una mail o un testo
   per qualcuno. Scrivi il testo pronto da inviare, in italiano, nel registro adatto al destinatario,
   firmato "Mattia" se serve una firma. payload.channel ("email", "messaggio" o "documento"),
@@ -105,7 +113,7 @@ Se la nota è una riflessione senza azioni, restituisci una lista vuota.
 ${sezioneProgetto(progetto)}`;
 }
 
-const PAYLOAD = ["text", "due", "project", "people", "description", "amount", "name", "category", "notes",
+const PAYLOAD = ["text", "due", "time", "place", "project", "people", "description", "amount", "name", "category", "notes",
   "type", "phone", "email", "channel", "to", "subject", "body"];
 
 export const SCHEMA = {
@@ -116,7 +124,7 @@ export const SCHEMA = {
       items: {
         type: "object",
         properties: {
-          kind: { type: "string", enum: ["task", "shopping_item", "expense", "manual_entry", "draft"] },
+          kind: { type: "string", enum: ["task", "shopping_item", "expense", "manual_entry", "event", "draft"] },
           shared: { type: "boolean" },
           summary: { type: "string" },
           payload: {
@@ -124,6 +132,8 @@ export const SCHEMA = {
             properties: {
               text: { type: "string" },
               due: { type: "string" },
+              time: { type: "string" },
+              place: { type: "string" },
               project: { type: "string" },
               people: { type: "string" },
               description: { type: "string" },
@@ -175,6 +185,10 @@ function pulisci(kind, p = {}) {
   switch (kind) {
     case "task": return { text: s(p.text), due: /^\d{4}-\d{2}-\d{2}$/.test(s(p.due)) ? s(p.due) : "", project: s(p.project), people: s(p.people) };
     case "shopping_item": return { text: s(p.text) };
+    case "event": return {
+      text: s(p.text), due: /^\d{4}-\d{2}-\d{2}$/.test(s(p.due)) ? s(p.due) : "",
+      time: /^\d{2}:\d{2}$/.test(s(p.time)) ? s(p.time) : "", place: s(p.place),
+    };
     case "expense": return { description: s(p.description) || s(p.text), amount: Number(p.amount) || 0 };
     case "manual_entry": return {
       name: s(p.name) || s(p.text), category: s(p.category), notes: s(p.notes),
@@ -225,7 +239,7 @@ const fmtData = (t) => new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome
  * se c'è, se no il testo); senza sintesi, tutte le note (fino a PRIME_PRECEDENTI) per costruire la prima.
  * La query usa l'indice ownerUid + projectId + createdAt; se manca (appena pubblicato) si va avanti senza.
  */
-async function progettoDellaNota(db, entry, uid, passo) {
+async function progettoDellaNota(db, entry, uid, passo, clientGoogle) {
   if (!entry.projectId) return null;
   const snap = await db.collection("projects").doc(entry.projectId).get();
   if (!snap.exists) return null;
@@ -248,12 +262,26 @@ async function progettoDellaNota(db, entry, uid, passo) {
       passo(`note precedenti non lette: ${err.message}`);
     }
   }
-  return { id: snap.id, name: p.name || "senza nome", istruzioni, sintesi, precedenti };
+  // Documenti di Drive collegati al progetto: letti con il permesso dell'utente, se Google è collegato.
+  let documenti = [];
+  if (istruzioni && Array.isArray(p.documenti) && p.documenti.length) {
+    let token = null;
+    try {
+      const { tokenServer } = await import("./google/account.js");
+      const t = await tokenServer(db, uid, clientGoogle);
+      token = t.permessi?.drive ? t.accessToken : null;
+      if (!token) passo("documenti: Google collegato senza il permesso per Drive");
+    } catch (err) {
+      passo(`documenti: permesso Google non ottenuto (${err.details?.motivo || err.message})`);
+    }
+    documenti = await leggiDocumenti(token, p.documenti, passo);
+  }
+  return { id: snap.id, name: p.name || "senza nome", istruzioni, sintesi, precedenti, documenti };
 }
 
 /** Spese e lista riguardano sempre la casa; le bozze sono sempre solo tue. */
 function visibilita(a) {
-  if (a.kind === "expense" || a.kind === "shopping_item") return "shared";
+  if (a.kind === "expense" || a.kind === "shopping_item" || a.kind === "event") return "shared";
   if (a.kind === "draft") return "private";
   if (a.kind === "manual_entry" && a.payload?.type === "person") return "private";
   return a.shared ? "shared" : "private";
@@ -265,11 +293,11 @@ function visibilita(a) {
  * di sintesi aggiornata del progetto (quella sì da confermare: sostituisce `projects.sintesi`).
  * Ritorna { azioni, riepilogo, sintesi }: quante proposte, se ha scritto il riepilogo, se ha proposto la sintesi.
  */
-export async function analyzeJournalEntry(db, entry, { uid, keys, provider, passo = () => {} }) {
-  const [ctx, progetto] = await Promise.all([contesto(db, entry, uid), progettoDellaNota(db, entry, uid, passo)]);
+export async function analyzeJournalEntry(db, entry, { uid, keys, provider, clientGoogle = null, passo = () => {} }) {
+  const [ctx, progetto] = await Promise.all([contesto(db, entry, uid), progettoDellaNota(db, entry, uid, passo, clientGoogle)]);
   const conRiepilogo = !!progetto?.istruzioni;
   passo(`contesto pronto (${ctx.progetti.length} progetti, ${ctx.persone.length} persone`
-    + (progetto ? `, progetto con ${progetto.precedenti.length} note precedenti${conRiepilogo ? ", riepilogo" : ""}` : "") + ")");
+    + (progetto ? `, progetto con ${progetto.precedenti.length} note precedenti${progetto.documenti.filter((d) => d.testo).length ? `, ${progetto.documenti.filter((d) => d.testo).length} documenti letti` : ""}${conRiepilogo ? ", riepilogo" : ""}` : "") + ")");
   const out = await reason({
     system: system({ ...ctx, progetto }), user: entry.text, schema: schema(conRiepilogo), keys, provider,
     maxTokens: conRiepilogo ? 12000 : 4096,
