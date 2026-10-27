@@ -13,7 +13,7 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 - **Dati** su Firestore, progetto `macroapp-b9bd0`. Ogni documento di contenuto ha
   `ownerUid`, `householdId`, `visibility` (`shared` | `private`): vedi `docs/MODELLO-DATI.md`.
 - **Functions** in `functions/` (Node 24, europe-west1): `analyzeEntry` (agente del diario,
-  provider AI intercambiabile in `src/ai/`; legge i documenti di Drive del progetto, `src/google/drive.js`), `bank` (onCall con `azione`: elenco banche, avvio e
+  provider AI intercambiabile in `src/ai/`; legge i documenti di Drive del progetto, `src/google/drive.js`; modello scelto dall'utente, `modelloPer` in `src/agent.js`, 300 s), `bank` (onCall con `azione`: elenco banche, avvio e
   conclusione del consenso, scollega, lettura a richiesta; `src/banking/enable.js`), `google` (account
   Google: collegamento una tantum con le spunte Contatti, Calendario e Drive, permessi di un'ora, `src/google/account.js`), `avvisa` (notifiche push,
   `src/avvisi.js`), `prodotto` (scheda di un prodotto da Open Food Facts con l'indice, cache in `prodotti/{ean}`;
@@ -22,6 +22,10 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
   regole, indici e functions (secret `FIREBASE_SERVICE_ACCOUNT`). Si può rilanciare a mano.
 - **Segreti** in Secret Manager (ANTHROPIC_API_KEY, GEMINI_API_KEY, ENABLE_BANKING_*):
   li gestisce Mattia dalla console; dopo un aggiornamento serve un nuovo deploy.
+  ANTHROPIC_API_KEY (dal 27/10) è una chiave dell'organizzazione Console dell'account col piano Max, collegata
+  ai crediti API inclusi nel piano (100 $ al mese, scadono a fine mese, nessun metodo di pagamento): non
+  proporre di comprare crediti. Claude non accetta audio: una trascrizione richiederebbe un altro servizio,
+  e Mattia non vuole pagare altro (GEMINI_API_KEY è rimasta, ma `transcribe()` non è usata).
   GOOGLE_OAUTH_CLIENT invece lo scrive il deploy, copiando ID e secret del client web dalla
   configurazione di Firebase Authentication (stesso client dell'accesso con Google).
 
@@ -33,6 +37,7 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 | `core/router.js` | router a hash; `vaiA(id, apri)` + `richiesto(id, apri)`: il menu chiede a una pagina di aprire un suo foglio. Passaggi tra le pagine con View Transitions (`<html data-passaggio>` = `entra` / `torna`): vaiA entra sempre, il resto lo decide `transizione(da, a)` in app.js |
 | `core/ui.js` | `el()`, icone disegnate a mano (`D`), date, importi, pillole, `sceltaColore` (cerchietti dei colori dei progetti, `COLORI`); `attesa(fonti, render)`: prima comparsa di una pagina quando sono arrivate tutte le sue fonti (max 400 ms), e «vuoto» solo per una fonte arrivata |
 | `core/db.js` | `create` (non aspetta il server, ritorna `{id, saved}`), `update`, `watchVisible`, `readVisible`; dopo le scritture condivise di spese, task e lista chiama `segnala` (notifiche). Ascolti condivisi: la stessa query è un solo `onSnapshot`, che resta aperto 10 minuti dopo l'uscita dalla pagina; i dati già noti arrivano subito (microtask), quindi una pagina rimontata o un filtro già usato si disegnano pieni al primo fotogramma. `chiudiAscolti` all'uscita dall'account |
+| `core/modelli.js` | modelli dell'AI per l'analisi (`users.modelli` = { note, progetti }, chiavi haiku/sonnet/opus, predefiniti Sonnet e Opus), `nomeModello` |
 | `core/notifiche.js` | notifiche push: `attiva`/`disattiva` su questo telefono (token in `users.dispositivi`), categorie (`users.notifiche`), `prova`, `segnala` → funzione `avvisa`; il disegno e il tocco della notifica stanno in `sw.js` |
 | `core/household.js` | casa, nomi dei membri (`memberNames`), `nomeDi`, `updateHousehold` (es. categorie del manuale) |
 | `core/rubrica.js` | voci del manuale in memoria, aggiornate in tempo reale: `trovaPersona`, `risolviPersone` (crea quelle che mancano, collegate a Google se il nome è univoco), `nomiTask`, `sincronizzaDaGoogle` (all'avvio) |
@@ -52,6 +57,7 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 | `modules/progetto/index.js` | pagina di un progetto con istruzioni (`macroapp.progetto` = quale; menu → Progetti, o dal Diario e dai Task): viste Sintesi (righe per tema con stato e lezioni collegate via `journal_entries.temi`), Lezioni (giorno, titolo, anteprima, temi; foglio di lettura con Modifica e Rianalizza), Da fare. Titolo in testata = nome del progetto (`titoloCorrente`, letto da app.js) |
 | `modules/lista/index.js` | tessere a 4 colonne; quelle da comprare divise per reparto (`REPARTI` = ordine del giro, `REGOLE_REPARTO` dal nome, `reparto` scelto a mano nel foglio Modifica); recenti e «Mi serve» per frequenza, senza reparti. «Scansiona» in Mi serve e in Modifica → `inserisciProdotto` (voce = tipo di prodotto, marca nel dettaglio, `ean` + `prodotto`; pallino della fascia sulla tessera) |
 | `modules/task/index.js` | task per progetti; `apriProgetto` (nome, visibilità, istruzioni per il diario, documenti di Drive, colore); dal progetto il pulsante Diario |
+| `modules/modelli/index.js` | pagina Modelli AI (menu → Account): un modello per le note semplici e uno per le note dei progetti con istruzioni, salvati al tocco |
 | `modules/notifiche/index.js` | pagina Notifiche (menu → Account): stato di questo telefono, «Attiva» in basso a destra, categorie, telefoni attivi, prova |
 | `modules/google/index.js` | pagina Google (menu → Collegamenti): stato del collegamento, righe Contatti / Calendario (scelta del calendario della casa, `apriSceltaCalendario`) / Drive, «Collega» in basso a destra, Ricollega e Scollega; conclude il ritorno dalla pagina di Google |
 | `modules/calendario/index.js` | pagina Calendario (menu → Casa): agenda dei prossimi 60 giorni per giorno, + per un evento nuovo (`apriEvento`: Invio sul titolo salva; giorno, tutto il giorno o con orario, luogo, note), foglio dell'evento con Modifica, Elimina e il link a Google; senza Google o senza calendario scelto rimanda alla pagina Google |
@@ -124,6 +130,13 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
 - [x] Lista (stile Bring), Spese (stile Splitwise, ricorrenti, pareggio), Diario con agente, Task per
       progetti con persone, Manuale con rubrica e categorie della casa
 - [x] Agente del diario funzionante (Sonnet, ~7 s): le proposte entrano nei moduli con la spunta
+- [x] **Modelli AI** (27/10, scelta di Mattia): Sonnet per le note semplici, Opus per quelle dei progetti con
+      istruzioni; si cambiano da menu → Modelli AI (anche Haiku). Il server legge `users.modelli` (chiavi non
+      valide → predefinito); la nota segna `modello` e il Diario lo mostra accanto all'ora. Tutti e tre ragionano
+      prima di rispondere e il ragionamento conta in `max_tokens`: tetti 8000 (semplici) e 32000 (progetti).
+      Opus su una nota di progetto lunga può metterci minuti: function a 300 s, app a 310 s. Da verificare con le
+      lezioni vere: durata di Opus e se la sintesi è davvero migliore di quella di Sonnet.
+      Prova con l'API vera da terminale: `MODELLO=opus ISTRUZIONI=… node functions/strumenti/prova-agente.mjs "…"`.
 - [x] Fogli con la barra in basso, menu a sinistra, apertura sul Diario, scorciatoie Chiama/WhatsApp/
       Telegram sui task con una persona che ha il numero (`modiDiContatto`, `canaleDa` in rubrica.js)
 - [x] Pagine pubbliche `/privacy` e `/termini` (richieste da Enable Banking)

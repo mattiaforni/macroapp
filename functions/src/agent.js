@@ -1,8 +1,20 @@
 // Agente del diario: dal testo di una nota ricava azioni e le scrive come proposte.
 // Non modifica mai i moduli direttamente: ogni azione passa dalla conferma dell'utente.
 import { FieldValue } from "firebase-admin/firestore";
-import { reason } from "./ai/provider.js";
+import { reason, MODELLI } from "./ai/provider.js";
 import { leggiDocumenti, sezioneDocumenti } from "./google/drive.js";
+
+/**
+ * Modello per la nota: users/{uid}.modelli = { note, progetti } (pagina «Modelli AI» dell'app).
+ * `note` per le note semplici, `progetti` per quelle di un progetto con istruzioni (riepilogo e sintesi).
+ * Scelte di Mattia del 27/10: Sonnet per le semplici, Opus per i progetti. Chiavi sconosciute → predefinito.
+ */
+export const MODELLI_PREDEFINITI = { note: "sonnet", progetti: "opus" };
+export function modelloPer(profilo, conRiepilogo) {
+  const tipo = conRiepilogo ? "progetti" : "note";
+  const scelto = profilo?.modelli?.[tipo];
+  return Object.hasOwn(MODELLI, scelto || "") ? scelto : MODELLI_PREDEFINITI[tipo];
+}
 
 /**
  * Sezione del prompt per una nota collegata a un progetto. Con le istruzioni del progetto
@@ -291,16 +303,22 @@ function visibilita(a) {
  * Legge la nota, scrive le proposte e, per le note di un progetto con istruzioni, il riepilogo
  * (con titolo e temi) nella nota stessa (testo correggibile, non un'azione: vedi CLAUDE.md, regola 5) e la proposta
  * di sintesi aggiornata del progetto (quella sì da confermare: sostituisce `projects.sintesi`).
- * Ritorna { azioni, riepilogo, sintesi }: quante proposte, se ha scritto il riepilogo, se ha proposto la sintesi.
+ * Ritorna { azioni, riepilogo, sintesi, modello }: quante proposte, se ha scritto il riepilogo, se ha proposto
+ * la sintesi, con quale modello (chiave di MODELLI; l'app la segna sulla nota).
  */
 export async function analyzeJournalEntry(db, entry, { uid, keys, provider, clientGoogle = null, passo = () => {} }) {
-  const [ctx, progetto] = await Promise.all([contesto(db, entry, uid), progettoDellaNota(db, entry, uid, passo, clientGoogle)]);
+  const [ctx, progetto, profilo] = await Promise.all([
+    contesto(db, entry, uid), progettoDellaNota(db, entry, uid, passo, clientGoogle),
+    db.collection("users").doc(uid).get().then((d) => (d.exists ? d.data() : {}), () => ({})),
+  ]);
   const conRiepilogo = !!progetto?.istruzioni;
+  const modello = modelloPer(profilo, conRiepilogo);
   passo(`contesto pronto (${ctx.progetti.length} progetti, ${ctx.persone.length} persone`
-    + (progetto ? `, progetto con ${progetto.precedenti.length} note precedenti${progetto.documenti.filter((d) => d.testo).length ? `, ${progetto.documenti.filter((d) => d.testo).length} documenti letti` : ""}${conRiepilogo ? ", riepilogo" : ""}` : "") + ")");
+    + (progetto ? `, progetto con ${progetto.precedenti.length} note precedenti${progetto.documenti.filter((d) => d.testo).length ? `, ${progetto.documenti.filter((d) => d.testo).length} documenti letti` : ""}${conRiepilogo ? ", riepilogo" : ""}` : "") + `), modello ${modello}`);
+  // Tetti larghi: il ragionamento del modello conta nel tetto (vedi ai/claude.js), si paga solo l'usato.
   const out = await reason({
     system: system({ ...ctx, progetto }), user: entry.text, schema: schema(conRiepilogo), keys, provider,
-    maxTokens: conRiepilogo ? 12000 : 4096,
+    maxTokens: conRiepilogo ? 32000 : 8000, model: modello,
   });
   passo(`risposta dell'AI (${Array.isArray(out.actions) ? out.actions.length : 0} azioni)`);
   const actions = (Array.isArray(out.actions) ? out.actions : []).filter((a) => SCHEMA.properties.actions.items.properties.kind.enum.includes(a.kind));
@@ -363,5 +381,5 @@ export async function analyzeJournalEntry(db, entry, { uid, keys, provider, clie
   }
   await batch.commit();
   passo(`proposte scritte${riepilogo ? ", riepilogo scritto" : ""}${nuovaSintesi ? ", sintesi proposta" : ""}`);
-  return { azioni: actions.length + (nuovaSintesi ? 1 : 0), riepilogo: !!riepilogo, sintesi: !!nuovaSintesi };
+  return { azioni: actions.length + (nuovaSintesi ? 1 : 0), riepilogo: !!riepilogo, sintesi: !!nuovaSintesi, modello };
 }

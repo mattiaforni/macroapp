@@ -10,7 +10,8 @@
 // ciò che è emerso finora) arriva invece come proposta sotto la nota e, confermata, si legge nella
 // pagina del progetto (modules/progetto), dove le note si sfogliano per titolo e per tema.
 //
-// journal_entries { text, projectId, riepilogo, titolo, temi, riepilogoAt, analyzed, analyzedAt, analysisError }
+// journal_entries { text, projectId, riepilogo, titolo, temi, riepilogoAt, analyzed, analyzedAt, analysisError, modello }
+// `modello`: chi ha letto la nota l'ultima volta (haiku, sonnet, opus: scelta in menu → Modelli AI).
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-functions.js";
 import { functions } from "../../core/firebase.js";
 import { el, icon, toast, fascia, vuoto, attesa, toDate, giornoRelativo, fab, testoRicco, isoGiorno, stessoGiorno, fmtDate } from "../../core/ui.js";
@@ -22,6 +23,7 @@ import { apriTask, apriProgetto } from "../task/index.js";
 import { vaiA } from "../../core/router.js";
 import { apriSpesa } from "../spese/index.js";
 import { apriVoceManuale } from "../manuale/index.js";
+import { nomeModello } from "../../core/modelli.js";
 
 export const id = "diario";
 export const title = "Diario";
@@ -34,7 +36,7 @@ const CHIAVE_AUTO = "macroapp.diario.auto";
 const CHIAVE_AI = "macroapp.diario.ai"; // "on" | "off": esito dell'ultima analisi
 const CHIAVE_FILTRO = "macroapp.diario.progetto"; // "tutte" o id del progetto (lo scrive anche la pagina Task)
 const CHIAVE_PAGINA = "macroapp.progetto"; // progetto aperto nella pagina Progetto (modules/progetto)
-const analyzeEntry = httpsCallable(functions, "analyzeEntry", { timeout: 130000 }); // la funzione ha 120 s
+const analyzeEntry = httpsCallable(functions, "analyzeEntry", { timeout: 310000 }); // la funzione ha 300 s (Opus può metterci minuti)
 
 const leggi = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch (e) { return d; } };
 const scrivi = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
@@ -137,7 +139,7 @@ export async function analizzaNota(entryId, attesa) {
     const res = await analyzeEntry({ entryId });
     const n = res.data?.proposals ?? 0;
     scrivi(CHIAVE_AI, "on");
-    update(COLL, entryId, { analyzed: true, analyzedAt: new Date(), analysisError: null });
+    update(COLL, entryId, { analyzed: true, analyzedAt: new Date(), analysisError: null, modello: res.data?.modello || null });
     if (!n && !res.data?.riepilogo) toast("Nessuna azione da proporre");
     return res.data || {};
   } catch (err) {
@@ -252,7 +254,8 @@ export function mount(container) {
       el("div.nota__testa", {},
         el("span", {}, d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })),
         prog && filtro === "tutte" ? el("small.progetto", {}, prog.name) : null,
-        n.analyzed && !mie.length && !n.riepilogo ? el("span", {}, "· analizzata") : null,
+        n.analyzed && n.modello ? el("span", {}, `· ${nomeModello(n.modello)}`)
+          : n.analyzed && !mie.length && !n.riepilogo ? el("span", {}, "· analizzata") : null,
         n.analysisError && !n.analyzed ? el("span", { style: "color:var(--frutto)" }, "· non analizzata") : null,
         el("span.spazio"),
         el("button.btn.btn--piatto", { disabled: analisi, onclick: () => analizza(n.id) },

@@ -11,10 +11,11 @@ import * as manuale from "./manuale/index.js";
 import * as proposte from "./proposte/index.js";
 import * as banca from "./banca/index.js";
 import * as notifiche from "./notifiche/index.js";
+import * as modelli from "./modelli/index.js";
 import * as impostazioni from "./impostazioni/index.js";
 import * as calendario from "./calendario/index.js";
 import * as google from "./google/index.js";
 
-export const modules = [diario, lista, spese, task, progetto, manuale, proposte, banca, notifiche, impostazioni, calendario, google];
+export const modules = [diario, lista, spese, task, progetto, manuale, proposte, banca, notifiche, modelli, impostazioni, calendario, google];
 export const navModules = modules.filter((m) => m.nav);
 export const DEFAULT_ROUTE = "diario";

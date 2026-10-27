@@ -5,18 +5,20 @@ import * as gemini from "./gemini.js";
 
 const providers = { claude, gemini };
 export const DEFAULT_PROVIDER = "claude";
+export { MODELLI, MODELLO_PREDEFINITO } from "./claude.js";
 
 /**
- * reason({ system, user, schema, keys, provider, maxTokens })
+ * reason({ system, user, schema, keys, provider, maxTokens, model })
  * Ritorna un oggetto JSON conforme a `schema` (JSON Schema). Ogni provider gestisce
  * la propria modalità di output strutturato. maxTokens: tetto della risposta (dove il provider lo usa).
+ * model: chiave di MODELLI (haiku, sonnet, opus); vale solo per Claude.
  */
-export async function reason({ system, user, schema, keys, provider = DEFAULT_PROVIDER, maxTokens }) {
+export async function reason({ system, user, schema, keys, provider = DEFAULT_PROVIDER, maxTokens, model }) {
   const p = providers[provider];
   if (!p) throw new Error(`Provider sconosciuto: ${provider}`);
   const key = provider === "claude" ? keys.anthropic : keys.gemini;
   if (!key) throw new Error(`Chiave mancante per ${provider}`);
-  return p.reason({ system, user, schema, key, maxTokens });
+  return p.reason({ system, user, schema, key, maxTokens, model });
 }
 
 /**

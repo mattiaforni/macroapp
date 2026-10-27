@@ -51,7 +51,8 @@ function spiegaErrore(msg = "") {
 }
 
 export const analyzeEntry = onCall(
-  { secrets: [ANTHROPIC_API_KEY, GEMINI_API_KEY, GOOGLE_OAUTH_CLIENT], timeoutSeconds: 120 },
+  // 300 s: Opus su una nota di progetto lunga può superare i due minuti (vedi src/ai/claude.js).
+  { secrets: [ANTHROPIC_API_KEY, GEMINI_API_KEY, GOOGLE_OAUTH_CLIENT], timeoutSeconds: 300 },
   async (req) => {
     if (!req.auth) throw new HttpsError("unauthenticated", "Accesso richiesto");
     const { entryId } = req.data || {};
@@ -70,13 +71,13 @@ export const analyzeEntry = onCall(
       const entry = { id: snap.id, ...snap.data() };
       passo("nota letta");
       const { analyzeJournalEntry } = await import("./src/agent.js");
-      const { azioni, riepilogo, sintesi } = await analyzeJournalEntry(db, entry, {
+      const { azioni, riepilogo, sintesi, modello } = await analyzeJournalEntry(db, entry, {
         uid: req.auth.uid,
         passo,
         keys: { anthropic: ANTHROPIC_API_KEY.value().trim(), gemini: GEMINI_API_KEY.value().trim() },
         clientGoogle: clientGoogle(), // per leggere i documenti di Drive del progetto
       });
-      return { proposals: azioni, riepilogo, sintesi };
+      return { proposals: azioni, riepilogo, sintesi, modello };
     } catch (err) {
       if (err instanceof HttpsError) throw err;
       console.error("analyzeEntry", err);

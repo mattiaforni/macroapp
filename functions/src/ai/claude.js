@@ -1,13 +1,22 @@
 // Provider Anthropic (Messages API) con output strutturato (output_config.format = json_schema).
 // Riferimento: https://platform.claude.com/docs/en/build-with-claude/structured-outputs
-// Sonnet: estrazione più accurata e bozze scritte meglio. Circa 1 centesimo per nota.
-// Per risparmiare si può passare a "claude-haiku-5-5" (circa un ventesimo del costo).
-const MODEL = "claude-sonnet-5-5";
+// Il modello lo sceglie l'utente dall'app (users/{uid}.modelli, pagina «Modelli AI»), separato per le
+// note semplici e per quelle dei progetti con istruzioni: qui la chiave breve diventa l'ID dell'API.
+// Prezzi per milione di token, ingresso/uscita (ottobre 2026): Haiku da 0,10/0,50 $, Sonnet 2/10 $,
+// Opus 4/20 $. https://platform.claude.com/docs/en/about-claude/models/overview
+// Tutti e tre ragionano prima di rispondere (thinking adattivo, attivo senza configurarlo): quel
+// ragionamento conta nel tetto max_tokens, che quindi va tenuto largo. Si paga solo ciò che si usa.
+export const MODELLI = { haiku: "claude-haiku-5-5", sonnet: "claude-sonnet-5-5", opus: "claude-opus-5-5" };
+export const MODELLO_PREDEFINITO = "sonnet";
 const URL = "https://api.anthropic.com/v1/messages";
 
-const ATTESA_MASSIMA = 100_000; // ms: sotto il tempo massimo della funzione (120 s)
+// ms: sotto il tempo massimo della funzione (300 s) e sotto l'attesa delle intestazioni di fetch
+// in Node (300 s): senza streaming la risposta arriva tutta alla fine. Opus su una nota di progetto
+// lunga può metterci un paio di minuti.
+const ATTESA_MASSIMA = 280_000;
 
-export async function reason({ system, user, schema, key, maxTokens = 4096 }) {
+export async function reason({ system, user, schema, key, maxTokens = 8000, model = MODELLO_PREDEFINITO }) {
+  const MODEL = MODELLI[model] || MODELLI[MODELLO_PREDEFINITO];
   const res = await fetch(URL, {
     method: "POST",
     signal: AbortSignal.timeout(ATTESA_MASSIMA),

@@ -24,6 +24,7 @@ const GRUPPI = [
   ]],
   ["Account", [
     { icona: "campana", testo: "Notifiche", vai: ["notifiche"] },
+    { icona: "scintilla", testo: "Modelli AI", vai: ["modelli"] },
     { icona: "impostazioni", testo: "Casa, tema e account", vai: ["impostazioni"] },
   ]],
 ];

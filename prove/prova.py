@@ -456,6 +456,7 @@ with sync_playwright() as p:
         pg.wait_for_selector(".azione >> text=Comprare lampadine", timeout=6000)
         pg.wait_for_timeout(300)
         shot(pg, "9-diario")
+        pg.wait_for_selector(".nota__testa >> text=· Sonnet")  # il modello che ha letto la nota
         mailto = pg.locator(".azione a.pillola", has_text="Apri nella mail").get_attribute("href")
         assert mailto.startswith("mailto:marco%40example.com"), mailto
         pg.locator(".azione", has_text="del circolo entro venerdì").locator("button[aria-label='Conferma']").click()
@@ -917,6 +918,30 @@ with sync_playwright() as p:
         utente = pg.evaluate("(() => { const s = JSON.parse(sessionStorage.getItem('finto.firestore')); return new Map(s.store.find(([c]) => c === 'users')[1]).get('uid-test'); })()")
         assert not utente.get("dispositivi"), f"telefono tolto: {utente.get('dispositivi')}"
         assert attiva.is_visible(), "spente: torna Attiva"
+
+        # ── Modelli AI: Sonnet per le note semplici e Opus per i progetti, cambio al tocco ──
+        step[0] = "modelli"
+        menu(pg, "Modelli AI")
+        pg.wait_for_selector("h3 >> text=Note dei progetti")
+        blocchi = pg.locator(".blocco")
+        assert blocchi.nth(0).locator(".riga:has-text('Sonnet') .spunta.on").count() == 1, "note semplici: Sonnet"
+        assert blocchi.nth(1).locator(".riga:has-text('Opus') .spunta.on").count() == 1, "progetti: Opus"
+        assert pg.locator(".spunta.on").count() == 2, "una scelta per tipo"
+        blocchi.nth(0).locator(".riga:has-text('Haiku')").click()
+        pg.wait_for_selector("text=Note semplici: Haiku")
+        assert blocchi.nth(0).locator(".riga:has-text('Haiku') .spunta.on").count() == 1
+        assert pg.locator(".spunta.on").count() == 2, "sempre una scelta per tipo"
+        utente = pg.evaluate("(() => { const s = JSON.parse(sessionStorage.getItem('finto.firestore')); return new Map(s.store.find(([c]) => c === 'users')[1]).get('uid-test'); })()")
+        assert utente.get("modelli") == {"note": "haiku"}, f"scelta salvata: {utente.get('modelli')}"
+        pg.wait_for_timeout(2700)  # il toast se ne va
+        pg.evaluate("window.scrollTo(0, 0)")
+        shot(pg, "17-modelli")
+        # La nota successiva la legge Haiku.
+        pg.click(".schede a[href='#/diario']")
+        pg.click("button.fab")
+        pg.fill("#foglio textarea", "Comprare il caffè")
+        conferma(pg)
+        pg.wait_for_selector(".nota__testa >> text=· Haiku", timeout=6000)
         print("FLUSSO COMPLETO")
     except Exception as e:
         shot(pg, "errore")

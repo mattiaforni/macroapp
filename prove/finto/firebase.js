@@ -109,6 +109,8 @@ export function httpsCallable(_f, name) {
     const hid = coll("users").get(UID)?.householdId || null;
     const base = { ownerUid: UID, householdId: hid, source: "agent", status: "pending", sourceEntryId: data.entryId, createdAt: new Date() };
     const P = coll("proposals");
+    // Modello come in functions/src/agent.js (modelloPer): scelta della persona o predefinito.
+    const scelti = coll("users").get(UID)?.modelli || {};
     // Nota di un progetto con istruzioni: riepilogo nella nota, un'azione e la sintesi del progetto proposta.
     const nota = coll("journal_entries").get(data.entryId);
     const progetto = nota?.projectId ? coll("projects").get(nota.projectId) : null;
@@ -121,7 +123,7 @@ export function httpsCallable(_f, name) {
         payload: { projectId: nota.projectId, projectName: progetto.name, prima: !progetto.sintesi,
           sintesi: "## Dritto\nStato: migliora\n- Chiudere la spalla **prima** del colpo: correzione che torna\n\n## Rovescio a due mani\nStato: da consolidare\n- Piedi più larghi\n\n## Da provare\n- Servizio con il lancio più avanti" } });
       notify();
-      return { data: { proposals: 2, riepilogo: true, sintesi: true } };
+      return { data: { proposals: 2, riepilogo: true, sintesi: true, modello: scelti.progetti || "opus" } };
     }
     P.set("p" + (++seq), { ...base, visibility: "private", kind: "task", summary: "Preparare l'assemblea del circolo entro venerdì", payload: { text: "Preparare l'assemblea", due: "2026-10-30", project: "Circolo", people: "Marco" } });
     P.set("p" + (++seq), { ...base, visibility: "shared", kind: "shopping_item", summary: "Comprare lampadine", payload: { text: "Lampadine" } });
@@ -130,7 +132,7 @@ export function httpsCallable(_f, name) {
     P.set("p" + (++seq), { ...base, visibility: "shared", kind: "event", summary: "Cena con i Rossi alle 20", payload: { text: "Cena con i Rossi", due: giorno, time: "20:00", place: "Da noi" } });
     P.set("p" + (++seq), { ...base, visibility: "private", kind: "draft", summary: "Mail a Marco per l'assemblea", payload: { channel: "email", to: "Marco", subject: "Assemblea del circolo", body: "Ciao Marco,\nti propongo di vederci venerdì alle 21 per preparare l'assemblea.\n\nMattia" } });
     notify();
-    return { data: { proposals: 4 } };
+    return { data: { proposals: 4, modello: scelti.note || "sonnet" } };
   };
 }
 export function signInWithPopup() { return Promise.resolve(); }

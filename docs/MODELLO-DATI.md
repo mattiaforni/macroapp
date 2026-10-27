@@ -10,13 +10,14 @@ Campi comuni a tutte le collezioni di contenuto, compilati da `core/db.js`:
 | `createdAt`, `updatedAt` | timestamp | server |
 
 ## `users/{uid}`
-`displayName, email, photoURL, householdId, createdAt, google?: { collegato, scaduto, email, dal, permessi: { contatti, calendario, drive } }, dispositivi?: { <id>: { token, nome, aggiornato } }, notifiche?: { spese, task, lista, banca }`
+`displayName, email, photoURL, householdId, createdAt, google?: { collegato, scaduto, email, dal, permessi: { contatti, calendario, drive } }, dispositivi?: { <id>: { token, nome, aggiornato } }, notifiche?: { spese, task, lista, banca }, modelli?: { note, progetti }`
 `google` lo scrive la funzione `google`: dice all'app se l'account Google è collegato, con quale account e quali
 delle tre spunte (contatti, calendario, Drive) sono state date. Il vecchio campo `contattiGoogle` (collegamento ai
 soli contatti, prima del 27/10) vale come `google` con il solo permesso dei contatti finché non si ricollega.
 `dispositivi`: i telefoni con le notifiche attive (id casuale tenuto nel telefono, token di Cloud Messaging);
 la funzione `avvisa` toglie quelli il cui token non vale più. `notifiche`: categorie per la persona, su tutti
-i suoi telefoni; `false` = spenta, assente = accesa.
+i suoi telefoni; `false` = spenta, assente = accesa. `modelli`: modello dell'AI per le note semplici e per quelle
+dei progetti con istruzioni (`haiku`, `sonnet`, `opus`; assente = Sonnet e Opus), letto da `analyzeEntry`.
 
 ## `google_tokens/{uid}`
 `ownerUid, refreshToken, accessToken, scade, email, scope, permessi, collegatoIl, state?, stateAt?` — solo Cloud Functions
@@ -82,13 +83,14 @@ esportati come testo, file di testo così come sono; PDF e altri formati solo pe
 `people` è la copia in chiaro dei nomi: serve a chi non vede la voce in rubrica (voce privata dell'altro membro) e ai task vecchi, che avevano solo il testo.
 
 ## `journal_entries`
-`text, projectId?, riepilogo?, titolo?, temi?: [string], riepilogoAt?, analyzed, analyzedAt, analysisError` — sempre `private`, solo il
+`text, projectId?, riepilogo?, titolo?, temi?: [string], riepilogoAt?, analyzed, analyzedAt, analysisError, modello?` — sempre `private`, solo il
 proprietario (anche nelle regole), anche quando il progetto è condiviso. `riepilogo` lo scrive l'agente
 (`analyzeEntry`) per le note di un progetto con `istruzioni`, tenendo conto delle 8 note precedenti dello
 stesso progetto; l'utente lo corregge dal foglio della nota. Con il riepilogo arrivano `titolo` (una riga) e
 `temi` (nomi delle sezioni della sintesi che la nota tocca: la pagina del progetto collega così le lezioni ai
 temi). `createdAt` si può cambiare dal foglio della nota (lezioni inserite dopo). Indici: `ownerUid+createdAt` e
-`ownerUid+projectId+createdAt` (Diario filtrato e note precedenti per l'agente).
+`ownerUid+projectId+createdAt` (Diario filtrato e note precedenti per l'agente). `modello`: chi ha fatto l'ultima
+analisi (lo scrive l'app con la risposta di `analyzeEntry`).
 
 ## `notes`
 `text`, e per le bozze `type: "draft", channel, to, subject` — bozze salvate dalle azioni proposte (e gli appunti

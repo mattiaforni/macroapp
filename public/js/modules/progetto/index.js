@@ -20,6 +20,7 @@ import { apriNota, analizzaNota, analisiAutomatica, titoloDi } from "../diario/i
 import { apriProgetto, rigaTask } from "../task/index.js";
 import { elencoDocumenti } from "../../components/documenti.js";
 import { vaiA } from "../../core/router.js";
+import { nomeModello } from "../../core/modelli.js";
 
 export const id = "progetto";
 export const title = "Progetto";
@@ -102,7 +103,7 @@ export function mount(container) {
     const sheet = openSheet({
       title: titoloDi(n) || "Lezione",
       body: [
-        el("p.meta", { style: "margin-top:12px" }, `${d.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" })}, ${d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}`),
+        el("p.meta", { style: "margin-top:12px" }, `${d.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" })}, ${d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}${n.modello ? ` · riepilogo di ${nomeModello(n.modello)}` : ""}`),
         n.temi?.length ? el("div.lezione__temi", {}, ...n.temi.map((t) => el("span.etichetta", {}, t))) : null,
         n.riepilogo
           ? el("div.sintesi-testo.lezione__riepilogo", {}, ...testoRicco(n.riepilogo))
