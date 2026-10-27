@@ -16,7 +16,8 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
   provider AI intercambiabile in `src/ai/`), `bank` (onCall con `azione`: elenco banche, avvio e
   conclusione del consenso, scollega, lettura a richiesta; `src/banking/enable.js`), `contatti` (Google
   Contatti: collegamento e permessi di un'ora, `src/google/contatti.js`), `avvisa` (notifiche push,
-  `src/avvisi.js`), `syncBank` (lettura quotidiana alle 7:15, poi le notifiche della banca). firebase-admin, agente e banca si importano dentro i gestori, non all'avvio.
+  `src/avvisi.js`), `prodotto` (scheda di un prodotto da Open Food Facts con l'indice, cache in `prodotti/{ean}`;
+  `src/prodotti/`), `syncBank` (lettura quotidiana alle 7:15, poi le notifiche della banca). firebase-admin, agente e banca si importano dentro i gestori, non all'avvio.
 - **Pubblicazione**: push su `main` → `.github/workflows/deploy.yml` pubblica hosting,
   regole, indici e functions (secret `FIREBASE_SERVICE_ACCOUNT`). Si può rilanciare a mano.
 - **Segreti** in Secret Manager (ANTHROPIC_API_KEY, GEMINI_API_KEY, ENABLE_BANKING_*):
@@ -40,11 +41,12 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 | `components/menu.js` | menu a sinistra a gruppi (Progetti — quelli con istruzioni, letti all'apertura —, Casa, Collegamenti, Account), come in Leghe Fantacalcio |
 | `components/proposals.js` | azioni proposte: `APPLICA` per tipo, `renderAzione` (la sintesi proposta si legge ripiegata) |
 | `components/sintesi.js` | sintesi di un progetto (`projects.sintesi`): `sezioniSintesi` (una sezione «## » per tema, prima riga «Stato: …» facoltativa), `tonoStato`, foglio per correggerla |
+| `components/prodotto.js` | codice a barre: `scansiona()` (fotocamera con `BarcodeDetector`, altrimenti il codice scritto), `apriProdotto(ean, { inLista })` (scheda da Open Food Facts via function `prodotto`: indice e fascia, Nutri-Score, additivi con rischio EFSA, NOVA, bio, valori per 100 g; con `inLista` il campo «In lista come», «Preso» a destra e «Da comprare» a sinistra), `pallinoIndice`, `riassunto` |
 | `components/persone.js` | scelta delle persone di un task: suggerimenti dalla rubrica e da Google Contatti, persone nuove; una voce della rubrica non collegata e il contatto Google con lo stesso nome compaiono una volta sola, e sceglierla la collega |
 | `modules/*/index.js` | un modulo = `{ id, title, nav, icon, mount(container) → smonta }`, in `modules/registry.js` |
 | `modules/diario/index.js` | note (anche dettate o condivise), filtro per progetto (`macroapp.diario.progetto`, lo scrive anche la pagina Task), riepilogo dell'AI con la trascrizione ripiegata, proposte sotto la nota. Esporta `apriNota`, `analizzaNota`, `titoloDi` (li usa la pagina Progetto) |
 | `modules/progetto/index.js` | pagina di un progetto con istruzioni (`macroapp.progetto` = quale; menu → Progetti, o dal Diario e dai Task): viste Sintesi (righe per tema con stato e lezioni collegate via `journal_entries.temi`), Lezioni (giorno, titolo, anteprima, temi; foglio di lettura con Modifica e Rianalizza), Da fare. Titolo in testata = nome del progetto (`titoloCorrente`, letto da app.js) |
-| `modules/lista/index.js` | tessere a 4 colonne; quelle da comprare divise per reparto (`REPARTI` = ordine del giro, `REGOLE_REPARTO` dal nome, `reparto` scelto a mano nel foglio Modifica); recenti e «Mi serve» per frequenza, senza reparti |
+| `modules/lista/index.js` | tessere a 4 colonne; quelle da comprare divise per reparto (`REPARTI` = ordine del giro, `REGOLE_REPARTO` dal nome, `reparto` scelto a mano nel foglio Modifica); recenti e «Mi serve» per frequenza, senza reparti. «Scansiona» in Mi serve e in Modifica → `inserisciProdotto` (voce = tipo di prodotto, marca nel dettaglio, `ean` + `prodotto`; pallino della fascia sulla tessera) |
 | `modules/task/index.js` | task per progetti; `apriProgetto` (nome, visibilità, istruzioni per il diario); dal progetto il pulsante Diario |
 | `modules/notifiche/index.js` | pagina Notifiche (menu → Account): stato di questo telefono, «Attiva» in basso a destra, categorie, telefoni attivi, prova |
 | `modules/banca/index.js` | stato del collegamento (`bank_connections/{uid}` in tempo reale), scelta della banca, conclusione al ritorno da `/banca?code=…` (messo da parte in `app.js`), «Leggi ora», rinnovo, scollega |
@@ -104,10 +106,12 @@ python3 prove/costruisci.py       # copia public/ con Firebase finto in memoria
 python3 prove/prova.py            # flusso completo in Chromium, schermate in prove/_schermate
 node functions/strumenti/prova-banca.mjs   # quali movimenti bancari diventano proposte (servono le dipendenze di functions)
 node functions/strumenti/prova-avvisi.mjs  # cosa dicono le notifiche e a chi
+node functions/strumenti/prova-prodotti.mjs # indice dei prodotti su schede OFF costruite a mano
+python3 prove/additivi.py                   # rigenera la tabella degli additivi dalla tassonomia OFF
 ```
 Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggiorna `prove/finto/firebase.js`.
 
-## Stato (26 ottobre 2026) e prossimi passi
+## Stato (27 ottobre 2026) e prossimi passi
 
 - [x] Pubblicazione automatica, accesso Google (anche da app installata), service worker
 - [x] Lista (stile Bring), Spese (stile Splitwise, ricorrenti, pareggio), Diario con agente, Task per
@@ -235,6 +239,16 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
       Sui telefoni: Chrome rilegge il manifest all'avvio (al più una volta al giorno) e aggiorna l'app
       installata con nome e icona nuovi, senza reinstallarla; da Chrome 144 può chiedere conferma
       («Rivedi aggiornamento dell'app»). Il cambio di nome del 25/10 segue la stessa strada.
+- [x] **Prodotti dal codice a barre** (27/10, richiesta di Mattia: «come Yuka, ma su dati aperti»). Open Food Facts
+      via function `prodotto` (User-Agent, cache `prodotti/{ean}`), indice 0–100 nostro (docs/ARCHITETTURA.md,
+      Prodotti: Nutri-Score 50, additivi 25 con rischio EFSA dalla tassonomia OFF, NOVA 15, bio 10; tetto 49 con un
+      additivo a rischio alto), scheda con «In lista come», «Preso»/«Da comprare», pallino sulla tessera.
+      Scanner: `BarcodeDetector` (Chrome Android); su iPhone non c'è e si scrive il codice (eventuale libreria ZXing).
+      **Non verificato con l'API vera**: la sessione non raggiungeva openfoodfacts.org (né i dump), quindi la prova
+      è su schede costruite a mano nel formato dell'API e la copertura dei prodotti italiani è da misurare dal
+      telefono: menu → Lista → + → Scansiona su una decina di prodotti della dispensa. Da controllare al primo uso: i nomi in
+      `categories_tags_it` (sono il nome proposto per la tessera) e che la function non prenda 403/429 da OFF (il
+      messaggio lo dice). L'API v2 riconverte i nutrienti nel formato `*_100g` anche col nuovo schema di OFF (API.pm).
 - [ ] Identità visiva definitiva (resto dell'app): da decidere con Mattia
 
 Bassa priorità (Mattia, 23/10: la revisione delle spese è meno rilevante), previste in

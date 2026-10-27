@@ -47,6 +47,9 @@
   --c-rosa: #E26C8E;    --c-rosa-tinta: #F9DDE6;    --c-rosa-testo: #B23E63;    --c-rosa-su: #1F1F1C;
   --c-verde: #2F7A55;   --c-verde-tinta: #E2F0E8;   --c-verde-testo: #2F7A55;   --c-verde-su: #FFFFFF;
 
+  /* Nutri-Score, colori ufficiali della scala (components/prodotto.js) */
+  --nutri-a: #038141; --nutri-b: #85BB2F; --nutri-c: #FECB02; --nutri-d: #EE8100; --nutri-e: #E63E11;
+
   --ui: "Instrument Sans", system-ui, -apple-system, sans-serif;
   --display: "Instrument Serif", Georgia, serif;
   --barra: calc(58px + env(safe-area-inset-bottom));
@@ -563,3 +566,48 @@ html[data-colore] .pagina-progetto .btn--piatto svg { color: var(--c-testo); }
 .tema > .tema__corpo:first-child { padding-top: 12px; }
 .tema__lezioni { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 0 14px; }
 .tema__lezioni .pillola { font-size: 12px; padding: 4px 10px; }
+
+/* ───────────── Prodotti dal codice a barre (components/prodotto.js) ─────────────
+   Fasce dell'indice: colori dell'app (verde, verdolino delle tessere, arancio, frutto). */
+.indice--eccellente { --indice: var(--verde); }
+.indice--buono { --indice: var(--tessera-verde); }
+.indice--mediocre { --indice: var(--c-arancio); }
+.indice--scarso { --indice: var(--frutto); }
+.indice-pallino { display: inline-block; width: 11px; height: 11px; border-radius: 50%; flex: none; background: var(--indice, var(--linea-forte)); }
+.tessera__indice { position: absolute; left: 7px; top: 7px; width: 9px; height: 9px; box-shadow: 0 0 0 2px rgba(255,255,255,.75); }
+@media (min-width: 420px) { .tessera__indice { left: 9px; top: 9px; width: 10px; height: 10px; } }
+
+.scanner { position: relative; margin-top: 14px; border-radius: var(--r-g); overflow: hidden; background: #000; aspect-ratio: 4 / 3; }
+.scanner__video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.scanner__mirino { position: absolute; inset: 26% 12%; border: 1.5px solid rgba(255,255,255,.85); border-radius: 10px; pointer-events: none; }
+
+.prodotto__testa { display: flex; align-items: center; gap: 16px; margin: 16px 0 10px; }
+.prodotto__indice {
+  width: 76px; height: 76px; border-radius: 50%; flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: var(--indice, var(--foglio-2)); color: var(--indice-su, #fff); border: 1px solid var(--linea);
+}
+.prodotto__indice:not([class*="indice--"]) { color: var(--inchiostro-2); }
+.prodotto__indice b { font-size: 32px; line-height: 1; font-weight: 400; }
+.prodotto__indice small { font-size: 8.5px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; margin-top: 4px; }
+.prodotto__nome { flex: 1; min-width: 0; }
+.prodotto__nome b { display: block; font-size: 17px; font-weight: 500; line-height: 1.25; overflow-wrap: anywhere; }
+.prodotto__nome span { display: block; font-size: 13px; color: var(--inchiostro-2); margin-top: 1px; }
+.prodotto__avviso { margin: 2px 0 10px; }
+.prodotto__fonte { margin-top: 16px; }
+.riga--dato { cursor: default; }
+.riga--dato > span:last-child { font-weight: 500; flex: none; }
+.grado {
+  display: inline-flex; width: 30px; height: 30px; border-radius: 8px; align-items: center; justify-content: center;
+  font-weight: 600; font-size: 15px; color: #fff; background: var(--grado); flex: none;
+}
+.grado--a { --grado: var(--nutri-a); } .grado--b { --grado: var(--nutri-b); } .grado--c { --grado: var(--nutri-c); color: #1F1F1C; }
+.grado--d { --grado: var(--nutri-d); } .grado--e { --grado: var(--nutri-e); }
+.additivi { list-style: none; margin: 0; padding: 2px 0 6px 12px; font-size: 13.5px; }
+.additivi li { padding: 5px 0; border-bottom: 1px solid var(--linea); }
+.additivi li:last-child { border-bottom: none; }
+.additivi b { font-weight: 600; }
+.additivi small { color: var(--inchiostro-2); }
+.additivi .rischio--alto .rischio { color: var(--frutto); font-weight: 600; }
+.additivi .rischio--moderato .rischio { color: var(--c-arancio-testo); font-weight: 600; }
+.valori .riga--dato { padding: 7px 0; }
+.valori .riga--dato .meta { margin-right: 4px; }

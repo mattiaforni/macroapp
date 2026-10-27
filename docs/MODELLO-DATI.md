@@ -30,6 +30,16 @@ messa in lista l'ultima volta (serve alla notifica che riassume le aggiunte di u
 `reparto` (`frutta`, `dispensa`, `colazione`, `carne`, `frigo`, `surgelati`, `bevande`, `casa`, `altro`): solo se
 scelto a mano nel foglio Modifica e diverso da quello che si ricava dal nome (`REGOLE_REPARTO` in `modules/lista`);
 `null` o assente = ricavato dal nome.
+`ean?`, `prodotto?: { nome, marca, indice, fascia }`: voce nata da un codice a barre (o collegata dal foglio Modifica con
+«Scansiona»): il riassunto della scheda, quanto basta per il pallino sulla tessera e la riga nel foglio Modifica; la
+scheda intera sta in `prodotti/{ean}`. `text` resta il tipo di prodotto («Spaghetti»), `detail` la marca.
+
+## `prodotti/{ean}`
+`ean, trovato, fonte: "off", tipo, nome, marca, quantita, descrizione, categoria, categorie, immagine, nutriscore: { grado, punteggio }, nova, additivi: [{ codice, nome, classe, rischio }], etichette, bio, nutrienti: { kcal, grassi, saturi, zuccheri, sale, fibre, proteine }, livelli, ambiente, completezza, ingredientiNoti, aggiornatoOff, indice, fascia, componenti, parziale, mancano, letto, lettoDa`
+Cache delle schede di Open Food Facts (ODbL) con l'indice calcolato dal server (`functions/src/prodotti/indice.js`), comune
+a tutte le case: l'id è il codice a barre, senza `ownerUid` né `householdId`. La scrive solo la function `prodotto`
+(un mese di validità se trovato, un giorno se no); la legge chiunque sia autenticato. `rischio` degli additivi:
+`alto` / `moderato` / `nessuno` secondo l'EFSA, `null` = non valutato.
 
 ## `manual_entries`
 `type: "shop"|"person"|"info", name, category, address, phone, email, url, notes, googleId?`
@@ -93,3 +103,4 @@ Le proposte create dalla banca hanno id `eb_<entry_reference>`, `source: "bank"`
 - cancellazione: proprietario o membro (se condiviso)
 - `journal_entries`: solo proprietario, `visibility` forzata a `private`
 - `households`: un non membro può solo aggiungersi, fino a 2 membri
+- `prodotti`: lettura per chi è autenticato, scrittura solo dal server

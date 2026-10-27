@@ -44,6 +44,13 @@ Dettagli in [docs/ARCHITETTURA.md](docs/ARCHITETTURA.md) e [docs/MODELLO-DATI.md
 4. Secret Manager: `ENABLE_BANKING_APP_ID` = application id, `ENABLE_BANKING_PRIVATE_KEY` = il contenuto intero del `.pem` (con le righe BEGIN/END). Poi un deploy (Actions → Deploy Firebase → Run workflow).
 5. Dal telefono: menu → Banca → + → scegli la banca → consenso sul sito della banca → ritorno nell'app → «Leggi ora». Le uscite compaiono in «Azioni da confermare», visibili solo a chi possiede il conto.
 
+## Prodotti (Open Food Facts)
+
+Nella Lista, «Scansiona» legge il codice a barre e mostra la scheda del prodotto con un indice 0–100 (Nutri-Score,
+additivi con rischio EFSA, NOVA, bio) calcolato dal server sui dati aperti di Open Food Facts (ODbL). Non serve
+configurare nulla: la function `prodotto` chiama OFF con lo User-Agent dell'app e tiene le schede in `prodotti/{ean}`.
+Su Chrome Android la fotocamera legge il codice; altrove si scrive il numero.
+
 ## Notifiche
 
 Niente da configurare: il deploy attiva le API di Cloud Messaging. Ognuno le attiva sul proprio telefono da

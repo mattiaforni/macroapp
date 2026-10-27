@@ -36,6 +36,7 @@ Scelte: nessun framework né bundler (coerente con i progetti precedenti, deploy
   `collega` → scambia il codice, conserva il refresh token in `google_tokens/{uid}`; `token` → permesso di un'ora
   per la People API, che l'app usa direttamente; `scollega` → revoca e cancella.
 - `avvisa` (callable): notifiche push (Firebase Cloud Messaging), vedi «Notifiche» sotto.
+- `prodotto` (callable, `{ ean, aggiorna? }`): scheda di un prodotto dal codice a barre, vedi «Prodotti» sotto.
 - `syncBank` (schedulata, 07:15 Europe/Rome): per ogni `bank_connections` attiva scarica i movimenti contabilizzati degli ultimi 7 giorni e crea una proposta di spesa **personale** per ogni uscita (la spesa confermata nasce condivisa). Deduplica con id deterministico della proposta (`eb_<entry_reference>`).
 - Segreti in Secret Manager, mai nel repository.
 
@@ -56,6 +57,32 @@ Flusso di collegamento:
 3. `syncBank` ogni mattina, o «Leggi ora» (`bank sincronizza`). Limite PSD2: senza l'utente presente la banca permette 4 letture al giorno per conto (Intesa risponde poi 429 `ASPSP_RATE_LIMIT_EXCEEDED`, «consented multiplicity per day»); «Leggi ora» manda quindi le intestazioni PSU (`Psu-Ip-Address`, `Psu-User-Agent`, … da `intestazioniPsu`) e non entra nel conto, `syncBank` no ed è una al giorno; la pagina avvisa quando il consenso scade entro 14 giorni (notifica push: in futuro).
 4. Quali uscite sono spese (`classifica`, provata da `functions/strumenti/prova-banca.mjs`): con una carta di credito tra i conti letti, l'addebito mensile della carta sul conto si scarta se sulla carta c'è un'entrata dello stesso importo entro 5 giorni, altrimenti se il testo nomina carta di credito, saldo, estratto conto o e/c accanto a «carta» (`SALDO_CARTA`; «Pagamento POS … carta 1234» resta). Senza carte lette l'addebito resta, perché è l'unica traccia di quelle spese. Si scartano anche i giroconti verso un altro conto letto (IBAN del beneficiario). Gli scarti vanno in `scartati`, visibili nella pagina Banca. Le uscite non contabilizzate (`PDNG`, `HOLD`, `SCHD`) non diventano proposte, perché prima della contabilizzazione importo e riferimento possono cambiare (preautorizzazioni: benzinaio, albergo); vanno in `lettura.inAttesa` e la pagina le mostra in «In attesa di contabilizzazione». Le righe dei conti dicono quanti movimenti ha dato la banca e quante uscite sono in attesa.
 5. Se Enable Banking risponde `EXPIRED_SESSION` (401 con codice `*SESSION*`, `sessioneChiusa` in enable.js): `syncConnection` legge lo stato della sessione, scrive `needsRenewal: true`, `sessionStatus`, `sessionEndedAt`; `syncBank` non la tocca più; la pagina mostra «Collegamento interrotto» e mette «Rinnova il consenso» in basso a destra, che rifà il punto 1 con la stessa banca.
+
+## Prodotti (Open Food Facts)
+
+Dalla Lista («Scansiona» nel foglio Mi serve, o nel foglio Modifica di una voce) si legge un codice a barre con la
+fotocamera (`BarcodeDetector`, Chrome Android; dove manca, o senza fotocamera, si scrive il codice) e si apre la
+scheda del prodotto: `components/prodotto.js` chiama la function `prodotto`, che legge Open Food Facts
+(`GET /api/v2/product/{ean}?product_type=all&lc=it&fields=…`, con lo User-Agent che OFF richiede e che dal
+browser non si può impostare) e tiene la scheda in `prodotti/{ean}` per un mese (un giorno se non trovata):
+il secondo telefono e le scansioni successive non toccano OFF (limite di 15 letture al minuto per IP).
+I campi `*_tags_it` arrivano già tradotti (categorie, additivi, etichette); `product_type=all` rinvia un
+cosmetico a Open Beauty Facts.
+
+**Indice** (`functions/src/prodotti/indice.js`, 0–100, sul modello di Yuka ma con regole dichiarate): Nutri-Score
+50 (A 100 … E 10), additivi 25 (nessuno 100, −20 per additivo; tetto 60 con un additivo a rischio EFSA
+«moderato», 40 con uno «alto»), NOVA 15 (1–2 100, 3 75, 4 0), bio 10. Media pesata delle componenti note; se ne
+manca una l'indice è «parziale» e lo dice; senza Nutri-Score né ingredienti non c'è indice. Un additivo a rischio
+alto porta l'indice al massimo a 49. Fasce: 75+ eccellente, 50 buono, 25 mediocre, sotto scarso. Il rischio degli
+additivi viene dalla tassonomia OFF (`efsa_evaluation_overexposure_risk`, 38 additivi «alto» — nitriti, sorbati,
+benzoati, solfiti, fosfati, carragenina, glutammato —, 14 «moderato»), estratta in `additivi.js` con
+`prove/additivi.py`. Prova senza rete: `node functions/strumenti/prova-prodotti.mjs`.
+
+**Nella Lista** la voce entra come tipo di prodotto (la categoria OFF più specifica, correggibile nel campo «In lista
+come», con le voci simili già in lista da toccare per unirsi), la marca nel dettaglio, `ean` e il riassunto in
+`prodotto`; «Preso» (in basso a destra) la mette tra i comprati, «Da comprare» in lista. La tessera porta il pallino
+della fascia; dal foglio Modifica si riapre la scheda. Dati ODbL: la scheda cita Open Food Facts e rimanda alla pagina
+del prodotto, anche per completarla quando è incompleta.
 
 ## Spese: regole e saldo
 

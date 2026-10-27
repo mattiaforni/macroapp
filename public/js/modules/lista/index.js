@@ -5,14 +5,17 @@
 //
 // Le tessere da comprare stanno divise per reparto, nell'ordine del giro al supermercato.
 //
-// Collezione: shopping_items { text, detail, done, addedAt, boughtAt, count, reparto? }
+// Collezione: shopping_items { text, detail, done, addedAt, boughtAt, count, reparto?, ean?, prodotto? }
 //   done = true  → comprato (sta tra i recenti)
 //   done = false → da comprare
 //   reparto      → scelto a mano nel foglio Modifica; assente = ricavato dal nome
+//   ean, prodotto → voce nata da un codice a barre (components/prodotto.js): la tessera porta il pallino
+//                   della fascia dell'indice, il foglio Modifica apre la scheda
 import { el, icon, iconaDa, toast, fascia, vuoto, toDate, fab } from "../../core/ui.js";
 import { create, update, remove, watchVisible, VIS } from "../../core/db.js";
 import { session } from "../../core/auth.js";
 import { openSheet, campo } from "../../components/sheet.js";
+import { scansiona, apriProdotto, pallinoIndice, riassunto, NOME_FASCIA } from "../../components/prodotto.js";
 
 export const id = "lista";
 export const title = "Lista";
@@ -104,10 +107,37 @@ export function aggiungiVoci(raw, items = []) {
   return nuove;
 }
 
+/**
+ * Voce dalla scheda di un prodotto (scansione): { ean, scheda, nome, preso }. Il nome è il tipo di
+ * prodotto («Spaghetti»); la marca va nel dettaglio; ean e riassunto restano nella voce. Se una voce
+ * con quel nome c'è già (o `voce` è data), si aggiorna quella; `preso` la mette tra i comprati.
+ */
+function inserisciProdotto({ ean, scheda, nome, preso }, items, voce = null) {
+  const esistente = voce || items.find((i) => norm(i.text) === norm(nome));
+  const uid = session.user.uid;
+  const dettaglio = scheda?.trovato ? (scheda.marca || (norm(scheda.nome) !== norm(nome) ? scheda.nome : "")) || "" : null;
+  const campi = { text: nome, ean, prodotto: riassunto(scheda) };
+  if (dettaglio) campi.detail = dettaglio;
+  const stato = preso
+    ? { done: true, boughtAt: new Date(), doneBy: uid, count: (esistente?.count || 0) + 1 }
+    : { done: false, addedAt: new Date(), addedBy: uid };
+  if (esistente) update(COLL, esistente.id, { ...campi, ...stato });
+  else create(COLL, { detail: "", count: 0, ...campi, ...stato }, VIS.SHARED);
+  toast(preso ? `${nome} preso` : `${nome} in lista`);
+}
+
+/** Scansiona un codice e apre la scheda con le azioni della lista. `voce` = voce da collegare. */
+async function scansionaInLista(getItems, voce = null) {
+  const ean = await scansiona();
+  if (!ean) return;
+  await apriProdotto(ean, { inLista: (r) => inserisciProdotto(r, getItems(), voce), voci: getItems(), nomeIniziale: voce?.text || "" });
+}
+
 function tessera(it, { verde, onTap, onAltro }) {
   const nomeIcona = iconaDa(`${it.text} ${it.detail || ""}`, ICONE, null);
   return el("div.tessera", { class: verde ? "tessera--verde" : "", role: "button", tabindex: "0", onclick: onTap,
       onkeydown: (e) => { if (e.key === "Enter") onTap(); } },
+    pallinoIndice(it.prodotto?.fascia, "tessera__indice"),
     nomeIcona ? icon(nomeIcona) : el("span.iniziale", {}, (it.text || "?").charAt(0).toUpperCase()),
     el("b", {}, it.text),
     it.detail ? el("small", {}, it.detail) : null,
@@ -115,7 +145,7 @@ function tessera(it, { verde, onTap, onAltro }) {
   );
 }
 
-function apriModifica(it) {
+function apriModifica(it, getItems) {
   const nome = el("input", { value: it.text, autofocus: true, enterkeyhint: "next" });
   const dett = el("input", { value: it.detail || "", placeholder: "es. surgelate, 1 kg, della marca…", enterkeyhint: "done" });
   nome.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); dett.focus(); } });
@@ -131,15 +161,25 @@ function apriModifica(it) {
   }, n)));
   disegnaReparti();
 
+  // Voce nata da un codice a barre: la riga apre la scheda del prodotto (indice, additivi…).
+  const p = it.prodotto;
+  const prodotto = it.ean ? el("div.riga", { role: "button", tabindex: "0", onclick: () => apriProdotto(it.ean) },
+    pallinoIndice(p?.fascia) || el("span.indice-pallino"),
+    el("div.testo", {}, el("b", {}, p?.nome || "Prodotto scansionato"),
+      el("span", {}, [p?.marca, p?.indice != null ? `${p.indice} · ${NOME_FASCIA[p.fascia]}` : "senza indice"].filter(Boolean).join(" · "))),
+    icon("freccia", "freccia-riga")) : null;
+
   const sheet = openSheet({
     title: "Modifica",
     body: [
       campo("Nome", nome),
       campo("Dettaglio", dett),
       campo("Reparto", reparti),
+      prodotto ? el("div", { style: "margin-top:4px" }, el("label.etichetta-campo", {}, "Prodotto"), prodotto) : null,
       el("div.foglio__piede", {},
         el("button.btn.btn--pericolo", { onclick: () => { remove(COLL, it.id); sheet.close(); toast(`${it.text} eliminato`); } },
           icon("cestino"), "Elimina"),
+        el("button.btn", { type: "button", onclick: () => scansionaInLista(getItems, it) }, icon("codice"), it.ean ? "Riscansiona" : "Scansiona"),
       ),
     ],
     onConfirm: () => {
@@ -210,6 +250,8 @@ function apriMiServe(getItems) {
     ],
     onConfirm: () => { aggiungi(); },
     confirmLabel: "Fatto",
+    // Codice a barre: la scheda del prodotto (Open Food Facts) e da lì «Preso» o «Da comprare».
+    azioni: [el("button.btn", { type: "button", onclick: () => scansionaInLista(getItems) }, icon("codice"), "Scansiona")],
   });
 }
 
@@ -242,7 +284,7 @@ export function mount(container) {
     daComprare.replaceChildren(...(da.length
       ? [...perReparto].filter(([, voci]) => voci.length).map(([k, voci]) => el("section.reparto", { "aria-label": NOME_REPARTO[k] },
           el("div.reparto__nome", {}, el("span", {}, NOME_REPARTO[k])),
-          el("div.tessere", {}, ...voci.map((it) => tessera(it, { onTap: () => compra(it), onAltro: () => apriModifica(it) }))),
+          el("div.tessere", {}, ...voci.map((it) => tessera(it, { onTap: () => compra(it), onAltro: () => apriModifica(it, () => items) }))),
         ))
       : [vuoto("Niente da comprare", "Tocca + per aggiungere, oppure una voce tra quelle usate di recente.")]));
 
@@ -256,7 +298,7 @@ export function mount(container) {
           render();
         },
       }, recentiAperti ? "Nascondi" : `Mostra (${fatti.length})`)),
-      recentiAperti ? el("div.tessere", {}, ...visibili.map((it) => tessera(it, { verde: true, onTap: () => rimetti(it), onAltro: () => apriModifica(it) }))) : null,
+      recentiAperti ? el("div.tessere", {}, ...visibili.map((it) => tessera(it, { verde: true, onTap: () => rimetti(it), onAltro: () => apriModifica(it, () => items) }))) : null,
       recentiAperti && fatti.length > RECENTI_VISIBILI
         ? el("p", { style: "text-align:center;margin-top:10px" },
             el("button.btn.btn--piatto", { onclick: () => { mostraTutti = !mostraTutti; render(); } }, mostraTutti ? "Mostra meno" : `Tutti i ${fatti.length}`))

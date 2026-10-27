@@ -129,6 +129,13 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Schede dei prodotti (Open Food Facts + indice), cache comune a tutte le case: l'id è il codice
+    // a barre. Le scrive solo la function `prodotto`; chi è autenticato le legge.
+    match /prodotti/{ean} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
     // Permessi di Google Contatti (refresh token): solo le Cloud Functions. Lo stato del
     // collegamento che serve all'app sta in users/{uid}.contattiGoogle.
     match /google_tokens/{uid} {

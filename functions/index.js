@@ -3,7 +3,7 @@
 // GOOGLE_OAUTH_CLIENT ({"id","secret"} del client web dell'accesso con Google) lo scrive il deploy.
 //
 // Funzioni: analyzeEntry (agente del diario), bank (collegamento e lettura della banca), contatti (Google Contatti),
-// avvisa (notifiche push sulle cose condivise), syncBank (lettura quotidiana).
+// avvisa (notifiche push sulle cose condivise), prodotto (scheda di un prodotto da Open Food Facts), syncBank (lettura quotidiana).
 // All'avvio del container si caricano solo le dichiarazioni delle funzioni.
 // firebase-admin, l'agente e il client bancario vengono importati alla prima richiesta (import dinamico):
 // avvio più rapido e nessun lavoro a livello di modulo che possa bloccare il container.
@@ -261,6 +261,47 @@ export const avvisa = onCall(
     } catch (err) {
       console.error("avvisa", err.code || "", String(err.message).slice(0, 200));
       throw new HttpsError("internal", `Notifica non inviata (${String(err.message).slice(0, 160)})`);
+    }
+  },
+);
+
+// Quanto a lungo vale una scheda in cache: un prodotto trovato un mese (OFF cambia poco), uno
+// non trovato un giorno (qualcuno potrebbe aggiungerlo, o il codice era letto male).
+const CACHE_TROVATO_MS = 30 * 24 * 3600 * 1000;
+const CACHE_ASSENTE_MS = 24 * 3600 * 1000;
+
+/**
+ * Scheda di un prodotto dal codice a barre ({ ean }), da Open Food Facts con l'indice calcolato
+ * in src/prodotti/indice.js. La scheda sta in prodotti/{ean} (cache della casa: la legge chiunque sia
+ * autenticato, la scrive solo il server); { aggiorna: true } la rilegge da OFF comunque.
+ * Ritorna la scheda ({ trovato: false, ean } se il codice non c'è).
+ */
+export const prodotto = onCall(
+  { timeoutSeconds: 30 },
+  async (req) => {
+    if (!req.auth) throw new HttpsError("unauthenticated", "Accesso richiesto");
+    const off = await import("./src/prodotti/off.js");
+    const ean = off.normalizzaEan(req.data?.ean);
+    if (!ean) throw new HttpsError("invalid-argument", "Codice a barre non valido");
+    try {
+      const db = await getDb();
+      const ref = db.collection("prodotti").doc(ean);
+      const snap = await ref.get();
+      const attuale = snap.exists ? snap.data() : null;
+      const eta = attuale?.letto?.toMillis ? Date.now() - attuale.letto.toMillis() : Infinity;
+      if (attuale && !req.data?.aggiorna && eta < (attuale.trovato ? CACHE_TROVATO_MS : CACHE_ASSENTE_MS)) {
+        return { ...attuale, ean, letto: attuale.letto.toMillis(), aggiornatoOff: attuale.aggiornatoOff?.toMillis?.() || null };
+      }
+      const grezzo = await off.leggiOff(ean);
+      const scheda = grezzo ? off.normalizza(grezzo) : { trovato: false, fonte: "off" };
+      const { FieldValue } = await import("firebase-admin/firestore");
+      await ref.set({ ...scheda, ean, letto: FieldValue.serverTimestamp(), lettoDa: req.auth.uid }, { merge: false });
+      return { ...scheda, ean, letto: Date.now(), aggiornatoOff: scheda.aggiornatoOff?.getTime?.() || null };
+    } catch (err) {
+      if (err instanceof HttpsError) throw err;
+      console.error("prodotto", ean, err.status || "", String(err.message).slice(0, 200));
+      if (err instanceof off.OffError) throw new HttpsError(err.status === 429 ? "resource-exhausted" : "unavailable", err.message);
+      throw new HttpsError("internal", `Scheda non letta (${String(err.message).slice(0, 160)})`);
     }
   },
 );

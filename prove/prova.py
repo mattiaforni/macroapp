@@ -87,6 +87,64 @@ with sync_playwright() as p:
         pg.wait_for_selector("#foglio", state="hidden")
         shot(pg, "1c-lista-reparti")
 
+        # ── Lista, codice a barre: in Chromium senza fotocamera si scrive il codice ──
+        step[0] = "lista, scansione"
+        pg.click("button.fab")
+        pg.wait_for_selector(inp)
+        pg.click("#foglio .foglio__secondarie button >> text=Scansiona")
+        codice = "#foglio input[aria-label='Codice a barre']"
+        pg.wait_for_selector(codice)
+        assert pg.locator("#foglio .scanner").count() == 0, "senza BarcodeDetector niente mirino"
+        pg.fill(codice, "8076809513753")
+        pg.keyboard.press("Enter")
+        pg.wait_for_selector("#foglio .prodotto__nome >> text=Spaghetti n.5")
+        assert pg.locator("#foglio .prodotto__indice.indice--eccellente b").inner_text() == "90", "indice 90"
+        assert pg.locator("#foglio .grado--a").count() == 1, "Nutri-Score A"
+        assert pg.input_value("#foglio input[aria-label='In lista come']") == "Spaghetti", "in lista come la categoria"
+        pg.click("#foglio button.nota__apri >> text=Valori per 100 g")
+        pg.wait_for_selector("#foglio .valori .riga >> text=Energia")
+        pg.wait_for_timeout(300)
+        shot(pg, "1d-prodotto")
+        pg.click("#foglio .btn--conferma >> text=Preso")
+        pg.wait_for_selector(".tessera--verde:has(.tessera__indice.indice--eccellente) >> text=Spaghetti")
+        pg.wait_for_selector("#foglio", state="hidden")
+        voce = pg.evaluate("(() => { const s = JSON.parse(sessionStorage.getItem('finto.firestore')); return [...new Map(s.store.find(([c]) => c === 'shopping_items')[1]).values()].find((v) => v.text === 'Spaghetti'); })()")
+        assert voce["ean"] == "8076809513753" and voce["prodotto"]["fascia"] == "eccellente" and voce["detail"] == "Barilla" and voce["done"] and voce["count"] == 1, f"voce dal prodotto: {voce}"
+        # Un prodotto a rischio, messo «Da comprare», unito alla voce «Würstel» scritta a mano.
+        pg.click("button.fab")
+        pg.fill(inp, "würstel")
+        pg.keyboard.press("Enter")
+        pg.wait_for_selector("#foglio .pillola >> text=Würstel")
+        pg.click("#foglio .foglio__secondarie button >> text=Scansiona")
+        pg.fill(codice, "8001234567890")
+        conferma(pg)
+        pg.wait_for_selector("#foglio .prodotto__nome >> text=Würstel di pollo")
+        assert pg.locator("#foglio .additivi li.rischio--alto").count() == 2, "due additivi a rischio alto"
+        assert "49" in pg.locator("#foglio .prodotto__avviso").inner_text(), "avviso del tetto a 49"
+        pg.wait_for_timeout(200)
+        shot(pg, "1e-prodotto-rischio")
+        pg.click("#foglio .foglio__secondarie button >> text=Da comprare")
+        pg.wait_for_selector(".tessera:not(.tessera--verde):has(.tessera__indice.indice--mediocre) >> text=Würstel")
+        pg.wait_for_selector("#foglio", state="hidden")
+        assert pg.locator(".tessera >> text=Würstel").count() == 1, "la voce scritta a mano e quella scansionata sono una sola"
+        pg.wait_for_timeout(300)
+        shot(pg, "1f-lista-prodotti")
+        # Dal foglio Modifica si riapre la scheda; un codice sconosciuto dice che non c'è.
+        pg.locator(".tessera", has_text="Würstel").locator("button.altro").click()
+        pg.wait_for_selector("#foglio .riga >> text=Würstel di pollo")
+        pg.click("#foglio .riga >> text=Würstel di pollo")
+        pg.wait_for_selector("#foglio .prodotto__nome >> text=Würstel di pollo")
+        assert pg.locator("#foglio .foglio__barra").count() == 0, "scheda di sola lettura: niente barra"
+        pg.click("#foglio button[aria-label='Indietro']")
+        pg.wait_for_selector("#foglio", state="hidden")
+        pg.click("button.fab")
+        pg.click("#foglio .foglio__secondarie button >> text=Scansiona")
+        pg.fill(codice, "4000000000001")
+        conferma(pg)
+        pg.wait_for_selector("#foglio >> text=Prodotto non trovato")
+        pg.click("#foglio button[aria-label='Indietro']")
+        pg.wait_for_selector("#foglio", state="hidden")
+
         # ── Spese ──
         step[0] = "spese"
         pg.click(".schede a[href='#/spese']")

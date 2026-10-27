@@ -66,9 +66,41 @@ function avvisaFinto(data = {}) {
   return { inviati: data.prova ? 1 : 0 };
 }
 
+// Funzione `prodotto` finta: una scheda piena per il codice degli spaghetti, una senza ingredienti,
+// «non trovato» per gli altri. Stesso formato di functions/src/prodotti/off.js → normalizza().
+const SCHEDE_FINTE = {
+  8076809513753: {
+    trovato: true, fonte: "off", tipo: "food", nome: "Spaghetti n.5", marca: "Barilla", quantita: "500 g", descrizione: "Pasta di semola di grano duro",
+    categoria: "Spaghetti", categorie: ["Cereali e patate", "Paste alimentari", "Spaghetti"], immagine: null,
+    nutriscore: { grado: "a", punteggio: -3 }, nova: 1, additivi: [], etichette: [], bio: false,
+    nutrienti: { kcal: 359, grassi: 2, saturi: 0.5, zuccheri: 3.5, sale: 0, fibre: 3, proteine: 12.5 },
+    livelli: { fat: "low", "saturated-fat": "low", sugars: "low", salt: "low" }, ambiente: "a", completezza: 0.9, ingredientiNoti: true,
+    aggiornatoOff: 1760000000000, indice: 90, fascia: "eccellente", parziale: false, mancano: [],
+    componenti: { nutrizione: { valore: 100, peso: 50, stato: "noto" }, additivi: { valore: 100, peso: 25, stato: "noto" }, nova: { valore: 100, peso: 15, stato: "noto" }, bio: { valore: 0, peso: 10, stato: "noto" } },
+  },
+  8001234567890: {
+    trovato: true, fonte: "off", tipo: "food", nome: "Würstel di pollo", marca: "Marca", quantita: "250 g", descrizione: null,
+    categoria: "Würstel", categorie: ["Carni", "Salumi", "Würstel"], immagine: null,
+    nutriscore: { grado: "d", punteggio: 14 }, nova: 4,
+    additivi: [{ codice: "E250", nome: "Nitrito di sodio", classe: "conservante", rischio: "alto" }, { codice: "E301", nome: "Ascorbato di sodio", classe: "antiossidante", rischio: null }, { codice: "E621", nome: "Glutammato di monosodio", classe: "esaltatore di sapidità", rischio: "alto" }],
+    etichette: [], bio: false, nutrienti: { kcal: 260, grassi: 22, saturi: 8, zuccheri: 1, sale: 2.1, fibre: null, proteine: null },
+    livelli: { fat: "high", "saturated-fat": "high", sugars: "low", salt: "high" }, ambiente: null, completezza: 0.8, ingredientiNoti: true,
+    aggiornatoOff: 1760000000000, indice: 25, fascia: "mediocre", parziale: false, mancano: [],
+    componenti: { nutrizione: { valore: 30, peso: 50, stato: "noto" }, additivi: { valore: 40, peso: 25, stato: "noto" }, nova: { valore: 0, peso: 15, stato: "noto" }, bio: { valore: 0, peso: 10, stato: "noto" } },
+  },
+};
+async function prodottoFinto(data = {}) {
+  await new Promise((ok) => setTimeout(ok, 80));
+  const ean = String(data.ean || "").replace(/\D/g, "");
+  const scheda = SCHEDE_FINTE[ean];
+  if (scheda) coll("prodotti").set(ean, { ...scheda, ean, letto: new Date() });
+  return { data: scheda ? { ...scheda, ean, letto: Date.now() } : { trovato: false, fonte: "off", ean, letto: Date.now() } };
+}
+
 export function httpsCallable(_f, name) {
   if (name === "bank") return bankFinto;
   if (name === "avvisa") return async (data) => ({ data: avvisaFinto(data) });
+  if (name === "prodotto") return prodottoFinto;
   return async (data) => {
     if (name === "contatti") return { data: contatti(data) };
     if (name !== "analyzeEntry") return { data: {} };
