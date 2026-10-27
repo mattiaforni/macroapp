@@ -268,7 +268,7 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
       vocabolario: nome, istruzioni e temi della sintesi del progetto scelto nel foglio, nomi della rubrica. Scartato
       `gemini-3.5-transcribe`: vocabolario solo come elenco di termini, audio da caricare con la Files API, costo
       ~2,5 volte. Costo stimato ~0,2 centesimi di dollaro al minuto (prezzi raddoppiati dal 2027); nel registro di
-      `trascrivi` durata e token, mai il testo. Prova: Diagnosi con `provatrascrizione` (voce sintetica espeak-ng,
+      `trascrivi` durata e token, mai il testo. Prova: Diagnosi con `provatrascrizione` (campione sintetico in functions/strumenti/campioni,
       con e senza contesto) o `node functions/strumenti/prova-trascrizione.mjs file.webm`.
       **Da verificare dal telefono**: qualità rispetto all'app Claude su una lezione vera; su iPhone (audio/mp4 →
       `audio/m4a`) se Gemini lo accetta; se lo schermo si spegne, che la registrazione non si interrompa (wake lock).

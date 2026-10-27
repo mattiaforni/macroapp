@@ -1,7 +1,7 @@
 // Prova della trascrizione con l'API vera, senza Firestore: stesso prompt e stesso modello della funzione.
 // Uso: GEMINI_API_KEY=… node strumenti/prova-trascrizione.mjs file.webm [audio/webm]
 // PROGETTO, TEMI (separati da virgola) e PERSONE (separate da virgola) simulano il contesto di un progetto.
-// La lancia il flusso «Diagnosi» con provatrascrizione: true, su un audio sintetico (espeak-ng).
+// La lancia il flusso «Diagnosi» con provatrascrizione: true, su campioni/lezione-sintetica.webm (voce espeak-ng).
 import { readFile } from "node:fs/promises";
 import { transcribe, MODELLO_TRASCRIZIONE } from "../src/ai/gemini.js";
 
