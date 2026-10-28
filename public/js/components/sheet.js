@@ -41,6 +41,30 @@ function seguiTastiera(host) {
   };
 }
 
+// Campi su più righe alti quanto il loro testo, così una nota lunga si legge scorrendo il foglio
+// e non dentro una finestrella. Lo fa il CSS (field-sizing: content); qui solo dove manca (Safari).
+const CAMPI_ALTI = !window.CSS?.supports?.("field-sizing", "content");
+function altezzaDelTesto(area, corpo) {
+  const adatta = () => {
+    if (!area.isConnected) return;
+    const s = getComputedStyle(area);
+    const bordi = parseFloat(s.borderTopWidth) + parseFloat(s.borderBottomWidth);
+    const sopra = corpo.scrollTop; // l'altezza «auto» di un attimo farebbe saltare il foglio
+    area.style.height = "auto";
+    area.style.height = `${area.scrollHeight + bordi}px`;
+    corpo.scrollTop = sopra;
+  };
+  area.addEventListener("input", adatta);
+  // Alla comparsa e quando cambia la larghezza (le righe vanno a capo altrove); non sull'altezza,
+  // che cambia adatta stesso.
+  let larghezza = -1;
+  new ResizeObserver(([r]) => {
+    if (r.contentRect.width === larghezza) return;
+    larghezza = r.contentRect.width;
+    adatta();
+  }).observe(area);
+}
+
 /**
  * openSheet({ title, body: Node|Node[], onConfirm, confirmLabel, azioni })
  * onConfirm: async () => boolean|void; false lascia il foglio aperto (es. campo mancante).
@@ -67,6 +91,7 @@ export function openSheet({ title, body, onConfirm, confirmLabel = "Salva", azio
   const corpo = el("div.foglio__corpo", {}, ...[].concat(body));
   const secondarie = [...[].concat(azioni).filter(Boolean)];
   corpo.querySelectorAll(".foglio__piede").forEach((p) => { secondarie.push(...p.children); p.remove(); });
+  if (CAMPI_ALTI) corpo.querySelectorAll("textarea").forEach((a) => altezzaDelTesto(a, corpo));
 
   const confirmBtn = onConfirm
     ? el("button.btn.btn--accento.btn--conferma", { type: "button", onclick: confirm }, icon("spunta"), confirmLabel)
@@ -146,7 +171,18 @@ export function openSheet({ title, body, onConfirm, confirmLabel = "Salva", azio
   // Primo campo pronto per scrivere.
   const first = host.querySelector("[autofocus]");
   // Se nel frattempo il fuoco è già dentro il foglio (scrivi velocissimo), non lo spostiamo.
-  if (first) setTimeout(() => { if (!host.contains(document.activeElement)) first.focus(); }, 60);
+  if (first) setTimeout(() => {
+    if (host.contains(document.activeElement)) return;
+    // Un testo su più righe già scritto si apre dall'inizio: cursore in cima, non in fondo
+    // (dove lo mette il browser dopo aver assegnato value), e foglio non scorso.
+    if (first.tagName === "TEXTAREA" && first.value) {
+      first.setSelectionRange(0, 0);
+      first.focus({ preventScroll: true });
+      corpo.scrollTop = 0;
+      return;
+    }
+    first.focus();
+  }, 60);
 
   current = { close, confirm };
   return current;

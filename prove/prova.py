@@ -1007,6 +1007,32 @@ with sync_playwright() as p:
         pg.wait_for_timeout(800)
         assert len(pg.evaluate("JSON.parse(sessionStorage.getItem('finto.trascrizioni') || '[]')")) == 1, "chiuso: niente trascrizione"
         assert pg.evaluate(liberi), "microfono liberato chiudendo il foglio"
+
+        # ── Nota lunga: riaperta si legge dall'inizio, tutta, scorrendo il foglio ──
+        step[0] = "nota lunga"
+        righe = [f"Riga {i} della riunione" for i in range(1, 41)]
+        pg.click("button.fab")
+        pg.fill("#foglio textarea", "\n".join(righe))
+        alta = pg.evaluate("(() => { const a = document.querySelector('#foglio textarea'); return a.scrollHeight - a.clientHeight; })()")
+        assert alta <= 1, f"mentre scrivi il campo cresce col testo: {alta}px nascosti"
+        conferma(pg)
+        pg.wait_for_selector(".nota__testo >> text=Riga 40 della riunione")
+        pg.wait_for_timeout(300)
+        pg.locator(".nota__testo", has_text="Riga 1 della riunione").first.click()
+        pg.wait_for_selector("#foglio h2 >> text=Nota")
+        pg.wait_for_timeout(300)
+        stato = pg.evaluate("""(() => { const a = document.querySelector('#foglio textarea');
+          const c = document.querySelector('#foglio .foglio__corpo');
+          return { nascosti: a.scrollHeight - a.clientHeight, campo: a.scrollTop, foglio: c.scrollTop,
+                   scorre: c.scrollHeight > c.clientHeight, fuoco: document.activeElement === a,
+                   cima: a.getBoundingClientRect().top }; })()""")
+        assert stato["nascosti"] <= 1 and stato["campo"] == 0, f"la nota intera, senza scorrere il campo: {stato}"
+        assert stato["foglio"] == 0 and stato["scorre"], f"si parte dall'inizio e si scorre il foglio: {stato}"
+        assert not stato["fuoco"], f"aperta per leggere, senza tastiera: {stato}"
+        assert stato["cima"] < 200, f"il testo comincia in alto: {stato}"
+        shot(pg, "19-nota-lunga")
+        pg.click("#foglio button[aria-label='Indietro']")
+        pg.wait_for_timeout(400)
         print("FLUSSO COMPLETO")
     except Exception as e:
         shot(pg, "errore")

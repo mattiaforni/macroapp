@@ -69,7 +69,8 @@ function sceltaProgetto(progetti, iniziale) {
  * Invio va a capo: una nota può avere più paragrafi.
  */
 export function apriNota({ esistente = null, testo = "", progetti = [], projectId = null, onSalva }) {
-  const area = el("textarea", { placeholder: "Scrivi o detta…", rows: 6, autofocus: !esistente?.riepilogo });
+  // Una nota già scritta si apre per leggerla dall'inizio: niente tastiera finché non tocchi il testo.
+  const area = el("textarea", { placeholder: "Scrivi o detta…", rows: 6, autofocus: !esistente });
   area.value = esistente?.text || testo;
   const attivi = progetti.filter((p) => !p.archived || p.id === esistente?.projectId).sort((a, b) => a.name.localeCompare(b.name));
   const progetto = sceltaProgetto(attivi, esistente ? esistente.projectId : projectId);
