@@ -321,6 +321,8 @@ export const trascrivi = onCall(
       const msg = String(err.message || "");
       console.error("trascrivi", msg.slice(0, 300));
       if (/API_KEY_INVALID|API key not valid|\b403\b/i.test(msg)) throw new HttpsError("failed-precondition", "La chiave di Gemini non è valida o non ha accesso all'API");
+      // 402: progetto in pagamento anticipato (AI Studio) con saldo a zero.
+      if (/\b402\b|prepayment credits/i.test(msg)) throw new HttpsError("resource-exhausted", "Credito prepagato di Gemini esaurito: ricaricalo in AI Studio (ai.studio/projects → Billing)");
       if (/\b429\b|RESOURCE_EXHAUSTED|quota/i.test(msg)) throw new HttpsError("resource-exhausted", "Limite di Gemini raggiunto: riprova tra poco (o controlla la fatturazione in AI Studio)");
       if (/\b404\b|not found/i.test(msg)) throw new HttpsError("failed-precondition", "Modello di trascrizione non disponibile per questa chiave");
       if (/nessuna risposta/i.test(msg)) throw new HttpsError("deadline-exceeded", "La trascrizione ci mette troppo: riprova");
