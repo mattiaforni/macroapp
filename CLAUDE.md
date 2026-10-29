@@ -260,11 +260,15 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
       **Rubriche e fonti** (29/10, dalle prime lezioni vere con Opus): nella sintesi le rubriche dentro un tema
       («Acquisito:», «In lavorazione:», «Chiave:») uscivano come voci rientrate e l'app le appiattiva in un solo
       elenco; ora `testoRicco` le mostra come etichette (h5) con l'elenco sotto, e il prompt chiede righe con i due
-      punti senza rientri. Una lezione ricostruita a posteriori (data cambiata) aveva nel riepilogo punti mai detti:
-      le «precedenti» erano le ultime 8 per `createdAt`, comprese quelle successive alla sua data, e il modello non
-      sapeva la data della nota. Ora precedenti = solo quelle con data anteriore, la nota porta la sua data
-      (`dataNota`), le successive si contano (con la sintesi) o si danno a parte (senza), e il riepilogo prende
-      SOLO dal testo della nota. Da valutare con Mattia: Fable 5.1 per le note dei progetti (10/50 $ per milione
+      punti senza rientri. Una lezione ricostruita a posteriori (dettata il 29/10, con la data del giorno) aveva nel
+      riepilogo punti mai detti, presi dalla sintesi o dalle note precedenti: ora il riepilogo prende SOLO dal testo
+      della nota (rianalizzata, Mattia la trova «molto buona»). Corretto anche un difetto vicino, che quella volta
+      non c'entrava: le «precedenti» erano le ultime 8 per `createdAt`, comprese quelle successive alla data di una
+      nota datata indietro, e il modello non sapeva la data della nota. Ora precedenti = solo quelle con data
+      anteriore, la nota porta la sua data (`dataNota`), le successive si contano (con la sintesi) o si danno a parte
+      (senza). Tempi veri di Opus su una lezione: 30–46 s.
+      La sintesi si propone solo se il modello la cambia: rianalizzando una nota già entrata nella sintesi (proposta
+      confermata), torna identica e non compare nulla, senza nessun segnale nell'app. Da valutare con Mattia: Fable 5.1 per le note dei progetti (10/50 $ per milione
       contro 4/20 di Opus; più lento: servirebbero streaming e un tempo massimo più lungo) o Opus con `effort` alto
       (oggi non è impostato: Opus 5.5 va a «medium»).
       **Storico della sintesi** (26/10, richiesta di Mattia): ogni cambio (spunta della proposta, modifica a mano,
