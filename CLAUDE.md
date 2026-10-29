@@ -268,7 +268,11 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
       anteriore, la nota porta la sua data (`dataNota`), le successive si contano (con la sintesi) o si danno a parte
       (senza). Tempi veri di Opus su una lezione: 30–46 s.
       La sintesi si propone solo se il modello la cambia: rianalizzando una nota già entrata nella sintesi (proposta
-      confermata), torna identica e non compare nulla, senza nessun segnale nell'app. Da valutare con Mattia: Fable 5.1 per le note dei progetti (10/50 $ per milione
+      confermata), torna identica e prima non compariva nulla. Ora (scelta A di Mattia, 29/10: sintesi sempre
+      automatica, niente pulsante «Aggiorna la sintesi») il server scrive `journal_entries.sintesiEsito`
+      («proposta» | «invariata») e l'app mostra «Sintesi del progetto invariata» sotto la nota e nel foglio della
+      lezione (`sintesiInvariata` in diario), più un avviso a fine analisi.
+      Da valutare con Mattia: Fable 5.1 per le note dei progetti (10/50 $ per milione
       contro 4/20 di Opus; più lento: servirebbero streaming e un tempo massimo più lungo) o Opus con `effort` alto
       (oggi non è impostato: Opus 5.5 va a «medium»).
       **Storico della sintesi** (26/10, richiesta di Mattia): ogni cambio (spunta della proposta, modifica a mano,

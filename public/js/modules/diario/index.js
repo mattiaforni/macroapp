@@ -161,6 +161,7 @@ export async function analizzaNota(entryId, attesa) {
     scrivi(CHIAVE_AI, "on");
     update(COLL, entryId, { analyzed: true, analyzedAt: new Date(), analysisError: null, modello: res.data?.modello || null });
     if (!n && !res.data?.riepilogo) toast("Nessuna azione da proporre");
+    else if (res.data?.sintesiEsito === "invariata") toast("Sintesi del progetto invariata");
     return res.data || {};
   } catch (err) {
     console.warn("analisi", err);
@@ -170,6 +171,14 @@ export async function analizzaNota(entryId, attesa) {
     toast(chiave ? "AI non ancora collegata: la nota è salvata" : `${err.message || "Analisi non riuscita"}. La nota è salvata.`, { ms: 7000 });
     return null;
   }
+}
+
+/**
+ * Sotto una nota di progetto: la sintesi non è cambiata con l'ultima analisi (`sintesiEsito`, scritto dal server).
+ * Senza, una sintesi invariata non dava nessun segnale (29/10). Esportata per il foglio della lezione.
+ */
+export function sintesiInvariata(n, inAnalisi = false) {
+  return n.sintesiEsito === "invariata" && !inAnalisi ? el("p.meta.nota__esito", {}, "Sintesi del progetto invariata") : null;
 }
 
 /** Analisi automatica attiva (scelta sul telefono, pillola in alto nel Diario). */
@@ -318,6 +327,7 @@ export function mount(container) {
           onclick: () => { remove(COLL, n.id); toast("Nota eliminata"); } }, icon("cestino")),
       ),
       ...corpo,
+      sintesiInvariata(n, analisi),
       mie.length ? el("div.azioni-ai", {}, ...mie.map(renderAzione)) : null,
     );
   }

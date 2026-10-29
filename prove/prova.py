@@ -699,6 +699,15 @@ with sync_playwright() as p:
         assert pg.locator("html[data-colore]").count() == 0, "fuori dalla pagina del progetto il colore se ne va"
         pg.wait_for_selector("button.pillola.on >> text=Tennis")
         pg.wait_for_selector(".nota__riepilogo li >> text=Servizio: lancio più avanti")
+        # Rianalisi di una nota già entrata nella sintesi: nessuna proposta, ma la nota lo dice
+        lezione = pg.locator(".nota", has=pg.locator(".nota__riepilogo li", has_text="Servizio: lancio più avanti"))
+        assert lezione.locator(".nota__esito").count() == 0, "la nota che ha proposto la sintesi non dice «invariata»"
+        prima = pg.locator(".nota__esito >> text=Sintesi del progetto invariata").count()
+        lezione.locator("button >> text=Rianalizza").click()
+        pg.wait_for_function(f"document.querySelectorAll('.nota__esito').length === {prima + 1}", timeout=6000)
+        assert pg.locator(".azione", has_text="Sintesi di Tennis").count() == 0, "nessuna sintesi proposta"
+        pg.wait_for_timeout(200)
+        shot(pg, "17h-sintesi-invariata")
         # In «Tutte» la nota porta il nome del progetto; le altre note restano
         pg.click("button.pillola >> text=Tutte")
         pg.wait_for_selector(".nota .progetto >> text=Tennis")

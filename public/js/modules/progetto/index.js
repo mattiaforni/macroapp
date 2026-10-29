@@ -16,7 +16,7 @@ import { create, update, remove, watchMine, watchVisible, VIS, where } from "../
 import { openSheet } from "../../components/sheet.js";
 import { watchPending, renderAzione } from "../../components/proposals.js";
 import { sezioniSintesi, tonoStato, apriSintesi, apriVersioni } from "../../components/sintesi.js";
-import { apriNota, analizzaNota, analisiAutomatica, titoloDi } from "../diario/index.js";
+import { apriNota, analizzaNota, analisiAutomatica, titoloDi, sintesiInvariata } from "../diario/index.js";
 import { apriProgetto, rigaTask } from "../task/index.js";
 import { elencoDocumenti } from "../../components/documenti.js";
 import { vaiA } from "../../core/router.js";
@@ -110,6 +110,7 @@ export function mount(container) {
           : el("div.nota__testo", {}, n.text),
         n.riepilogo ? apri : null,
         n.riepilogo ? trascrizione : null,
+        sintesiInvariata(n),
         mie.length ? el("div.azioni-ai", { style: "margin-top:14px" }, ...mie.map(renderAzione)) : null,
         el("div.foglio__piede", {},
           el("button.btn", { onclick: () => { sheet.close(); analizza(n.id); } }, icon("scintilla"), "Rianalizza"),

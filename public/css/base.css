@@ -447,6 +447,7 @@ a.pillola { text-decoration: none; }
 .nota__riepilogo h5 { margin: 8px 0 0; font-size: 13.5px; font-weight: 500; color: var(--inchiostro-2); }
 .nota__riepilogo ul ul, .sintesi-testo ul ul { margin: 0 0 2px; padding-left: 16px; }
 .nota__riepilogo b { font-weight: 600; }
+.nota__esito { margin: 6px 0 0; }
 .nota__apri { display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; padding: 4px 0;
   font-size: 12.5px; color: var(--inchiostro-2); }
 .nota__apri svg { width: 15px; height: 15px; transition: transform .15s; }

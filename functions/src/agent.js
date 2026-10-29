@@ -346,8 +346,9 @@ function visibilita(a) {
  * Legge la nota, scrive le proposte e, per le note di un progetto con istruzioni, il riepilogo
  * (con titolo e temi) nella nota stessa (testo correggibile, non un'azione: vedi CLAUDE.md, regola 5) e la proposta
  * di sintesi aggiornata del progetto (quella sì da confermare: sostituisce `projects.sintesi`).
- * Ritorna { azioni, riepilogo, sintesi, modello }: quante proposte, se ha scritto il riepilogo, se ha proposto
- * la sintesi, con quale modello (chiave di MODELLI; l'app la segna sulla nota).
+ * Ritorna { azioni, riepilogo, sintesi, sintesiEsito, modello }: quante proposte, se ha scritto il riepilogo, se ha
+ * proposto la sintesi, l'esito della sintesi ("proposta" | "invariata" | null, scritto anche nella nota come
+ * `sintesiEsito`), con quale modello (chiave di MODELLI; l'app la segna sulla nota).
  */
 export async function analyzeJournalEntry(db, entry, { uid, keys, provider, clientGoogle = null, passo = () => {} }) {
   const [ctx, progetto, profilo] = await Promise.all([
@@ -371,6 +372,9 @@ export async function analyzeJournalEntry(db, entry, { uid, keys, provider, clie
   // La sintesi si propone solo se cambia davvero rispetto a quella del progetto.
   const sintesi = conRiepilogo ? s(out.sintesi) : "";
   const nuovaSintesi = sintesi && sintesi !== progetto.sintesi ? sintesi : "";
+  // Esito per la nota, che l'app mostra (29/10: una sintesi restituita identica, ad esempio rianalizzando una
+  // nota già entrata nella sintesi, non dava nessun segnale e sembrava che l'analisi non l'avesse considerata).
+  const sintesiEsito = !conRiepilogo ? null : nuovaSintesi ? "proposta" : sintesi ? "invariata" : null;
 
   // Rianalisi: le proposte ancora in attesa della stessa nota vengono sostituite. Una sintesi
   // proposta da una nota precedente e ancora in attesa è superata da quella nuova.
@@ -402,9 +406,10 @@ export async function analyzeJournalEntry(db, entry, { uid, keys, provider, clie
       updatedAt: FieldValue.serverTimestamp(),
     });
   }
-  if (riepilogo) {
+  if (riepilogo || sintesiEsito) {
     batch.update(db.collection("journal_entries").doc(entry.id), {
-      riepilogo, titolo, temi, riepilogoAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+      ...(riepilogo ? { riepilogo, titolo, temi, riepilogoAt: FieldValue.serverTimestamp() } : {}),
+      sintesiEsito, updatedAt: FieldValue.serverTimestamp(),
     });
   }
   if (nuovaSintesi) {
@@ -423,6 +428,6 @@ export async function analyzeJournalEntry(db, entry, { uid, keys, provider, clie
     });
   }
   await batch.commit();
-  passo(`proposte scritte${riepilogo ? ", riepilogo scritto" : ""}${nuovaSintesi ? ", sintesi proposta" : ""}`);
-  return { azioni: actions.length + (nuovaSintesi ? 1 : 0), riepilogo: !!riepilogo, sintesi: !!nuovaSintesi, modello };
+  passo(`proposte scritte${riepilogo ? ", riepilogo scritto" : ""}${sintesiEsito ? `, sintesi ${sintesiEsito}` : ""}`);
+  return { azioni: actions.length + (nuovaSintesi ? 1 : 0), riepilogo: !!riepilogo, sintesi: !!nuovaSintesi, sintesiEsito, modello };
 }
