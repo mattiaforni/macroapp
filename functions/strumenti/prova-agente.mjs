@@ -15,7 +15,7 @@ const ctx = {
   persone: ["Domenico Rossi"], categorie: ["Idraulica", "Elettricità", "Casa"],
 };
 const voci = [{ id: "v1", name: "Domenico Rossi", googleId: "" }];
-const rubricaGoogle = (process.env.CONTATTI || "Massimo Sottani, Massimo Bianchi, Anna Mambelli, Domenico Neri")
+const rubricaGoogle = (process.env.CONTATTI || "Massimo Ferri, Massimo Bianchi, Anna Rossetti, Domenico Neri")
   .split(",").map((x) => x.trim()).filter(Boolean).map((nome, i) => ({ nome, soprannome: "", googleId: `people/prova${i}` }));
 const contatti = candidati(rubricaGoogle, nota);
 const istruzioni = (process.env.ISTRUZIONI || "").trim();

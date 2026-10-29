@@ -138,7 +138,7 @@ export function httpsCallable(_f, name) {
         const parola = (n) => new RegExp(`\\b${n.split(" ")[0]}\\b`, "i").test(testo);
         const voci = [...coll("manual_entries").entries()].filter(([, v]) => v.type === "person" && parola(v.name))
           .map(([id, v]) => ({ nome: v.name, voceId: id, ...(v.googleId ? { googleId: v.googleId } : {}) }));
-        const google = [{ nome: "Anna Mambelli", googleId: "people/c4", in: /mambelli/i }].filter((c) => c.in.test(testo) && !voci.some((v) => v.googleId === c.googleId))
+        const google = [{ nome: "Anna Rossetti", googleId: "people/c4", in: /rossetti/i }].filter((c) => c.in.test(testo) && !voci.some((v) => v.googleId === c.googleId))
           .map(({ nome, googleId }) => ({ nome, googleId }));
         nota.persone = [...voci, ...google];
       }

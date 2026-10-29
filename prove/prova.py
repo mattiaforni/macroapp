@@ -309,7 +309,7 @@ with sync_playwright() as p:
                 {"resourceName": "people/c1", "names": [{"displayName": "Giulia Bianchi"}], "phoneNumbers": [{"value": google["giulia"]}], "organizations": [{"name": "Circolo"}]},
                 {"resourceName": "people/c2", "names": [{"displayName": "Marco"}], "emailAddresses": [{"value": "marco@example.com"}], "phoneNumbers": [{"value": "333 5550000"}]},
                 {"resourceName": "people/c3", "names": [{"displayName": "Giuseppe Verdi"}], "nicknames": [{"value": "Beppe"}], "phoneNumbers": [{"value": "+39 347 0000000"}]},
-                {"resourceName": "people/c4", "names": [{"displayName": "Anna Mambelli"}], "nicknames": [{"value": "Ani"}]},
+                {"resourceName": "people/c4", "names": [{"displayName": "Anna Rossetti"}], "nicknames": [{"value": "Ani"}]},
             ]}))
         pg.route("https://people.googleapis.com/**", people)
         # Google Calendar finto: due calendari, eventi in memoria (GET/POST/PATCH/DELETE).
@@ -547,11 +547,11 @@ with sync_playwright() as p:
         step[0] = "titolo e persone"
         pg.click(".schede a[href='#/diario']")
         pg.click("button.fab")
-        pg.fill("#foglio textarea", "Oggi al circolo si parlava di smartphone e adolescenti: non toglierli, ma insegnare a usarli. Ani Mambelli vorrebbe organizzare dei big talk, ne parlo con Giulia.")
+        pg.fill("#foglio textarea", "Oggi al circolo si parlava di smartphone e adolescenti: non toglierli, ma insegnare a usarli. Ani Rossetti vorrebbe organizzare dei big talk, ne parlo con Giulia.")
         conferma(pg)
         riga = pg.locator(".voce-nota", has=pg.locator(".lezione__titolo", has_text="Smartphone e adolescenti"))
         riga.wait_for(timeout=6000)
-        riga.locator(".persona >> text=Anna Mambelli").wait_for()
+        riga.locator(".persona >> text=Anna Rossetti").wait_for()
         assert riga.locator(".persona >> text=Giulia Bianchi").count() == 1, "Giulia, in rubrica"
         assert riga.locator(".lezione__giorno small").inner_text().lower() == "oggi"
         pg.evaluate("window.scrollTo(0, 0)")
@@ -560,7 +560,7 @@ with sync_playwright() as p:
         # Il foglio di lettura: Giulia apre la rubrica, Anna Google Contatti (in rubrica non entra da sola)
         riga.locator("button.lezione").click()
         pg.wait_for_selector("#foglio h2 >> text=Smartphone e adolescenti")
-        assert pg.locator("#foglio .lettura__persone a.pillola", has_text="Anna Mambelli").get_attribute("href") == "https://contacts.google.com/person/c4"
+        assert pg.locator("#foglio .lettura__persone a.pillola", has_text="Anna Rossetti").get_attribute("href") == "https://contacts.google.com/person/c4"
         assert pg.locator("#foglio .lettura__persone button.pillola", has_text="Giulia Bianchi").count() == 1
         pg.wait_for_timeout(150)
         shot(pg, "9c-nota-lettura")
@@ -569,18 +569,18 @@ with sync_playwright() as p:
         pg.wait_for_selector("#foglio h2 >> text=Nota")
         assert pg.locator("#foglio input.nota__titolo-campo").input_value() == "Smartphone e adolescenti"
         pg.fill("#foglio input.nota__titolo-campo", "Big talk al circolo")
-        pg.click("#foglio button[aria-label='Togli Anna Mambelli']")
+        pg.click("#foglio button[aria-label='Togli Anna Rossetti']")
         pg.wait_for_timeout(150)
         shot(pg, "9d-nota-modifica")
         conferma(pg)
         riga = pg.locator(".voce-nota", has=pg.locator(".lezione__titolo", has_text="Big talk al circolo"))
         riga.wait_for()
-        assert riga.locator(".persona >> text=Anna Mambelli").count() == 0
+        assert riga.locator(".persona >> text=Anna Rossetti").count() == 0
         riga.locator("button.lezione").click()
         pg.click("#foglio button >> text=Rianalizza")
         pg.wait_for_timeout(800)
         assert riga.locator(".lezione__titolo").inner_text() == "Big talk al circolo", "il titolo scritto a mano resta"
-        assert riga.locator(".persona >> text=Anna Mambelli").count() == 0, "le persone corrette a mano restano"
+        assert riga.locator(".persona >> text=Anna Rossetti").count() == 0, "le persone corrette a mano restano"
         assert riga.locator(".persona >> text=Giulia Bianchi").count() == 1
         # Una nota nuova con il titolo scritto da te: l'AI non lo cambia
         pg.click("button.fab")
@@ -594,7 +594,7 @@ with sync_playwright() as p:
         menu(pg, "Manuale e rubrica")
         pg.click("button.pillola >> text=Persone")
         pg.wait_for_selector(".riga >> text=Giulia Bianchi")
-        assert pg.locator(".riga", has_text="Anna Mambelli").count() == 0, "una persona nominata non entra in rubrica"
+        assert pg.locator(".riga", has_text="Anna Rossetti").count() == 0, "una persona nominata non entra in rubrica"
 
         # ── Diario per progetto: Tennis con istruzioni, riepilogo sotto la nota, trascrizione ripiegata ──
         step[0] = "diario per progetto"
