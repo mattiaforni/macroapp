@@ -5,24 +5,43 @@
 // Google, compare una volta sola: sceglierla la collega a quel contatto (prende il numero), senza
 // doppioni. Invio sceglie la prima, oppure tiene il nome come persona nuova. Le persone nuove e i
 // collegamenti entrano in rubrica solo quando il task viene salvato. Invio a campo vuoto conferma.
+//
+// Per le persone di una nota del diario (`perNota`, 29/10) la scelta è la stessa, ma niente entra in rubrica:
+// valore() ritorna [{ nome, voceId?, googleId? }], come le scrive l'agente in `journal_entries.persone`.
 import { el, icon } from "../core/ui.js";
 import { persone, personaDaId, personaDaGoogle, trovaPersona, separaNomi, risolviPersone, collegaAGoogle } from "../core/rubrica.js";
-import { cercaContatti, caricaContatti, suContatti, dettaglioContatto, contattiConNome } from "../core/contatti-google.js";
+import { cercaContatti, caricaContatti, suContatti, dettaglioContatto, contattiConNome, contattoDaId } from "../core/contatti-google.js";
 
 const norm = (s) => String(s || "").trim().toLowerCase().replace(/\s+/g, " ");
 
+/** Le persone di una nota ([{ nome, voceId?, googleId? }]) come scelte della pillola. */
+function scelteDaNota(lista = []) {
+  return lista.map((x) => {
+    const p = (x.voceId && personaDaId(x.voceId)) || personaDaGoogle(x.googleId);
+    if (p) return { id: p.id, name: p.name };
+    if (x.googleId) return { id: null, name: x.nome, google: contattoDaId(x.googleId) || { googleId: x.googleId, name: x.nome } };
+    return { id: null, name: x.nome, nuova: true };
+  });
+}
+
+/** Una scelta come persona di una nota: { nome, voceId?, googleId? }. */
+function personaDiNota(s) {
+  const googleId = s.google?.googleId || s.collega?.googleId || (s.id && personaDaId(s.id)?.googleId) || "";
+  return { nome: s.name, ...(s.id ? { voceId: s.id } : {}), ...(googleId ? { googleId } : {}) };
+}
+
 /**
- * sceltaPersone({ ids, testo, onInvioVuoto })
+ * sceltaPersone({ ids, testo, onInvioVuoto }) per i task, sceltaPersone({ perNota: [...] }) per le note.
  * ids: peopleIds del task; testo: il vecchio campo people ("Marco, Giulia"), usato se mancano gli id.
- * Ritorna { node, valore(visibility) → { peopleIds, people } }.
+ * Ritorna { node, valore(visibility) → { peopleIds, people } } (con perNota: valore() → [{ nome, voceId?, googleId? }]).
  */
-export function sceltaPersone({ ids = [], testo = "", onInvioVuoto } = {}) {
+export function sceltaPersone({ ids = [], testo = "", onInvioVuoto, perNota = null } = {}) {
   // Persone che la rubrica non mostra (voci private dell'altra persona): restano collegate.
   const nascosti = ids.filter((id) => !personaDaId(id));
   // scelta: { id, name } dalla rubrica, { id, name, collega } dalla rubrica da collegare a Google,
   // { id: null, name, nuova } nuova, { id: null, name, google } da Google
-  let scelte = ids.map((id) => personaDaId(id)).filter(Boolean).map((p) => ({ id: p.id, name: p.name }));
-  if (!ids.length && testo) {
+  let scelte = perNota ? scelteDaNota(perNota) : ids.map((id) => personaDaId(id)).filter(Boolean).map((p) => ({ id: p.id, name: p.name }));
+  if (!perNota && !ids.length && testo) {
     scelte = separaNomi(testo).map((n) => {
       const p = trovaPersona(n);
       return p ? { id: p.id, name: p.name } : { id: null, name: n };
@@ -125,7 +144,7 @@ export function sceltaPersone({ ids = [], testo = "", onInvioVuoto } = {}) {
 
   return {
     node: el("div", {}, pillole, input, suggeriti),
-    /** Al salvataggio: le persone nuove entrano in rubrica con la visibilità del task. */
+    /** Al salvataggio: le persone nuove entrano in rubrica con la visibilità del task (per una nota no). */
     valore(visibility) {
       smetti();
       const daScrivere = input.value.trim(); // nome scritto ma non confermato con Invio
@@ -133,6 +152,7 @@ export function sceltaPersone({ ids = [], testo = "", onInvioVuoto } = {}) {
         const p = trovaPersona(daScrivere);
         if (!p || !giàScelta(p)) aggiungi(p ? (candidati(daScrivere).find((x) => x.id === p.id) || { id: p.id, name: p.name }) : { id: null, name: cap(daScrivere) });
       }
+      if (perNota) return scelte.map(personaDiNota);
       for (const s of scelte) if (s.collega) collegaAGoogle(s.id, s.collega);
       const nuovi = scelte.filter((s) => !s.id);
       const idNuovi = risolviPersone(nuovi.map((s) => (s.google || s.nuova ? s : s.name)), visibility);

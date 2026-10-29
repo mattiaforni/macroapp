@@ -3,6 +3,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { reason, MODELLI } from "./ai/provider.js";
 import { leggiDocumenti, sezioneDocumenti } from "./google/drive.js";
+import { contattiNominati, normalizza } from "./google/contatti.js";
 
 /**
  * Modello per la nota: users/{uid}.modelli = { note, progetti } (pagina «Modelli AI» dell'app).
@@ -61,8 +62,7 @@ riga facoltativa, "Stato: " e due-quattro parole sul punto in cui si è (es. "mi
 "tornato indietro"). Tieni ciò che resta valido, aggiorna ciò che cambia, togli ciò che è superato, non
 ripetere le date né raccontare le lezioni una per una. Lunghezza: quanto serve per orientarsi, non di più.
 
-Scrivi anche un "titolo" della nota (una riga, al massimo 60 caratteri, di cosa parla: niente data) e
-"temi": i nomi esatti delle sezioni della sintesi che la nota tocca (quelle della sintesi aggiornata,
+In "temi" scrivi i nomi esatti delle sezioni della sintesi che la nota tocca (quelle della sintesi aggiornata,
 escluse le trasversali).`);
     if (progetto.dopo) {
       righe.push(`
@@ -103,16 +103,33 @@ Non ci sono note del progetto con una data anteriore a questa.` : `
   return righe.join("\n");
 }
 
-export function system({ oggi, altro, progetti, persone, categorie, progetto = null, dataNota = "" }) {
+/**
+ * Titolo e persone, per ogni nota (29/10, richiesta di Mattia: una nota analizzata senza azioni non lasciava
+ * traccia; ora ha un titolo e le persone nominate come etichette, collegate alla rubrica o a Google Contatti).
+ */
+function sezioneNota({ titoloUtente = "" }) {
+  return `
+Oltre alle azioni, per ogni nota:
+- "titolo": una riga, al massimo 60 caratteri, che dica di cosa parla la nota (niente data, niente
+  virgolette).${titoloUtente ? ` L'utente le ha già dato il titolo «${titoloUtente}»: restituisci quello.` : ""}
+- "persone": le persone che la nota nomina, una volta ciascuna, escluso l'utente stesso. Scrivi il nome come
+  è in rubrica o tra i contatti Google elencati sopra quando corrisponde senza dubbi: anche se la nota dà solo
+  il nome proprio o il nome ha un evidente errore di dettatura, purché fra quelli elencati una sola persona
+  sia adatta. Altrimenti scrivilo come nella nota, con il cognome se c'è. Niente ruoli o categorie senza un
+  nome ("il maestro", "gli adolescenti"), né gruppi, enti o luoghi. Lista vuota se non ne nomina.`;
+}
+
+export function system({ oggi, io = "", altro, progetti, persone, categorie, contattiGoogle = [], titoloUtente = "", progetto = null, dataNota = "" }) {
   return `Sei l'assistente di un'app personale e di coppia (lista della spesa, spese condivise, task per progetti,
 manuale di casa, calendario della casa, appunti). Ricevi una nota scritta o dettata dall'utente: può contenere errori di dettatura
 e poca punteggiatura. Estrai SOLO le azioni concrete che la nota contiene o chiede, senza inventarne.
 
 Oggi è ${oggi}.${dataNota ? ` La nota però è datata ${dataNota}: le date relative che contiene ("venerdì",
-"domani") si contano da quel giorno.` : ""} L'altra persona della casa si chiama ${altro || "(non ancora indicata)"}.
+"domani") si contano da quel giorno.` : ""}${io ? ` L'utente si chiama ${io}.` : ""} L'altra persona della casa si chiama ${altro || "(non ancora indicata)"}.
 Progetti esistenti dell'utente: ${progetti.length ? progetti.join(", ") : "nessuno"}.
 Persone in rubrica: ${persone.length ? persone.join(", ") : "nessuna"}.
-Quando la nota nomina una di queste persone (anche solo col nome proprio), scrivila come è in rubrica.
+Quando la nota nomina una di queste persone (anche solo col nome proprio), scrivila come è in rubrica.${contattiGoogle.length ? `
+Contatti Google dell'utente che il testo potrebbe nominare (non sono in rubrica): ${contattiGoogle.join(", ")}.` : ""}
 
 Tipi di azione:
 - task: una cosa da fare. payload.text (frase breve all'infinito o imperativo), payload.due (AAAA-MM-GG solo se
@@ -145,7 +162,8 @@ Per ogni azione:
   (lavoro, volontariato, cose proprie).
 Un'informazione da conservare non è un'azione: se riguarda la casa può essere una manual_entry "info",
 se riguarda un progetto con istruzioni va nel riepilogo e nella sintesi, altrimenti resta nella nota.
-Se la nota è una riflessione senza azioni, restituisci una lista vuota.
+Se la nota è una riflessione senza azioni, restituisci una lista vuota di azioni.
+${sezioneNota({ titoloUtente })}
 ${sezioneProgetto(progetto)}`;
 }
 
@@ -155,6 +173,8 @@ const PAYLOAD = ["text", "due", "time", "place", "project", "people", "descripti
 export const SCHEMA = {
   type: "object",
   properties: {
+    titolo: { type: "string" },
+    persone: { type: "array", items: { type: "string" } },
     actions: {
       type: "array",
       items: {
@@ -196,21 +216,21 @@ export const SCHEMA = {
       },
     },
   },
-  required: ["actions"],
+  required: ["titolo", "persone", "actions"],
   additionalProperties: false,
 };
 
-/** Lo schema della risposta: riepilogo, sintesi, titolo e temi solo per le note di un progetto con istruzioni. */
+/** Lo schema della risposta: titolo, persone e azioni sempre; riepilogo, sintesi e temi per le note di un progetto con istruzioni. */
 export function schema(conRiepilogo = false) {
   if (!conRiepilogo) return SCHEMA;
   return {
     ...SCHEMA,
     properties: {
-      riepilogo: { type: "string" }, sintesi: { type: "string" }, titolo: { type: "string" },
+      riepilogo: { type: "string" }, sintesi: { type: "string" },
       temi: { type: "array", items: { type: "string" } },
       ...SCHEMA.properties,
     },
-    required: ["riepilogo", "sintesi", "titolo", "temi", ...SCHEMA.required],
+    required: ["riepilogo", "sintesi", "temi", ...SCHEMA.required],
   };
 }
 
@@ -245,21 +265,65 @@ async function contesto(db, entry, uid) {
     db.collection("projects").where("ownerUid", "==", uid).get(),
     hid ? db.collection("projects").where("householdId", "==", hid).where("visibility", "==", "shared").get() : null,
     hid ? db.collection("households").doc(hid).get() : null,
-    db.collection("manual_entries").where("ownerUid", "==", uid).where("type", "==", "person").select("name").get(),
+    db.collection("manual_entries").where("ownerUid", "==", uid).where("type", "==", "person").select("name", "googleId").get(),
     hid ? db.collection("manual_entries").where("householdId", "==", hid).where("visibility", "==", "shared")
-      .where("type", "==", "person").select("name").get() : null,
+      .where("type", "==", "person").select("name", "googleId").get() : null,
   ]);
   const nomi = new Set();
   for (const d of [...mie.docs, ...(casa?.docs || [])]) if (!d.data().archived) nomi.add(d.data().name);
-  const persone = new Set();
-  for (const d of [...mieVoci.docs, ...(vociCasa?.docs || [])]) if (d.data().name) persone.add(d.data().name);
+  // Voci della rubrica con l'id: le persone nominate nella nota vi si collegano (`journal_entries.persone`).
+  const voci = new Map();
+  for (const d of [...mieVoci.docs, ...(vociCasa?.docs || [])]) {
+    if (d.data().name && !voci.has(d.id)) voci.set(d.id, { id: d.id, name: d.data().name, googleId: d.data().googleId || "" });
+  }
+  const vociPersone = [...voci.values()];
+  const persone = [...new Set(vociPersone.map((v) => v.name))];
   const casaDati = h?.exists ? h.data() : {};
   const categorie = Array.isArray(casaDati.manualCategories) ? casaDati.manualCategories : CATEGORIE_PREDEFINITE;
   const nomiCasa = casaDati.memberNames || {};
   const altro = Object.entries(nomiCasa).find(([k]) => k !== uid)?.[1] || "";
   const oggi = new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date());
   const iso = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Rome" }).format(new Date());
-  return { oggi: `${oggi} (${iso})`, altro: altro.split(" ")[0], progetti: [...nomi], persone: [...persone].slice(0, 300), categorie };
+  return {
+    oggi: `${oggi} (${iso})`, io: nomiCasa[uid] || "", altro: altro.split(" ")[0], progetti: [...nomi],
+    persone: persone.slice(0, 300), vociPersone, categorie,
+  };
+}
+
+/**
+ * Le persone scritte dal modello → [{ nome, voceId?, googleId? }] per `journal_entries.persone`.
+ * Si collegano alla rubrica (nome completo uguale, o nome proprio di una sola voce) o, se non ci sono, a un
+ * contatto Google tra i candidati (stesse regole). Un nome che non corrisponde a nessuno resta solo un nome.
+ * Fuori l'utente stesso. Nessuna voce entra in rubrica da qui: lo fa l'app, con un gesto dell'utente.
+ */
+export function collegaPersone(nomi, { voci = [], contatti = [], io = "" } = {}) {
+  const n = normalizza;
+  const primo = (s) => n(s).split(" ")[0];
+  const unico = (lista, nome, nomiDi) => {
+    const t = n(nome);
+    const esatti = lista.filter((x) => nomiDi(x).some((v) => n(v) === t));
+    if (esatti.length) return esatti.length === 1 ? esatti[0] : null;
+    if (t.includes(" ")) return null;
+    const perNome = lista.filter((x) => primo(nomiDi(x)[0]) === t);
+    return perNome.length === 1 ? perNome[0] : null;
+  };
+  const visti = new Set();
+  const out = [];
+  for (const grezzo of Array.isArray(nomi) ? nomi : []) {
+    const nome = s(grezzo).replace(/^["«]+|["»]+$/g, "").trim();
+    if (!nome || nome.length > 60) continue;
+    if (io && (n(nome) === n(io) || n(nome) === primo(io))) continue;
+    const voce = unico(voci, nome, (v) => [v.name]);
+    const contatto = voce ? null : unico(contatti, nome, (c) => [c.nome, c.soprannome].filter(Boolean));
+    const persona = voce
+      ? { nome: voce.name, voceId: voce.id, ...(voce.googleId ? { googleId: voce.googleId } : {}) }
+      : contatto ? { nome: contatto.nome, googleId: contatto.googleId } : { nome: nome.charAt(0).toUpperCase() + nome.slice(1) };
+    const chiave = persona.voceId || persona.googleId || n(persona.nome);
+    if (visti.has(chiave)) continue;
+    visti.add(chiave);
+    out.push(persona);
+  }
+  return out.slice(0, 12);
 }
 
 const PRECEDENTI = 8;         // note precedenti date come contesto, quando il progetto ha già una sintesi
@@ -289,7 +353,7 @@ const fmtData = (t) => new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome
  * riepilogo punti di lezioni successive): con la sintesi se ne dice solo quante sono, senza si danno a parte.
  * Le query usano l'indice ownerUid + projectId + createdAt; se manca (appena pubblicato) si va avanti senza.
  */
-async function progettoDellaNota(db, entry, uid, passo, clientGoogle) {
+async function progettoDellaNota(db, entry, uid, passo, tokenGoogle) {
   if (!entry.projectId) return null;
   const snap = await db.collection("projects").doc(entry.projectId).get();
   if (!snap.exists) return null;
@@ -322,8 +386,7 @@ async function progettoDellaNota(db, entry, uid, passo, clientGoogle) {
   if (istruzioni && Array.isArray(p.documenti) && p.documenti.length) {
     let token = null;
     try {
-      const { tokenServer } = await import("./google/account.js");
-      const t = await tokenServer(db, uid, clientGoogle);
+      const t = await tokenGoogle();
       token = t.permessi?.drive ? t.accessToken : null;
       if (!token) passo("documenti: Google collegato senza il permesso per Drive");
     } catch (err) {
@@ -343,31 +406,44 @@ function visibilita(a) {
 }
 
 /**
- * Legge la nota, scrive le proposte e, per le note di un progetto con istruzioni, il riepilogo
- * (con titolo e temi) nella nota stessa (testo correggibile, non un'azione: vedi CLAUDE.md, regola 5) e la proposta
+ * Legge la nota, scrive le proposte, il titolo e le persone nominate nella nota e, per le note di un progetto con
+ * istruzioni, il riepilogo (con i temi) nella nota stessa (testo correggibile, non un'azione: vedi CLAUDE.md, regola 5) e la proposta
  * di sintesi aggiornata del progetto (quella sì da confermare: sostituisce `projects.sintesi`).
- * Ritorna { azioni, riepilogo, sintesi, sintesiEsito, modello }: quante proposte, se ha scritto il riepilogo, se ha
+ * Ritorna { azioni, riepilogo, titolo, persone, sintesi, sintesiEsito, modello }: quante proposte, se ha scritto il
+ * riepilogo e il titolo, quante persone ha messo nella nota, se ha
  * proposto la sintesi, l'esito della sintesi ("proposta" | "invariata" | null, scritto anche nella nota come
  * `sintesiEsito`), con quale modello (chiave di MODELLI; l'app la segna sulla nota).
  */
 export async function analyzeJournalEntry(db, entry, { uid, keys, provider, clientGoogle = null, passo = () => {} }) {
-  const [ctx, progetto, profilo] = await Promise.all([
-    contesto(db, entry, uid), progettoDellaNota(db, entry, uid, passo, clientGoogle),
+  // Un solo permesso di Google per tutta l'analisi (documenti del progetto e contatti), chiesto se serve.
+  let permesso = null;
+  const tokenGoogle = () => (permesso ||= import("./google/account.js").then(({ tokenServer }) => tokenServer(db, uid, clientGoogle)));
+  // Titolo e persone scritti a mano dall'utente nel foglio della nota: l'agente non li cambia.
+  const titoloUtente = entry.titoloAMano ? s(entry.titolo) : "";
+  const [ctx, progetto, profilo, contattiTutti] = await Promise.all([
+    contesto(db, entry, uid), progettoDellaNota(db, entry, uid, passo, tokenGoogle),
     db.collection("users").doc(uid).get().then((d) => (d.exists ? d.data() : {}), () => ({})),
+    entry.personeAMano ? [] : contattiNominati(tokenGoogle, `${titoloUtente} ${entry.text || ""}`, { passo }),
   ]);
+  // Ai contatti Google si tolgono l'utente e chi è già in rubrica (stesso contatto o stesso nome).
+  const inRubrica = new Set(ctx.vociPersone.flatMap((v) => [v.googleId, normalizza(v.name)]).filter(Boolean));
+  const contatti = contattiTutti.filter((c) => !inRubrica.has(c.googleId) && !inRubrica.has(normalizza(c.nome))
+    && normalizza(c.nome) !== normalizza(ctx.io));
   const conRiepilogo = !!progetto?.istruzioni;
   const modello = modelloPer(profilo, conRiepilogo);
-  passo(`contesto pronto (${ctx.progetti.length} progetti, ${ctx.persone.length} persone`
+  passo(`contesto pronto (${ctx.progetti.length} progetti, ${ctx.persone.length} persone, ${contatti.length} contatti Google possibili`
     + (progetto ? `, progetto con ${progetto.precedenti.length} note precedenti${progetto.dopo ? ` e ${progetto.dopo} successive` : ""}${progetto.documenti.filter((d) => d.testo).length ? `, ${progetto.documenti.filter((d) => d.testo).length} documenti letti` : ""}${conRiepilogo ? ", riepilogo" : ""}` : "") + `), modello ${modello}`);
   // Tetti larghi: il ragionamento del modello conta nel tetto (vedi ai/claude.js), si paga solo l'usato.
   const out = await reason({
-    system: system({ ...ctx, progetto, dataNota: dataNota(entry.createdAt) }), user: entry.text, schema: schema(conRiepilogo), keys, provider,
+    system: system({ ...ctx, contattiGoogle: contatti.map((c) => c.nome), titoloUtente, progetto, dataNota: dataNota(entry.createdAt) }),
+    user: entry.text, schema: schema(conRiepilogo), keys, provider,
     maxTokens: conRiepilogo ? 32000 : 8000, model: modello,
   });
   passo(`risposta dell'AI (${Array.isArray(out.actions) ? out.actions.length : 0} azioni)`);
   const actions = (Array.isArray(out.actions) ? out.actions : []).filter((a) => SCHEMA.properties.actions.items.properties.kind.enum.includes(a.kind));
   const riepilogo = conRiepilogo ? s(out.riepilogo) : "";
-  const titolo = conRiepilogo ? s(out.titolo).slice(0, 80) : "";
+  const titolo = entry.titoloAMano ? "" : s(out.titolo).replace(/^["«“]+|["»”]+$/g, "").trim().slice(0, 80);
+  const persone = entry.personeAMano ? null : collegaPersone(out.persone, { voci: ctx.vociPersone, contatti, io: ctx.io });
   const temi = conRiepilogo && Array.isArray(out.temi) ? [...new Set(out.temi.map(s).filter(Boolean))].slice(0, 12) : [];
   // La sintesi si propone solo se cambia davvero rispetto a quella del progetto.
   const sintesi = conRiepilogo ? s(out.sintesi) : "";
@@ -406,12 +482,14 @@ export async function analyzeJournalEntry(db, entry, { uid, keys, provider, clie
       updatedAt: FieldValue.serverTimestamp(),
     });
   }
-  if (riepilogo || sintesiEsito) {
-    batch.update(db.collection("journal_entries").doc(entry.id), {
-      ...(riepilogo ? { riepilogo, titolo, temi, riepilogoAt: FieldValue.serverTimestamp() } : {}),
-      sintesiEsito, updatedAt: FieldValue.serverTimestamp(),
-    });
-  }
+  // Nella nota: titolo e persone (tutte le note, se l'utente non li ha scritti a mano), riepilogo e temi (progetti
+  // con istruzioni). Sono la nota stessa, non azioni: si correggono dal suo foglio (CLAUDE.md, regola 5).
+  batch.update(db.collection("journal_entries").doc(entry.id), {
+    ...(riepilogo ? { riepilogo, temi, riepilogoAt: FieldValue.serverTimestamp() } : {}),
+    ...(titolo ? { titolo } : {}),
+    ...(persone ? { persone } : {}),
+    sintesiEsito, updatedAt: FieldValue.serverTimestamp(),
+  });
   if (nuovaSintesi) {
     batch.set(db.collection("proposals").doc(), {
       ownerUid: uid,
@@ -428,6 +506,6 @@ export async function analyzeJournalEntry(db, entry, { uid, keys, provider, clie
     });
   }
   await batch.commit();
-  passo(`proposte scritte${riepilogo ? ", riepilogo scritto" : ""}${sintesiEsito ? `, sintesi ${sintesiEsito}` : ""}`);
-  return { azioni: actions.length + (nuovaSintesi ? 1 : 0), riepilogo: !!riepilogo, sintesi: !!nuovaSintesi, sintesiEsito, modello };
+  passo(`proposte scritte${riepilogo ? ", riepilogo scritto" : ""}${persone ? `, ${persone.length} persone (${persone.filter((p) => p.voceId || p.googleId).length} collegate)` : ""}${sintesiEsito ? `, sintesi ${sintesiEsito}` : ""}`);
+  return { azioni: actions.length + (nuovaSintesi ? 1 : 0), riepilogo: !!riepilogo, titolo: !!titolo, persone: persone?.length || 0, sintesi: !!nuovaSintesi, sintesiEsito, modello };
 }

@@ -426,27 +426,8 @@ a.pillola { text-decoration: none; }
 .stato-ai.on i { background: var(--verde); }
 .stato-ai.on { color: var(--verde); }
 
-.nota { padding: 14px 0 12px; border-bottom: 1px solid var(--linea); }
-.nota:last-child { border-bottom: none; }
-.nota__testa { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--inchiostro-3); }
-.nota__testa .spazio { flex: 1; }
 .nota__testo { white-space: pre-wrap; margin: 4px 0 2px; font-size: 15.5px; }
-.nota__testa .progetto { margin-left: 2px; }
-/* Riepilogo scritto dall'AI per le note di un progetto con istruzioni; la trascrizione sta sotto, ripiegata. */
-.nota__riepilogo { margin: 4px 0 2px; font-size: 15.5px; line-height: 1.5; cursor: pointer; }
-.nota__riepilogo h4 {
-  font-size: 11px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase;
-  color: var(--inchiostro-3); margin: 12px 0 2px;
-}
-.nota__riepilogo h4:first-child { margin-top: 6px; }
-.nota__riepilogo p { margin: 3px 0; }
-.nota__riepilogo ul { margin: 2px 0 4px; padding-left: 18px; }
-.nota__riepilogo li { margin: 2px 0; }
-.nota__riepilogo li::marker { color: var(--inchiostro-3); }
-/* Rubriche dentro una sezione («Acquisito:», «In lavorazione:»): etichetta con l'elenco sotto (testoRicco). */
-.nota__riepilogo h5 { margin: 8px 0 0; font-size: 13.5px; font-weight: 500; color: var(--inchiostro-2); }
-.nota__riepilogo ul ul, .sintesi-testo ul ul { margin: 0 0 2px; padding-left: 16px; }
-.nota__riepilogo b { font-weight: 600; }
+.sintesi-testo ul ul { margin: 0 0 2px; padding-left: 16px; }
 .nota__esito { margin: 6px 0 0; }
 .nota__apri { display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; padding: 4px 0;
   font-size: 12.5px; color: var(--inchiostro-2); }
@@ -575,9 +556,30 @@ html[data-colore] .pagina-progetto .btn--piatto svg { color: var(--c-testo); }
 .lezione__testo { flex: 1; min-width: 0; }
 .lezione__titolo { font-size: 16px; font-weight: 500; line-height: 1.3; }
 .lezione__anteprima { font-size: 13.5px; color: var(--inchiostro-2); margin-top: 3px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.lezione__temi { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.lezione__temi { display: flex; align-items: center; gap: 5px 10px; flex-wrap: wrap; margin-top: 7px; }
 .lezione__temi .etichetta { font-size: 11.5px; }
 .lezione__riepilogo { margin-top: 10px; }
+/* Note del Diario con la stessa riga delle lezioni (rigaNota in modules/diario): sotto il titolo e l'anteprima
+   ora e modello, progetto, persone nominate, temi; le azioni proposte fuori dal pulsante, allineate al testo. */
+.voce-nota { border-bottom: 1px solid var(--linea); }
+.voce-nota > .lezione { border-bottom: none; }
+.voce-nota__azioni { margin: -4px 0 12px 54px; }
+.lezione__ora { font-size: 12px; color: var(--inchiostro-3); font-variant-numeric: tabular-nums; }
+.persona { display: inline-flex; align-items: center; gap: 3px; font-size: 12.5px; color: var(--inchiostro-2); }
+.persona svg { width: 13px; height: 13px; flex: none; color: var(--inchiostro-3); }
+.lezione__stato { font-size: 12px; color: var(--accento); }
+.lezione__stato--errore { color: var(--frutto); }
+.lezione__stato--muto { color: var(--inchiostro-3); }
+/* Foglio di lettura di una nota (apriLettura) */
+.lettura__persone { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.lettura__testo { font-size: 16px; line-height: 1.55; margin-top: 12px; }
+/* Titolo nel foglio della nota: una riga in Instrument Serif sopra il testo, con la sola linea sotto */
+.nota__titolo-campo {
+  width: 100%; border: none; border-bottom: 1px solid var(--linea); background: transparent; color: inherit;
+  font-family: var(--display); font-size: 24px; line-height: 1.25; padding: 4px 0 8px; outline: none; border-radius: 0;
+}
+.nota__titolo-campo:focus { border-bottom: 2px solid var(--accento); padding-bottom: 7px; }
+.nota__titolo-campo::placeholder { color: var(--inchiostro-3); font-style: italic; }
 
 .tema { border-bottom: 1px solid var(--linea); }
 .tema__testa { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 14px 0; color: inherit; }

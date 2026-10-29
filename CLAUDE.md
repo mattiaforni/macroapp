@@ -54,10 +54,10 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 | `components/prodotto.js` | codice a barre: `scansiona()` (fotocamera con `BarcodeDetector`, altrimenti il codice scritto; con un codice il foglio **resta aperto** e lo sostituisce `apriProdotto`: chiuderlo faceva un `history.back()` che chiudeva anche l'attesa), `apriProdotto(ean, { inLista, aggiorna })` (foglio di attesa con l'anello e il codice, dopo 6 s «ci mette più del solito»; indietro annulla; errore nello stesso foglio con «Riprova»; poi la scheda da Open Food Facts via function `prodotto`: indice e fascia, Nutri-Score, additivi con rischio EFSA, NOVA, bio, valori per 100 g, «Rileggi» in fondo che salta la cache; con `inLista` il campo «In lista come» con le voci simili (`simile`: tutte le parole della più corta nella più lunga), «Preso» a destra e «Da comprare» a sinistra), `pallinoIndice`, `riassunto` (con `v` = modello dell'indice), `aggiornaRiassunti`, `VERSIONE_INDICE` |
 | `components/documenti.js` | documenti di Drive collegati a un progetto o a una voce del manuale: `sceltaDocumenti` (elenco + ricerca, in un foglio), `elencoDocumenti`, `rigaDocumento` |
 | `components/registratore.js` | nota vocale: `pulsanteRegistra({ inserisci, progetto })` per la barra del foglio della nota (Registra → tempo · Ferma → «Trascrivo…»), MediaRecorder webm/opus a 32 kbit/s, schermo acceso durante la registrazione, microfono liberato a Ferma o alla chiusura del foglio; manda a `trascrivi` |
-| `components/persone.js` | scelta delle persone di un task: suggerimenti dalla rubrica e da Google Contatti, persone nuove; una voce della rubrica non collegata e il contatto Google con lo stesso nome compaiono una volta sola, e sceglierla la collega |
+| `components/persone.js` | scelta delle persone di un task: suggerimenti dalla rubrica e da Google Contatti, persone nuove; una voce della rubrica non collegata e il contatto Google con lo stesso nome compaiono una volta sola, e sceglierla la collega. Con `perNota` (persone di una nota) niente entra in rubrica: `valore()` → [{ nome, voceId?, googleId? }] |
 | `modules/*/index.js` | un modulo = `{ id, title, nav, icon, mount(container) → smonta }`, in `modules/registry.js` |
-| `modules/diario/index.js` | in cima «Prossimi giorni» (eventi del calendario della casa di oggi e dei due giorni dopo, non finiti, al più 4, righe di `rigaEvento`; solo se ce ne sono); note (anche dettate o condivise; una nota già scritta si riapre per leggerla dall'inizio, senza tastiera — 28/10, richiesta di Mattia), filtro per progetto (`macroapp.diario.progetto`, lo scrive anche la pagina Task), riepilogo dell'AI con la trascrizione ripiegata, proposte sotto la nota. Esporta `apriNota`, `analizzaNota`, `titoloDi` (li usa la pagina Progetto) |
-| `modules/progetto/index.js` | pagina di un progetto con istruzioni (`macroapp.progetto` = quale; menu → Progetti, o dal Diario e dai Task): viste Sintesi (righe per tema con stato e lezioni collegate via `journal_entries.temi`), Lezioni (giorno, titolo, anteprima, temi; foglio di lettura con Modifica e Rianalizza), Da fare. Titolo in testata = nome del progetto (`titoloCorrente`, letto da app.js) |
+| `modules/diario/index.js` | in cima «Prossimi giorni» (eventi del calendario della casa di oggi e dei due giorni dopo, non finiti, al più 4, righe di `rigaEvento`; solo se ce ne sono); note come le lezioni (29/10): `rigaNota` (giorno in serif solo sulla prima nota del giorno, titolo, anteprima su due righe, ora · modello, progetto su «Tutte», persone, temi; proposte sotto la riga), `elencoNote` (fasce per mese), `apriLettura` (foglio di lettura: persone che aprono la rubrica o Google Contatti, riepilogo con la trascrizione ripiegata o testo, proposte; Rianalizza ed Elimina a sinistra, Modifica a destra); `apriNota` (titolo in serif sopra il testo, Invio porta al testo; Persone; progetto; giorno; una nota già scritta si riapre dall'inizio, senza tastiera); `testaNota` (titolo dell'AI o a mano, se no la prima frase, e l'anteprima riprende da lì); filtro per progetto (`macroapp.diario.progetto`, lo scrive anche la pagina Task). Riga, foglio e `analizzaNota` li usa la pagina Progetto |
+| `modules/progetto/index.js` | pagina di un progetto con istruzioni (`macroapp.progetto` = quale; menu → Progetti, o dal Diario e dai Task): viste Sintesi (righe per tema con stato e lezioni collegate via `journal_entries.temi`), Lezioni (le righe e il foglio di lettura del Diario), Da fare. Titolo in testata = nome del progetto (`titoloCorrente`, letto da app.js) |
 | `modules/lista/index.js` | tessere a 4 colonne; quelle da comprare divise per reparto (`REPARTI` = ordine del giro, `REGOLE_REPARTO` dal nome, `reparto` scelto a mano nel foglio Modifica); recenti e «Mi serve» per frequenza, senza reparti. Tondo «Scansiona» sopra il + (`fab--sopra`, 29/10; la pagina mette `<html data-fab-doppio>` per alzare toast e spazio in fondo) e «Scansiona» in Mi serve e in Modifica → `inserisciProdotto` (voce = tipo di prodotto, marca nel dettaglio, `ean` + `prodotto`; pallino della fascia sulla tessera) |
 | `modules/task/index.js` | task per progetti; `apriProgetto` (nome, visibilità, istruzioni per il diario, documenti di Drive, colore); dal progetto il pulsante Diario |
 | `modules/modelli/index.js` | pagina Modelli AI (menu → Account): un modello per le note semplici e uno per le note dei progetti con istruzioni, salvati al tocco |
@@ -95,9 +95,10 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
    (servono per `householdId+visibility+ordine` e `ownerUid+ordine`). Gli ordinamenti fini
    si fanno nel modulo, per non moltiplicare gli indici.
 5. Niente entra nei moduli dall'AI senza conferma: l'agente scrive solo `proposals` (anche gli eventi
-   del calendario: proposta `event`, scritta su Google solo con la spunta). Unica eccezione,
-   decisa da Mattia il 23/10: il riepilogo di una nota di un progetto con istruzioni
-   (`journal_entries.riepilogo`), che è testo della nota stessa e si corregge dal suo foglio.
+   del calendario: proposta `event`, scritta su Google solo con la spunta). Eccezioni, perché sono la nota
+   stessa e si correggono dal suo foglio: il riepilogo di una nota di un progetto con istruzioni
+   (`journal_entries.riepilogo`, deciso da Mattia il 23/10), il titolo e le persone nominate di ogni nota
+   (`titolo`, `persone`, richiesta di Mattia del 29/10; una persona taggata non entra in rubrica).
    La sintesi del progetto invece passa dalla conferma (scelta di Mattia, 26/10).
 6. Mai nel repo chiavi o dati personali.
 
@@ -294,6 +295,18 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
       **Da verificare dal telefono**: qualità rispetto all'app Claude su una lezione vera; su iPhone (audio/mp4 →
       `audio/m4a`) se Gemini lo accetta; se lo schermo si spegne, che la registrazione non si interrompa (wake lock).
       Possibile seguito, se Mattia lo vuole: salvare e analizzare subito dopo la trascrizione, senza passare dal campo.
+- [x] **Diario come le lezioni, titolo e persone** (29/10, richiesta di Mattia dal telefono: una nota lunga occupava
+      tutto lo schermo; Diario e lezioni del tennis «mi sembrano due strumenti diversi, quando invece sono lo stesso»; un'
+      analisi senza azioni non lasciava traccia). Elenco del Diario con le righe delle lezioni (`rigaNota`), la nota si
+      legge toccandola (`apriLettura`, anche dalla pagina del progetto); Rianalizza ed Elimina stanno nel foglio. Per ogni
+      nota l'agente scrive titolo e persone nominate (rubrica, o contatti Google con una parola del nome nel testo, letti
+      dal server con il permesso dell'utente: `functions/src/google/contatti.js`; all'AI vanno solo quei nomi). Titolo e
+      persone si scrivono anche a mano (foglio della nota), e allora l'AI non li cambia. Prova senza Firestore:
+      `CONTATTI="Nome Cognome, …" node functions/strumenti/prova-agente.mjs "…"` stampa titolo e persone.
+      Da verificare con le note vere: che i nomi dettati male («Ani» per Anna) si colleghino al contatto giusto; costo dei
+      token in più (titolo, persone, candidati: poche decine di token per nota).
+      Da decidere con Mattia: se l'AI debba anche rivedere il testo delle note semplici (punteggiatura, errori di dettatura)
+      o scriverne un riepilogo, come per i progetti con istruzioni; filtro del Diario per persona.
 - [ ] Diario per progetto, seguiti: importare lo storico delle lezioni dalle chat del progetto Claude
       (esportazione dei dati di claude.ai); valutare con le note vere quante precedenti servono
       e se la sintesi proposta rispetta le correzioni fatte a mano.

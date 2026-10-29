@@ -3,9 +3,9 @@
 // Tre viste, come pillole:
 // - Sintesi: le sezioni della sintesi (components/sintesi.js) come righe per tema, con lo stato e
 //   le lezioni in cui il tema è emerso (le note che lo portano in `temi`); una riga si apre sul posto.
-// - Lezioni: le note del progetto con il giorno grande, il titolo scritto dall'AI, un'anteprima e i
-//   temi; toccandole si legge il riepilogo intero, con la trascrizione ripiegata; da lì Modifica
-//   e Rianalizza.
+// - Lezioni: le note del progetto con le righe del Diario (rigaNota: giorno grande, titolo scritto dall'AI,
+//   anteprima, persone e temi); toccandole si legge il riepilogo intero, con la trascrizione ripiegata
+//   (apriLettura, lo stesso foglio del Diario); da lì Modifica e Rianalizza.
 // - Da fare: i task del progetto.
 // In fondo alla Sintesi, i documenti di Drive collegati al progetto (si aprono in Drive; si scelgono
 // dal foglio del progetto).
@@ -13,14 +13,12 @@
 // dove le guardi.
 import { el, icon, toast, fascia, vuoto, attesa, toDate, meseLungo, fab, testoRicco } from "../../core/ui.js";
 import { create, update, remove, watchMine, watchVisible, VIS, where } from "../../core/db.js";
-import { openSheet } from "../../components/sheet.js";
-import { watchPending, renderAzione } from "../../components/proposals.js";
+import { watchPending } from "../../components/proposals.js";
 import { sezioniSintesi, tonoStato, apriSintesi, apriVersioni } from "../../components/sintesi.js";
-import { apriNota, analizzaNota, analisiAutomatica, titoloDi, sintesiInvariata } from "../diario/index.js";
+import { apriNota, analizzaNota, analisiAutomatica, rigaNota, apriLettura, elencoNote } from "../diario/index.js";
 import { apriProgetto, rigaTask } from "../task/index.js";
 import { elencoDocumenti } from "../../components/documenti.js";
 import { vaiA } from "../../core/router.js";
-import { nomeModello } from "../../core/modelli.js";
 
 export const id = "progetto";
 export const title = "Progetto";
@@ -34,19 +32,10 @@ const NOTE = "journal_entries";
 const CHIAVE_PAGINA = "macroapp.progetto";
 const CHIAVE_VISTA = "macroapp.progetto.vista"; // "sintesi" | "lezioni" | "dafare"
 const CHIAVE_DIARIO = "macroapp.diario.progetto";
-const GIORNI = ["dom", "lun", "mar", "mer", "gio", "ven", "sab"];
 
 const leggi = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch (e) { return d; } };
 const scrivi = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
 const norm = (s) => String(s || "").trim().toLowerCase();
-
-/** Anteprima di una nota: le prime voci del riepilogo, in una riga. */
-function anteprima(n) {
-  const voci = String(n.riepilogo || "").split("\n").map((r) => r.trim())
-    .filter((r) => r && !/^#/.test(r)).map((r) => r.replace(/^[-*•]\s+/, "").replace(/\*\*/g, ""));
-  const testo = voci.length ? voci.slice(0, 3).join(" · ") : String(n.text || "").replace(/\s+/g, " ");
-  return testo.length > 110 ? `${testo.slice(0, 108).trimEnd()}…` : testo;
-}
 
 export function mount(container) {
   const progettoId = leggi(CHIAVE_PAGINA, "");
@@ -77,8 +66,8 @@ export function mount(container) {
   function nuova() {
     apriNota({
       progetti, projectId: progetto.id,
-      onSalva: ({ text, projectId, createdAt }) => {
-        const { id: entryId, saved } = create(NOTE, { text, projectId, analyzed: false, ...(createdAt ? { createdAt } : {}) }, VIS.PRIVATE);
+      onSalva: (dati) => {
+        const { id: entryId, saved } = create(NOTE, { ...dati, analyzed: false }, VIS.PRIVATE);
         if (analisiAutomatica()) analizza(entryId, saved);
         if (vista !== "lezioni") scegli("lezioni");
       },
@@ -89,36 +78,13 @@ export function mount(container) {
     apriNota({ esistente: n, progetti, onSalva: (dati) => update(NOTE, n.id, dati) });
   }
 
-  /** Foglio di lettura di una lezione: riepilogo intero, trascrizione ripiegata, Modifica e Rianalizza. */
+  /** Foglio di lettura di una lezione: lo stesso del Diario. */
   function apriLezione(n) {
-    const d = toDate(n.createdAt) || new Date();
-    const mie = proposte.filter((p) => p.sourceEntryId === n.id);
-    let aperta = false;
-    const trascrizione = el("div.nota__testo.nota__testo--trascrizione", { hidden: true }, n.text);
-    const apri = el("button.nota__apri", { type: "button", "aria-expanded": "false", onclick: () => {
-      aperta = !aperta; trascrizione.hidden = !aperta;
-      apri.setAttribute("aria-expanded", aperta ? "true" : "false");
-      apri.lastChild.textContent = aperta ? "Nascondi la trascrizione" : "Trascrizione";
-    } }, icon("giu"), "Trascrizione");
-    const sheet = openSheet({
-      title: titoloDi(n) || "Lezione",
-      body: [
-        el("p.meta", { style: "margin-top:12px" }, `${d.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" })}, ${d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}${n.modello ? ` · riepilogo di ${nomeModello(n.modello)}` : ""}`),
-        n.temi?.length ? el("div.lezione__temi", {}, ...n.temi.map((t) => el("span.etichetta", {}, t))) : null,
-        n.riepilogo
-          ? el("div.sintesi-testo.lezione__riepilogo", {}, ...testoRicco(n.riepilogo))
-          : el("div.nota__testo", {}, n.text),
-        n.riepilogo ? apri : null,
-        n.riepilogo ? trascrizione : null,
-        sintesiInvariata(n),
-        mie.length ? el("div.azioni-ai", { style: "margin-top:14px" }, ...mie.map(renderAzione)) : null,
-        el("div.foglio__piede", {},
-          el("button.btn", { onclick: () => { sheet.close(); analizza(n.id); } }, icon("scintilla"), "Rianalizza"),
-          el("button.btn.btn--pericolo", { onclick: () => { remove(NOTE, n.id); sheet.close(); toast("Nota eliminata"); } }, icon("cestino")),
-        ),
-      ],
-      confirmLabel: "Modifica",
-      onConfirm: () => { modifica(n); },
+    apriLettura(n, {
+      proposte: proposte.filter((p) => p.sourceEntryId === n.id),
+      onModifica: () => modifica(n),
+      onAnalizza: () => analizza(n.id),
+      onElimina: () => { remove(NOTE, n.id); toast("Nota eliminata"); },
     });
   }
 
@@ -172,33 +138,14 @@ export function mount(container) {
     return nodi;
   }
 
-  function rigaLezione(n) {
-    const d = toDate(n.createdAt) || new Date();
-    const analisi = inCorso.has(n.id);
-    return el("button.lezione", { type: "button", onclick: () => apriLezione(n) },
-      el("div.lezione__giorno", {}, el("b.display", {}, String(d.getDate())), el("small", {}, GIORNI[d.getDay()])),
-      el("div.lezione__testo", {},
-        el("div.lezione__titolo", {}, titoloDi(n) || "Senza titolo"),
-        el("div.lezione__anteprima", {}, analisi ? "Analizzo…" : anteprima(n)),
-        n.temi?.length || (n.analysisError && !n.analyzed)
-          ? el("div.lezione__temi", {},
-            ...(n.temi || []).map((t) => el("span.etichetta", {}, t)),
-            n.analysisError && !n.analyzed ? el("span.etichetta", { style: "color:var(--frutto)" }, "non analizzata") : null)
-          : null,
-      ),
-    );
-  }
-
   function vistaLezioni() {
     if (!note.length) return [!dati.ha("note") ? null : vuoto("Nessuna lezione ancora", "Tocca + e scrivi o detta: la nota finisce in questo progetto.")];
-    const nodi = [];
-    let mese = null;
-    for (const n of note) {
-      const m = meseLungo(toDate(n.createdAt) || new Date());
-      if (m !== mese) { nodi.push(fascia(m.charAt(0).toUpperCase() + m.slice(1))); mese = m; }
-      nodi.push(rigaLezione(n));
-    }
-    return nodi;
+    return elencoNote(note, (n, conGiorno) => rigaNota(n, {
+      conGiorno,
+      proposte: proposte.filter((p) => p.sourceEntryId === n.id),
+      inAnalisi: inCorso.has(n.id),
+      onApri: () => apriLezione(n),
+    }));
   }
 
   function vistaDaFare() {

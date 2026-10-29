@@ -1,24 +1,31 @@
 // Diario: scrivi o detta (microfono della tastiera). Le note sono sempre solo tue.
 // Con l'AI collegata, ogni nota salvata viene letta dall'agente, che propone sotto di essa
 // le azioni che contiene: task, voci per la lista, spese, voci del manuale, bozze di mail.
-// Niente entra nell'app senza la tua spunta.
+// Niente entra nell'app senza la tua spunta. Nella nota stessa l'agente scrive il titolo e le persone
+// nominate (etichette collegate alla rubrica o a Google Contatti): si correggono dal foglio della nota, e
+// quelli scritti a mano lì restano (`titoloAMano`, `personeAMano`).
+//
+// L'elenco è come le lezioni del tennis (29/10, richiesta di Mattia: «mi sembrano due strumenti diversi»): il
+// giorno a sinistra in Instrument Serif, titolo, due righe di anteprima, persone; fasce per mese. Una nota si
+// apre toccandola, in un foglio di lettura (apriLettura) con Modifica, Rianalizza ed Elimina. La stessa riga e
+// lo stesso foglio li usa la pagina del progetto (modules/progetto).
 //
 // Una nota può appartenere a un progetto (es. Tennis). Se il progetto ha istruzioni per il diario,
-// l'agente scrive anche un riepilogo della nota tenendo conto delle precedenti: compare al posto
+// l'agente scrive anche un riepilogo della nota tenendo conto delle precedenti: si legge al posto
 // del testo, che resta ripiegato sotto («Trascrizione»). Il riepilogo è testo correggibile, non
-// un'azione: è l'unica cosa che l'agente scrive senza la spunta. La sintesi del progetto (lo stato,
-// ciò che è emerso finora) arriva invece come proposta sotto la nota e, confermata, si legge nella
-// pagina del progetto (modules/progetto), dove le note si sfogliano per titolo e per tema.
+// un'azione. La sintesi del progetto (lo stato, ciò che è emerso finora) arriva invece come proposta
+// sotto la nota e, confermata, si legge nella pagina del progetto, dove le note si sfogliano anche per tema.
 //
 // In cima, «Prossimi giorni»: gli eventi del calendario della casa di oggi e dei due giorni dopo (non quelli
 // già finiti), con le righe della pagina Calendario; compare solo se ce ne sono e se Google è collegato con il
 // calendario. Scelta di Mattia del 27/10 (schermata B), al posto di aprire il Calendario dal menu.
 //
-// journal_entries { text, projectId, riepilogo, titolo, temi, riepilogoAt, analyzed, analyzedAt, analysisError, modello }
+// journal_entries { text, titolo, titoloAMano, persone: [{ nome, voceId?, googleId? }], personeAMano, projectId,
+//   riepilogo, temi, riepilogoAt, analyzed, analyzedAt, analysisError, modello, sintesiEsito }
 // `modello`: chi ha letto la nota l'ultima volta (haiku, sonnet, opus: scelta in menu → Modelli AI).
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-functions.js";
 import { functions } from "../../core/firebase.js";
-import { el, icon, toast, fascia, vuoto, attesa, toDate, giornoRelativo, fab, testoRicco, isoGiorno, stessoGiorno, fmtDate } from "../../core/ui.js";
+import { el, icon, toast, fascia, vuoto, attesa, toDate, meseLungo, fab, testoRicco, isoGiorno, stessoGiorno, fmtDate } from "../../core/ui.js";
 import { openSheet } from "../../components/sheet.js";
 import { create, update, remove, watchMine, watchVisible, readVisible, VIS, where } from "../../core/db.js";
 import { watchPending, renderAzione } from "../../components/proposals.js";
@@ -32,6 +39,9 @@ import { statoGoogle, suGoogle } from "../../core/google.js";
 import { calendarioCasa, leggiEventi, eventiNoti, suEventi } from "../../core/calendario.js";
 import { rigaEvento, inOrdine } from "../calendario/index.js";
 import { pulsanteRegistra } from "../../components/registratore.js";
+import { sceltaPersone } from "../../components/persone.js";
+import { personaDaId, personaDaGoogle } from "../../core/rubrica.js";
+import { linkGoogle } from "../../core/contatti-google.js";
 
 export const id = "diario";
 export const title = "Diario";
@@ -46,6 +56,7 @@ const CHIAVE_FILTRO = "macroapp.diario.progetto"; // "tutte" o id del progetto (
 const CHIAVE_PAGINA = "macroapp.progetto"; // progetto aperto nella pagina Progetto (modules/progetto)
 const GIORNI_PROSSIMI = 2; // «Prossimi giorni»: oggi e i due giorni dopo
 const MAX_PROSSIMI = 4;    // righe al massimo; per le altre c'è il Calendario
+const GIORNI = ["dom", "lun", "mar", "mer", "gio", "ven", "sab"];
 const analyzeEntry = httpsCallable(functions, "analyzeEntry", { timeout: 310000 }); // la funzione ha 300 s (Opus può metterci minuti)
 
 const leggi = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch (e) { return d; } };
@@ -63,15 +74,24 @@ function sceltaProgetto(progetti, iniziale) {
   return { node, valore: () => scelto };
 }
 
+/** Le persone di una nota, in una forma confrontabile (per sapere se il foglio le ha cambiate). */
+const chiavePersone = (lista) => JSON.stringify((lista || []).map((p) => [p.nome, p.voceId || "", p.googleId || ""]));
+
 /**
- * Foglio della nota: textarea a tutta larghezza. La spunta salva; le pillole trasformano
- * subito il testo in task, voce di lista, spesa o voce del manuale, senza passare dall'AI.
- * Invio va a capo: una nota può avere più paragrafi.
+ * Foglio della nota: titolo (facoltativo) e testo a tutta larghezza, poi persone, progetto e giorno. La spunta
+ * salva; le pillole trasformano subito il testo in task, voce di lista, spesa o voce del manuale, senza passare
+ * dall'AI. Invio nel titolo porta al testo; nel testo va a capo: una nota può avere più paragrafi.
+ * Titolo e persone cambiati qui restano come li hai scritti: l'analisi non li tocca più (titoloAMano,
+ * personeAMano). Svuotando il titolo, lo riscrive l'AI alla prossima analisi.
  */
 export function apriNota({ esistente = null, testo = "", progetti = [], projectId = null, onSalva }) {
   // Una nota già scritta si apre per leggerla dall'inizio: niente tastiera finché non tocchi il testo.
   const area = el("textarea", { placeholder: "Scrivi o detta…", rows: 6, autofocus: !esistente });
   area.value = esistente?.text || testo;
+  const titolo = el("input.nota__titolo-campo", { placeholder: "Titolo", "aria-label": "Titolo della nota", autocomplete: "off", enterkeyhint: "next" });
+  titolo.value = esistente?.titolo || "";
+  titolo.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); area.focus(); } });
+  const persone = sceltaPersone({ perNota: esistente?.persone || [] });
   const attivi = progetti.filter((p) => !p.archived || p.id === esistente?.projectId).sort((a, b) => a.name.localeCompare(b.name));
   const progetto = sceltaProgetto(attivi, esistente ? esistente.projectId : projectId);
   // Il riepilogo scritto dall'AI si corregge qui; se lo svuoti, torna a vedersi il testo.
@@ -112,10 +132,12 @@ export function apriNota({ esistente = null, testo = "", progetti = [], projectI
   const sheet = openSheet({
     title: esistente ? "Nota" : "Nuova nota",
     body: [
+      el("div.taccuino", {}, titolo),
       riepilogo ? el("div.campo", { style: "margin-top:14px" }, el("label", {}, "Riepilogo"), riepilogo) : null,
       riepilogo ? el("div.etichetta-campo", {}, "Trascrizione") : null,
-      el("div.taccuino", { style: riepilogo ? "padding-top:0" : null }, area),
+      el("div.taccuino", { style: "padding-top:0" }, area),
       esistente ? null : el("p.meta", { style: "margin-top:6px" }, "Per la voce tocca «Registra» in basso: parla quanto vuoi, poi «Ferma»."),
+      el("div.campo", { style: "margin-top:16px" }, el("label", {}, "Persone"), persone.node),
       attivi.length ? el("div", { style: "margin-top:16px" }, el("div.etichetta-campo", {}, "Progetto"), progetto.node) : null,
       el("div", { style: "margin-top:16px" }, el("div.etichetta-campo", {}, "Giorno"), el("div.segmenti", { style: "padding-top:0;position:relative" }, dataBtn, dataInput)),
       esistente ? null : el("div", { style: "margin-top:16px" },
@@ -141,6 +163,10 @@ export function apriNota({ esistente = null, testo = "", progetti = [], projectI
       const text = area.value.trim();
       if (!text) { area.focus(); return false; }
       const dati = { text, projectId: progetto.valore() };
+      const t = titolo.value.trim();
+      if (t !== (esistente?.titolo || "")) { dati.titolo = t; dati.titoloAMano = !!t; }
+      const scelte = persone.valore();
+      if (chiavePersone(scelte) !== chiavePersone(esistente?.persone)) { dati.persone = scelte; dati.personeAMano = true; }
       if (riepilogo) dati.riepilogo = riepilogo.value.trim();
       if (quando.getTime() !== originale.getTime()) dati.createdAt = quando;
       onSalva(dati);
@@ -184,13 +210,128 @@ export function sintesiInvariata(n, inAnalisi = false) {
 /** Analisi automatica attiva (scelta sul telefono, pillola in alto nel Diario). */
 export const analisiAutomatica = () => leggi(CHIAVE_AUTO, "1") === "1";
 
-/** Titolo di una nota: quello scritto dall'AI, se no la prima riga utile del riepilogo o del testo. */
-export function titoloDi(n) {
-  if (n.titolo) return n.titolo;
-  const righe = String(n.riepilogo || n.text || "").split("\n").map((r) => r.trim()).filter(Boolean);
-  const prima = righe.find((r) => !/^#/.test(r)) || righe[0] || "";
-  const pulita = prima.replace(/^[-*•]\s+/, "").replace(/\*\*/g, "");
-  return pulita.length > 70 ? `${pulita.slice(0, 68).trimEnd()}…` : pulita;
+const pulisci = (r) => r.replace(/^[-*•]\s+/, "").replace(/\*\*/g, "").trim();
+const unaRiga = (t) => String(t || "").replace(/\s+/g, " ").trim();
+
+/**
+ * Titolo e anteprima di una nota per l'elenco. Il titolo è quello della nota (dell'AI o scritto a mano); senza,
+ * la prima frase o riga (del riepilogo, se c'è, se no del testo), e l'anteprima riprende da lì senza ripeterla.
+ * Con il riepilogo l'anteprima sono le sue prime voci; se no il testo.
+ */
+export function testaNota(n) {
+  const titolo = String(n.titolo || "").trim();
+  if (n.riepilogo) {
+    const voci = String(n.riepilogo).split("\n").map((r) => r.trim()).filter((r) => r && !/^#/.test(r)).map(pulisci).filter(Boolean);
+    if (titolo) return { titolo, anteprima: voci.slice(0, 3).join(" · ") };
+    const [prima = "", ...resto] = voci;
+    return { titolo: prima.length > 70 ? `${prima.slice(0, 68).replace(/\s+\S*$/, "")}…` : prima, anteprima: resto.slice(0, 3).join(" · ") };
+  }
+  const testo = String(n.text || "").trim();
+  if (titolo) return { titolo, anteprima: unaRiga(testo).slice(0, 280) };
+  const riga = testo.split("\n")[0].trim();
+  const frase = riga.match(/^.{8,70}?[.!?](?=\s|$)/)?.[0] || riga;
+  if (frase.length <= 70) return { titolo: frase.replace(/\.$/, ""), anteprima: unaRiga(testo.slice(frase.length)).slice(0, 280) };
+  const taglio = frase.slice(0, 68).replace(/\s+\S*$/, "");
+  return { titolo: `${taglio}…`, anteprima: `…${unaRiga(testo.slice(taglio.length)).slice(0, 280)}` };
+}
+
+/** Titolo di una nota (per i fogli e la pagina del progetto). */
+export const titoloDi = (n) => testaNota(n).titolo;
+
+/** Una persona della nota come pillola: si apre in rubrica se c'è, se no su Google Contatti, se no è solo un nome. */
+function pillolaPersona(p) {
+  const voce = (p.voceId && personaDaId(p.voceId)) || personaDaGoogle(p.googleId);
+  if (voce) return el("button.pillola", { type: "button", onclick: () => apriVoceManuale(voce) }, icon("persona"), voce.name);
+  if (p.googleId) return el("a.pillola", { href: linkGoogle(p.googleId), target: "_blank", rel: "noopener", title: "Su Google Contatti" }, icon("contatto"), p.nome);
+  return el("span.pillola", {}, icon("persona"), p.nome);
+}
+
+/**
+ * Riga di una nota, come le lezioni del tennis: giorno a sinistra (solo sulla prima nota del giorno, `conGiorno`),
+ * titolo, anteprima su due righe, poi ora e modello (`conOra`, nel Diario), progetto (`progetto`, nel Diario su
+ * «Tutte»), persone e temi. Sotto, fuori dal pulsante, le azioni proposte ancora in attesa.
+ */
+export function rigaNota(n, { conGiorno = true, conOra = false, progetto = null, proposte = [], inAnalisi = false, onApri } = {}) {
+  const d = toDate(n.createdAt) || new Date();
+  const { titolo, anteprima } = testaNota(n);
+  const persone = Array.isArray(n.persone) ? n.persone.filter((p) => p?.nome) : [];
+  const nonAnalizzata = n.analysisError && !n.analyzed && !inAnalisi;
+  const piede = [
+    conOra ? el("span.lezione__ora", {}, d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }), n.analyzed && n.modello ? ` · ${nomeModello(n.modello)}` : "") : null,
+    progetto ? el("span.progetto", {}, progetto.name) : null,
+    ...persone.map((p) => el("span.persona", {}, icon("persona"), p.nome)),
+    ...(n.temi || []).map((t) => el("span.etichetta", {}, t)),
+    inAnalisi ? el("span.lezione__stato", {}, "Analizzo…") : null,
+    nonAnalizzata ? el("span.lezione__stato.lezione__stato--errore", {}, "non analizzata") : null,
+    n.sintesiEsito === "invariata" && !inAnalisi ? el("span.lezione__stato.lezione__stato--muto", {}, "sintesi invariata") : null,
+  ].filter(Boolean);
+  const oggi = stessoGiorno(d, new Date());
+  return el("div.voce-nota", { "data-id": n.id },
+    el("button.lezione", { type: "button", onclick: onApri },
+      el("div.lezione__giorno", {}, conGiorno ? [el("b.display", {}, String(d.getDate())), el("small", {}, oggi ? "oggi" : GIORNI[d.getDay()])] : null),
+      el("div.lezione__testo", {},
+        el("div.lezione__titolo", {}, titolo || "Senza titolo"),
+        anteprima ? el("div.lezione__anteprima", {}, anteprima) : null,
+        piede.length ? el("div.lezione__temi", {}, ...piede) : null,
+      ),
+    ),
+    proposte.length ? el("div.azioni-ai.voce-nota__azioni", {}, ...proposte.map(renderAzione)) : null,
+  );
+}
+
+/**
+ * Foglio di lettura di una nota (Diario e pagina del progetto): data, persone e temi, il riepilogo intero con la
+ * trascrizione ripiegata o il testo, le azioni proposte. In basso Rianalizza ed Elimina a sinistra, Modifica a destra.
+ */
+export function apriLettura(n, { progetto = null, proposte = [], onModifica, onAnalizza, onElimina }) {
+  const d = toDate(n.createdAt) || new Date();
+  const persone = Array.isArray(n.persone) ? n.persone.filter((p) => p?.nome) : [];
+  let aperta = false;
+  const trascrizione = el("div.nota__testo.nota__testo--trascrizione", { hidden: true }, n.text);
+  const apri = el("button.nota__apri", { type: "button", "aria-expanded": "false", onclick: () => {
+    aperta = !aperta; trascrizione.hidden = !aperta;
+    apri.setAttribute("aria-expanded", aperta ? "true" : "false");
+    apri.lastChild.textContent = aperta ? "Nascondi la trascrizione" : "Trascrizione";
+  } }, icon("giu"), "Trascrizione");
+  const quando = `${d.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" })}, ${d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}`;
+  const sheet = openSheet({
+    title: titoloDi(n) || "Nota",
+    body: [
+      el("p.meta", { style: "margin-top:12px" }, quando, n.analyzed && n.modello ? ` · letta da ${nomeModello(n.modello)}` : "",
+        progetto ? [" · ", el("span.progetto", {}, progetto.name)] : null),
+      persone.length ? el("div.lettura__persone", {}, ...persone.map(pillolaPersona)) : null,
+      n.temi?.length ? el("div.lezione__temi", {}, ...n.temi.map((t) => el("span.etichetta", {}, t))) : null,
+      n.riepilogo
+        ? el("div.sintesi-testo.lezione__riepilogo", {}, ...testoRicco(n.riepilogo))
+        : el("div.nota__testo.lettura__testo", {}, n.text),
+      n.riepilogo ? apri : null,
+      n.riepilogo ? trascrizione : null,
+      sintesiInvariata(n),
+      proposte.length ? el("div.azioni-ai", { style: "margin-top:14px" }, ...proposte.map(renderAzione)) : null,
+      el("div.foglio__piede", {},
+        el("button.btn", { onclick: () => { sheet.close(); onAnalizza?.(); } }, icon("scintilla"), n.analyzed ? "Rianalizza" : "Analizza"),
+        el("button.btn.btn--pericolo", { "aria-label": "Elimina nota", onclick: () => { sheet.close(); onElimina?.(); } }, icon("cestino")),
+      ),
+    ],
+    confirmLabel: "Modifica",
+    onConfirm: () => { onModifica?.(); },
+  });
+}
+
+/** Note in elenco: fascia per mese, giorno solo sulla prima nota del giorno. riga(n, conGiorno) → nodo. */
+export function elencoNote(note, riga) {
+  const nodi = [];
+  let mese = null;
+  let giorno = null;
+  for (const n of note) {
+    const d = toDate(n.createdAt) || new Date();
+    const m = meseLungo(d);
+    if (m !== mese) { nodi.push(fascia(m.charAt(0).toUpperCase() + m.slice(1))); mese = m; giorno = null; }
+    const g = isoGiorno(d);
+    nodi.push(riga(n, g !== giorno));
+    giorno = g;
+  }
+  return nodi;
 }
 
 export function mount(container) {
@@ -198,7 +339,6 @@ export function mount(container) {
   let proposte = [];
   let progetti = [];
   const inCorso = new Set(); // note in analisi
-  const aperte = new Set();  // note con il riepilogo di cui si legge anche la trascrizione
   const conNote = new Set(); // progetti che hanno note tra quelle viste
   let auto = leggi(CHIAVE_AUTO, "1") === "1";
   let filtro = leggi(CHIAVE_FILTRO, "tutte");
@@ -237,8 +377,8 @@ export function mount(container) {
   function nuova(testo = "") {
     apriNota({
       testo, progetti, projectId: filtro !== "tutte" ? filtro : null,
-      onSalva: ({ text, projectId, createdAt }) => {
-        const { id: entryId, saved } = create(COLL, { text, projectId, analyzed: false, ...(createdAt ? { createdAt } : {}) }, VIS.PRIVATE);
+      onSalva: (dati) => {
+        const { id: entryId, saved } = create(COLL, { ...dati, analyzed: false }, VIS.PRIVATE);
         if (auto) analizza(entryId, saved);
       },
     });
@@ -294,42 +434,24 @@ export function mount(container) {
     disegnaProssimi();
   }
 
-  function nota(n) {
-    const d = toDate(n.createdAt) || new Date();
-    const mie = proposte.filter((p) => p.sourceEntryId === n.id);
-    const analisi = inCorso.has(n.id);
-    const prog = progettoDi(n.projectId);
-    const scrive = analisi && !n.riepilogo && prog?.istruzioni;
-    const aperta = aperte.has(n.id);
-    const corpo = n.riepilogo
-      ? [
-          el("div.nota__riepilogo", { onclick: () => modifica(n) }, ...testoRicco(n.riepilogo)),
-          el("button.nota__apri", { type: "button", "aria-expanded": aperta ? "true" : "false",
-            onclick: () => { aperta ? aperte.delete(n.id) : aperte.add(n.id); render(); } },
-            icon("giu"), aperta ? "Nascondi la trascrizione" : "Trascrizione"),
-          aperta ? el("div.nota__testo.nota__testo--trascrizione", { onclick: () => modifica(n) }, n.text) : null,
-        ]
-      : [
-          el("div.nota__testo", { onclick: () => modifica(n) }, n.text),
-          scrive ? el("p.meta", { style: "margin-top:6px" }, "Scrivo il riepilogo…") : null,
-        ];
-    return el("div.nota", {},
-      el("div.nota__testa", {},
-        el("span", {}, d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })),
-        prog && filtro === "tutte" ? el("small.progetto", {}, prog.name) : null,
-        n.analyzed && n.modello ? el("span", {}, `· ${nomeModello(n.modello)}`)
-          : n.analyzed && !mie.length && !n.riepilogo ? el("span", {}, "· analizzata") : null,
-        n.analysisError && !n.analyzed ? el("span", { style: "color:var(--frutto)" }, "· non analizzata") : null,
-        el("span.spazio"),
-        el("button.btn.btn--piatto", { disabled: analisi, onclick: () => analizza(n.id) },
-          icon("scintilla"), analisi ? "Analizzo…" : n.analyzed ? "Rianalizza" : "Analizza"),
-        el("button.tondo.tondo--piatto", { "aria-label": "Elimina nota",
-          onclick: () => { remove(COLL, n.id); toast("Nota eliminata"); } }, icon("cestino")),
-      ),
-      ...corpo,
-      sintesiInvariata(n, analisi),
-      mie.length ? el("div.azioni-ai", {}, ...mie.map(renderAzione)) : null,
-    );
+  function leggiNota(n) {
+    apriLettura(n, {
+      progetto: progettoDi(n.projectId),
+      proposte: proposte.filter((p) => p.sourceEntryId === n.id),
+      onModifica: () => modifica(n),
+      onAnalizza: () => analizza(n.id),
+      onElimina: () => { remove(COLL, n.id); toast("Nota eliminata"); },
+    });
+  }
+
+  function nota(n, conGiorno) {
+    return rigaNota(n, {
+      conGiorno, conOra: true,
+      progetto: filtro === "tutte" ? progettoDi(n.projectId) : null,
+      proposte: proposte.filter((p) => p.sourceEntryId === n.id),
+      inAnalisi: inCorso.has(n.id),
+      onApri: () => leggiNota(n),
+    });
   }
 
   /** Pillole dei progetti: quelli con istruzioni per il diario e quelli che hanno già note. */
@@ -361,12 +483,7 @@ export function mount(container) {
         ? vuoto("Nessuna nota in questo progetto", "Tocca + e scrivi o incolla: la nota finisce qui.")
         : vuoto("Il diario è vuoto", "Tocca + e scrivi o detta: un'idea, cosa devi fare, cosa hai speso. Le note sono visibili solo a te."));
     }
-    let giorno = null;
-    for (const n of note) {
-      const g = giornoRelativo(toDate(n.createdAt) || new Date());
-      if (g !== giorno) { nodi.push(fascia(g)); giorno = g; }
-      nodi.push(nota(n));
-    }
+    nodi.push(...elencoNote(note, nota));
     elenco.replaceChildren(...nodi);
   }
 

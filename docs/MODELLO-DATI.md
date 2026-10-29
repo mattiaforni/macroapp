@@ -83,12 +83,15 @@ esportati come testo, file di testo così come sono; PDF e altri formati solo pe
 `people` è la copia in chiaro dei nomi: serve a chi non vede la voce in rubrica (voce privata dell'altro membro) e ai task vecchi, che avevano solo il testo.
 
 ## `journal_entries`
-`text, projectId?, riepilogo?, titolo?, temi?: [string], riepilogoAt?, analyzed, analyzedAt, analysisError, modello?` — sempre `private`, solo il
+`text, titolo?, titoloAMano?, persone?: [{ nome, voceId?, googleId? }], personeAMano?, projectId?, riepilogo?, temi?: [string], riepilogoAt?, analyzed, analyzedAt, analysisError, modello?, sintesiEsito?` — sempre `private`, solo il
 proprietario (anche nelle regole), anche quando il progetto è condiviso. `riepilogo` lo scrive l'agente
 (`analyzeEntry`) per le note di un progetto con `istruzioni`, tenendo conto delle 8 note precedenti dello
-stesso progetto; l'utente lo corregge dal foglio della nota. Con il riepilogo arrivano `titolo` (una riga) e
-`temi` (nomi delle sezioni della sintesi che la nota tocca: la pagina del progetto collega così le lezioni ai
-temi). `createdAt` si può cambiare dal foglio della nota (lezioni inserite dopo). Indici: `ownerUid+createdAt` e
+stesso progetto; l'utente lo corregge dal foglio della nota. Con il riepilogo arrivano i `temi` (nomi delle sezioni
+della sintesi che la nota tocca: la pagina del progetto collega così le lezioni ai temi). Per ogni nota (29/10)
+l'agente scrive `titolo` (una riga) e `persone`: le persone nominate, ciascuna con `voceId` (voce della rubrica) o
+`googleId` (contatto Google non in rubrica) quando il nome corrisponde senza dubbi, altrimenti solo il nome; non
+crea voci in rubrica. Titolo e persone cambiati a mano nel foglio della nota segnano `titoloAMano` / `personeAMano`
+e l'agente non li tocca più (un titolo svuotato torna all'AI). `createdAt` si può cambiare dal foglio della nota (lezioni inserite dopo). Indici: `ownerUid+createdAt` e
 `ownerUid+projectId+createdAt` (Diario filtrato e note precedenti per l'agente). `modello`: chi ha fatto l'ultima
 analisi (lo scrive l'app con la risposta di `analyzeEntry`).
 

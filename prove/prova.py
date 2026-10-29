@@ -309,6 +309,7 @@ with sync_playwright() as p:
                 {"resourceName": "people/c1", "names": [{"displayName": "Giulia Bianchi"}], "phoneNumbers": [{"value": google["giulia"]}], "organizations": [{"name": "Circolo"}]},
                 {"resourceName": "people/c2", "names": [{"displayName": "Marco"}], "emailAddresses": [{"value": "marco@example.com"}], "phoneNumbers": [{"value": "333 5550000"}]},
                 {"resourceName": "people/c3", "names": [{"displayName": "Giuseppe Verdi"}], "nicknames": [{"value": "Beppe"}], "phoneNumbers": [{"value": "+39 347 0000000"}]},
+                {"resourceName": "people/c4", "names": [{"displayName": "Anna Mambelli"}], "nicknames": [{"value": "Ani"}]},
             ]}))
         pg.route("https://people.googleapis.com/**", people)
         # Google Calendar finto: due calendari, eventi in memoria (GET/POST/PATCH/DELETE).
@@ -515,7 +516,8 @@ with sync_playwright() as p:
         pg.wait_for_selector(".azione >> text=Comprare lampadine", timeout=6000)
         pg.wait_for_timeout(300)
         shot(pg, "9-diario")
-        pg.wait_for_selector(".nota__testa >> text=· Sonnet")  # il modello che ha letto la nota
+        pg.wait_for_selector(".voce-nota .lezione__ora >> text=· Sonnet")  # il modello che ha letto la nota
+        pg.wait_for_selector(".lezione__titolo >> text=Assemblea del circolo con Marco")  # il titolo scritto dall'AI
         mailto = pg.locator(".azione a.pillola", has_text="Apri nella mail").get_attribute("href")
         assert mailto.startswith("mailto:marco%40example.com"), mailto
         pg.locator(".azione", has_text="del circolo entro venerdì").locator("button[aria-label='Conferma']").click()
@@ -541,6 +543,59 @@ with sync_playwright() as p:
         pg.click(".schede a[href='#/lista']")
         pg.wait_for_selector(".tessera >> text=Lampadine")
 
+        # ── Titolo e persone: l'AI intitola la nota e mette le persone nominate (rubrica o Google Contatti) ──
+        step[0] = "titolo e persone"
+        pg.click(".schede a[href='#/diario']")
+        pg.click("button.fab")
+        pg.fill("#foglio textarea", "Oggi al circolo si parlava di smartphone e adolescenti: non toglierli, ma insegnare a usarli. Ani Mambelli vorrebbe organizzare dei big talk, ne parlo con Giulia.")
+        conferma(pg)
+        riga = pg.locator(".voce-nota", has=pg.locator(".lezione__titolo", has_text="Smartphone e adolescenti"))
+        riga.wait_for(timeout=6000)
+        riga.locator(".persona >> text=Anna Mambelli").wait_for()
+        assert riga.locator(".persona >> text=Giulia Bianchi").count() == 1, "Giulia, in rubrica"
+        assert riga.locator(".lezione__giorno small").inner_text().lower() == "oggi"
+        pg.evaluate("window.scrollTo(0, 0)")
+        pg.wait_for_timeout(300)
+        shot(pg, "9b-diario-persone")
+        # Il foglio di lettura: Giulia apre la rubrica, Anna Google Contatti (in rubrica non entra da sola)
+        riga.locator("button.lezione").click()
+        pg.wait_for_selector("#foglio h2 >> text=Smartphone e adolescenti")
+        assert pg.locator("#foglio .lettura__persone a.pillola", has_text="Anna Mambelli").get_attribute("href") == "https://contacts.google.com/person/c4"
+        assert pg.locator("#foglio .lettura__persone button.pillola", has_text="Giulia Bianchi").count() == 1
+        pg.wait_for_timeout(150)
+        shot(pg, "9c-nota-lettura")
+        # Modifica: titolo e persone cambiati a mano restano anche rianalizzando
+        conferma(pg)
+        pg.wait_for_selector("#foglio h2 >> text=Nota")
+        assert pg.locator("#foglio input.nota__titolo-campo").input_value() == "Smartphone e adolescenti"
+        pg.fill("#foglio input.nota__titolo-campo", "Big talk al circolo")
+        pg.click("#foglio button[aria-label='Togli Anna Mambelli']")
+        pg.wait_for_timeout(150)
+        shot(pg, "9d-nota-modifica")
+        conferma(pg)
+        riga = pg.locator(".voce-nota", has=pg.locator(".lezione__titolo", has_text="Big talk al circolo"))
+        riga.wait_for()
+        assert riga.locator(".persona >> text=Anna Mambelli").count() == 0
+        riga.locator("button.lezione").click()
+        pg.click("#foglio button >> text=Rianalizza")
+        pg.wait_for_timeout(800)
+        assert riga.locator(".lezione__titolo").inner_text() == "Big talk al circolo", "il titolo scritto a mano resta"
+        assert riga.locator(".persona >> text=Anna Mambelli").count() == 0, "le persone corrette a mano restano"
+        assert riga.locator(".persona >> text=Giulia Bianchi").count() == 1
+        # Una nota nuova con il titolo scritto da te: l'AI non lo cambia
+        pg.click("button.fab")
+        pg.fill("#foglio input.nota__titolo-campo", "Idee per il giardino")
+        pg.keyboard.press("Enter")
+        assert pg.evaluate("document.activeElement === document.querySelector('#foglio textarea')"), "Invio nel titolo porta al testo"
+        pg.keyboard.type("Spostare il rosmarino vicino al muro")
+        conferma(pg)
+        pg.wait_for_timeout(800)
+        assert pg.locator(".lezione__titolo >> text=Idee per il giardino").count() == 1
+        menu(pg, "Manuale e rubrica")
+        pg.click("button.pillola >> text=Persone")
+        pg.wait_for_selector(".riga >> text=Giulia Bianchi")
+        assert pg.locator(".riga", has_text="Anna Mambelli").count() == 0, "una persona nominata non entra in rubrica"
+
         # ── Diario per progetto: Tennis con istruzioni, riepilogo sotto la nota, trascrizione ripiegata ──
         step[0] = "diario per progetto"
         pg.click(".schede a[href='#/task']")
@@ -562,18 +617,26 @@ with sync_playwright() as p:
         pg.wait_for_selector("#foglio button.pillola.on >> text=Tennis")  # progetto già scelto dal filtro
         pg.fill("#foglio textarea", "oggi il maestro mi ha fatto lavorare sul dritto, chiudere prima la spalla, e sul rovescio a due mani con i piedi più larghi. devo comprare le corde")
         conferma(pg)
-        pg.wait_for_selector(".nota__riepilogo h4 >> text=Cosa ho imparato", timeout=6000)
-        assert pg.locator(".nota__riepilogo b >> text=chiudere prima").count() == 1, "grassetto nel riepilogo"
-        assert pg.locator(".nota__testo >> text=oggi il maestro").count() == 0, "trascrizione ripiegata"
-        assert pg.locator(".azione >> text=Comprare le corde nuove").count() == 1, "le azioni restano proposte"
+        # Nel Diario la nota è una riga come le lezioni: titolo dell'AI, anteprima dal riepilogo, temi
+        pg.wait_for_selector(".lezione__titolo >> text=Spalla chiusa sul dritto", timeout=6000)
+        riga = pg.locator(".voce-nota", has_text="Spalla chiusa sul dritto")
+        assert "Dritto: chiudere prima la spalla" in riga.locator(".lezione__anteprima").inner_text(), "anteprima dal riepilogo"
+        assert riga.locator(".lezione__temi .etichetta >> text=Dritto").count() == 1
+        assert pg.locator("text=oggi il maestro").count() == 0, "il testo si legge solo aprendo la nota"
+        assert riga.locator(".azione >> text=Comprare le corde nuove").count() == 1, "le azioni restano proposte, sotto la riga"
         pg.wait_for_timeout(250)
         shot(pg, "16-tennis-riepilogo")
-        pg.click("button.nota__apri")
-        pg.wait_for_selector(".nota__testo >> text=oggi il maestro")
+        # Toccandola: foglio di lettura con il riepilogo e la trascrizione ripiegata
+        riga.locator("button.lezione").click()
+        pg.wait_for_selector("#foglio .lezione__riepilogo h4 >> text=Cosa ho imparato")
+        assert pg.locator("#foglio .lezione__riepilogo b >> text=chiudere prima").count() == 1, "grassetto nel riepilogo"
+        assert pg.locator("#foglio .nota__testo--trascrizione").is_hidden(), "trascrizione ripiegata"
+        pg.click("#foglio button.nota__apri")
+        pg.wait_for_selector("#foglio .nota__testo--trascrizione >> text=oggi il maestro")
         pg.wait_for_timeout(150)
         shot(pg, "16b-tennis-trascrizione")
-        # Il riepilogo si corregge dal foglio della nota
-        pg.click(".nota__riepilogo")
+        # Il riepilogo si corregge dal foglio della nota (Modifica)
+        conferma(pg)
         pg.wait_for_selector("#foglio label >> text=Riepilogo")
         r = pg.locator("#foglio .campo textarea")
         assert "Cosa ho imparato" in r.input_value(), r.input_value()
@@ -581,7 +644,11 @@ with sync_playwright() as p:
         pg.wait_for_timeout(150)
         shot(pg, "17-tennis-nota")
         conferma(pg)
-        pg.wait_for_selector(".nota__riepilogo li >> text=Servizio: lancio più avanti")
+        pg.wait_for_timeout(300)
+        riga.locator("button.lezione").click()
+        pg.wait_for_selector("#foglio .lezione__riepilogo li >> text=Servizio: lancio più avanti")
+        pg.click("#foglio button[aria-label='Indietro']")
+        pg.wait_for_timeout(300)
         # Il task proposto finisce nel progetto Tennis
         pg.locator(".azione", has_text="Comprare le corde nuove").locator("button[aria-label='Conferma']").click()
         pg.wait_for_timeout(300)
@@ -698,20 +765,23 @@ with sync_playwright() as p:
         pg.wait_for_selector(".schede a[aria-current='page'][href='#/diario']")
         assert pg.locator("html[data-colore]").count() == 0, "fuori dalla pagina del progetto il colore se ne va"
         pg.wait_for_selector("button.pillola.on >> text=Tennis")
-        pg.wait_for_selector(".nota__riepilogo li >> text=Servizio: lancio più avanti")
+        pg.wait_for_selector(".lezione__titolo >> text=Spalla chiusa sul dritto")
         # Rianalisi di una nota già entrata nella sintesi: nessuna proposta, ma la nota lo dice
-        lezione = pg.locator(".nota", has=pg.locator(".nota__riepilogo li", has_text="Servizio: lancio più avanti"))
-        assert lezione.locator(".nota__esito").count() == 0, "la nota che ha proposto la sintesi non dice «invariata»"
-        prima = pg.locator(".nota__esito >> text=Sintesi del progetto invariata").count()
-        lezione.locator("button >> text=Rianalizza").click()
-        pg.wait_for_function(f"document.querySelectorAll('.nota__esito').length === {prima + 1}", timeout=6000)
+        lezione = pg.locator(".voce-nota").first  # la più recente: quella che ha proposto la sintesi
+        assert lezione.locator(".lezione__stato--muto").count() == 0, "la nota che ha proposto la sintesi non dice «invariata»"
+        lezione.locator("button.lezione").click()
+        pg.click("#foglio button >> text=Rianalizza")
+        lezione.locator(".lezione__stato--muto >> text=sintesi invariata").wait_for(timeout=6000)
         assert pg.locator(".azione", has_text="Sintesi di Tennis").count() == 0, "nessuna sintesi proposta"
+        lezione.locator("button.lezione").click()
+        pg.wait_for_selector("#foglio .nota__esito >> text=Sintesi del progetto invariata")
+        pg.click("#foglio button[aria-label='Indietro']")
         pg.wait_for_timeout(200)
         shot(pg, "17h-sintesi-invariata")
         # In «Tutte» la nota porta il nome del progetto; le altre note restano
         pg.click("button.pillola >> text=Tutte")
-        pg.wait_for_selector(".nota .progetto >> text=Tennis")
-        assert pg.locator(".nota").count() >= 2, "in Tutte ci sono anche le altre note"
+        pg.wait_for_selector(".voce-nota .progetto >> text=Tennis")
+        assert pg.locator(".voce-nota").count() >= 2, "in Tutte ci sono anche le altre note"
         pg.wait_for_timeout(200)
         shot(pg, "18-diario-tutte")
         pg.click(".schede a[href='#/task']")
@@ -726,7 +796,7 @@ with sync_playwright() as p:
         # ── Niente «vuoto» di passaggio: cambiando filtro o sezione la pagina non dice «vuoto»
         # nemmeno per un fotogramma prima che arrivino i dati (video di Mattia, 26/10) ──
         step[0] = "niente vuoto di passaggio"
-        pg.wait_for_selector(".nota .progetto >> text=Tennis")
+        pg.wait_for_selector(".voce-nota .progetto >> text=Tennis")
         pg.evaluate("""() => { window.lampi = []; new MutationObserver((ms) => { for (const m of ms) for (const n of m.addedNodes) {
             if (n.nodeType !== 1) continue;
             const v = n.matches('.vuoto') ? n : n.querySelector('.vuoto');
@@ -743,7 +813,7 @@ with sync_playwright() as p:
         lampi = pg.evaluate("lampi")
         assert not lampi, f"«vuoto» comparso per un attimo: {lampi}"
         # Tornando a una sezione già vista, la pagina è piena al primo fotogramma (ascolti condivisi in db.js)
-        for sezione, sel in [("task", ".riga"), ("lista", ".tessera"), ("spese", ".riga"), ("diario", ".nota")]:
+        for sezione, sel in [("task", ".riga"), ("lista", ".tessera"), ("spese", ".riga"), ("diario", ".voce-nota")]:
             piena = pg.evaluate("""([s, sel]) => new Promise((ok) => {
                 addEventListener('hashchange', () => requestAnimationFrame(() => ok(!!document.querySelector('#view ' + sel))), { once: true });
                 document.querySelector(`.schede a[href='#/${s}']`).click(); })""", [sezione, sel])
@@ -1041,7 +1111,7 @@ with sync_playwright() as p:
         pg.click("button.fab")
         pg.fill("#foglio textarea", "Comprare il caffè")
         conferma(pg)
-        pg.wait_for_selector(".nota__testa >> text=· Haiku", timeout=6000)
+        pg.wait_for_selector(".lezione__ora >> text=· Haiku", timeout=6000)
 
         # ── Nota vocale: Registra in basso a sinistra, Ferma, la trascrizione entra nel campo ──
         step[0] = "nota vocale"
@@ -1088,9 +1158,24 @@ with sync_playwright() as p:
         alta = pg.evaluate("(() => { const a = document.querySelector('#foglio textarea'); return a.scrollHeight - a.clientHeight; })()")
         assert alta <= 1, f"mentre scrivi il campo cresce col testo: {alta}px nascosti"
         conferma(pg)
-        pg.wait_for_selector(".nota__testo >> text=Riga 40 della riunione")
+        # Nell'elenco una riga sola: la prima riga fa da titolo, l'anteprima riprende da lì (due righe al più)
+        riga = pg.locator(".voce-nota", has=pg.locator(".lezione__titolo", has_text="Riga 1 della riunione"))
+        riga.wait_for()
+        assert riga.locator(".lezione__anteprima").inner_text().startswith("Riga 2 della riunione"), riga.locator(".lezione__anteprima").inner_text()
+        assert riga.locator("button.lezione").bounding_box()["height"] < 120, f"la nota lunga non riempie la pagina: {riga.locator('button.lezione').bounding_box()}"
         pg.wait_for_timeout(300)
-        pg.locator(".nota__testo", has_text="Riga 1 della riunione").first.click()
+        shot(pg, "19a-nota-lunga-elenco")
+        # Toccandola si legge tutta, dall'inizio, scorrendo il foglio
+        riga.locator("button.lezione").click()
+        pg.wait_for_selector("#foglio h2 >> text=Riga 1 della riunione")
+        pg.wait_for_selector("#foglio .lettura__testo >> text=Riga 40 della riunione")
+        pg.wait_for_timeout(300)
+        lettura = pg.evaluate("""(() => { const c = document.querySelector('#foglio .foglio__corpo');
+          return { foglio: c.scrollTop, scorre: c.scrollHeight > c.clientHeight }; })()""")
+        assert lettura["foglio"] == 0 and lettura["scorre"], f"si legge dall'inizio scorrendo il foglio: {lettura}"
+        shot(pg, "19b-nota-lunga-lettura")
+        # Modifica: il campo è alto quanto il testo, senza tastiera, dall'inizio
+        conferma(pg)
         pg.wait_for_selector("#foglio h2 >> text=Nota")
         pg.wait_for_timeout(300)
         stato = pg.evaluate("""(() => { const a = document.querySelector('#foglio textarea');
@@ -1101,7 +1186,7 @@ with sync_playwright() as p:
         assert stato["nascosti"] <= 1 and stato["campo"] == 0, f"la nota intera, senza scorrere il campo: {stato}"
         assert stato["foglio"] == 0 and stato["scorre"], f"si parte dall'inizio e si scorre il foglio: {stato}"
         assert not stato["fuoco"], f"aperta per leggere, senza tastiera: {stato}"
-        assert stato["cima"] < 200, f"il testo comincia in alto: {stato}"
+        assert stato["cima"] < 220, f"il testo comincia in alto: {stato}"
         shot(pg, "19-nota-lunga")
         pg.click("#foglio button[aria-label='Indietro']")
         pg.wait_for_timeout(400)

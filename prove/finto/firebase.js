@@ -129,6 +129,20 @@ export function httpsCallable(_f, name) {
     // Nota di un progetto con istruzioni: riepilogo nella nota, un'azione e la sintesi del progetto proposta.
     const nota = coll("journal_entries").get(data.entryId);
     const progetto = nota?.projectId ? coll("projects").get(nota.projectId) : null;
+    // Titolo e persone, per tutte le note, come il server (agent.js): non se l'utente li ha scritti a mano.
+    // Persone: le voci della rubrica il cui nome proprio è nel testo, e i contatti Google finti (non in rubrica).
+    if (nota) {
+      const testo = String(nota.text || "");
+      if (!nota.titoloAMano) nota.titolo = /assemblea/i.test(testo) ? "Assemblea del circolo con Marco" : /smartphone/i.test(testo) ? "Smartphone e adolescenti" : nota.titolo;
+      if (!nota.personeAMano) {
+        const parola = (n) => new RegExp(`\\b${n.split(" ")[0]}\\b`, "i").test(testo);
+        const voci = [...coll("manual_entries").entries()].filter(([, v]) => v.type === "person" && parola(v.name))
+          .map(([id, v]) => ({ nome: v.name, voceId: id, ...(v.googleId ? { googleId: v.googleId } : {}) }));
+        const google = [{ nome: "Anna Mambelli", googleId: "people/c4", in: /mambelli/i }].filter((c) => c.in.test(testo) && !voci.some((v) => v.googleId === c.googleId))
+          .map(({ nome, googleId }) => ({ nome, googleId }));
+        nota.persone = [...voci, ...google];
+      }
+    }
     if (progetto?.istruzioni) {
       // Come il server: una rianalisi sostituisce le proposte ancora in attesa della stessa nota.
       for (const [id, p] of [...P]) if (p.sourceEntryId === data.entryId && p.status === "pending") P.delete(id);
@@ -145,6 +159,12 @@ export function httpsCallable(_f, name) {
         payload: { projectId: nota.projectId, projectName: progetto.name, prima: !progetto.sintesi, sintesi } });
       notify();
       return { data: { proposals: cambia ? 2 : 1, riepilogo: true, sintesi: cambia, sintesiEsito: nota.sintesiEsito, modello: scelti.progetti || "opus" } };
+    }
+    // Le quattro azioni solo dalla nota dell'assemblea; le altre note (riflessioni, prove) non ne hanno.
+    if (!/assemblea/i.test(nota?.text || "")) {
+      for (const [id, p] of [...P]) if (p.sourceEntryId === data.entryId && p.status === "pending") P.delete(id);
+      notify();
+      return { data: { proposals: 0, titolo: !!nota?.titolo, persone: nota?.persone?.length || 0, modello: scelti.note || "sonnet" } };
     }
     P.set("p" + (++seq), { ...base, visibility: "private", kind: "task", summary: "Preparare l'assemblea del circolo entro venerdì", payload: { text: "Preparare l'assemblea", due: "2026-10-30", project: "Circolo", people: "Marco" } });
     P.set("p" + (++seq), { ...base, visibility: "shared", kind: "shopping_item", summary: "Comprare lampadine", payload: { text: "Lampadine" } });
