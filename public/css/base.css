@@ -443,6 +443,9 @@ a.pillola { text-decoration: none; }
 .nota__riepilogo ul { margin: 2px 0 4px; padding-left: 18px; }
 .nota__riepilogo li { margin: 2px 0; }
 .nota__riepilogo li::marker { color: var(--inchiostro-3); }
+/* Rubriche dentro una sezione («Acquisito:», «In lavorazione:»): etichetta con l'elenco sotto (testoRicco). */
+.nota__riepilogo h5 { margin: 8px 0 0; font-size: 13.5px; font-weight: 500; color: var(--inchiostro-2); }
+.nota__riepilogo ul ul, .sintesi-testo ul ul { margin: 0 0 2px; padding-left: 16px; }
 .nota__riepilogo b { font-weight: 600; }
 .nota__apri { display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; padding: 4px 0;
   font-size: 12.5px; color: var(--inchiostro-2); }
@@ -556,6 +559,11 @@ html[data-colore] .pagina-progetto .btn--piatto svg { color: var(--c-testo); }
 .sintesi-testo ul { margin: 2px 0 4px; padding-left: 18px; }
 .sintesi-testo li { margin: 2px 0; }
 .sintesi-testo li::marker { color: var(--inchiostro-3); }
+.sintesi-testo h5 {
+  margin: 10px 0 1px; font-size: 11px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--inchiostro-3);
+}
+.sintesi-testo h5:first-child { margin-top: 2px; }
 .sintesi-testo b { font-weight: 600; }
 .sintesi-proposta { margin-top: 4px; padding-left: 10px; border-left: 1px solid var(--linea-forte); font-size: 14px; }
 

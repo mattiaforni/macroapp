@@ -594,6 +594,11 @@ with sync_playwright() as p:
         assert pg.locator(".tema", has_text="Da provare").locator(".meta").count() == 0, "tema senza lezioni"
         pg.click(".tema__testa >> text=Dritto")
         pg.wait_for_selector(".tema--aperto .tema__corpo li >> text=Chiudere la spalla")
+        # Rubriche come etichette con l'elenco sotto, non come voci dello stesso elenco
+        corpo = pg.locator(".tema--aperto .tema__corpo")
+        assert corpo.locator("h5").all_text_contents() == ["Acquisito", "In lavorazione"], corpo.locator("h5").all_text_contents()
+        assert corpo.locator("li >> text=Acquisito").count() == 0, "«Acquisito:» non è una voce"
+        assert corpo.locator("ul").count() == 2 and corpo.locator("li").count() == 3, "due elenchi sotto le due rubriche"
         pg.wait_for_timeout(200)
         shot(pg, "17c-progetto-sintesi")
         # Dal tema alla lezione: foglio di lettura con riepilogo e trascrizione ripiegata

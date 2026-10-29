@@ -156,21 +156,52 @@ function inline(riga) {
   return riga.split(/\*\*(.+?)\*\*/g).map((pezzo, i) => (i % 2 ? el("b", {}, pezzo) : pezzo));
 }
 
-/** Testo semplice scritto dall'AI (riepiloghi, sintesi): «## » titoli, «- » elenchi, **grassetto**. */
+/**
+ * Etichetta di un gruppo di voci, senza i due punti: una riga corta che finisce con «:» («Acquisito:»,
+ * anche come voce «- Acquisito:») o tutta in grassetto («**In lavorazione**», per una voce solo con «:»).
+ * Altrimenti null.
+ */
+function gruppo(t, voce) {
+  const g = t.match(/^\*\*([^*]+)\*\*(:?)$/);
+  if (g) return voce && !g[2] && !g[1].endsWith(":") ? null : g[1].replace(/:$/, "").trim();
+  const d = t.match(/^([^*:#]{1,40}):$/);
+  return d ? d[1].trim() : null;
+}
+
+/**
+ * Testo semplice scritto dall'AI (riepiloghi, sintesi): «## » titoli, «- » elenchi, **grassetto**.
+ * Le rubriche dentro un tema («Acquisito:», «In lavorazione:») diventano etichette (h5) con l'elenco sotto,
+ * sia scritte come riga a sé sia come voce con le sottovoci rientrate (29/10: rese piatte, non si capiva
+ * quali punti stessero sotto quale rubrica). Le altre sottovoci rientrate restano un elenco annidato.
+ */
 export function testoRicco(testo) {
   const out = [];
-  let elenco = null;
+  let elenco = null; // elenco in corso
+  let base = 0;      // rientro delle voci di primo livello di `elenco`
+  let ultima = null; // ultima voce di primo livello, che accoglie le sottovoci
+  let sotto = null;  // elenco delle sottovoci di `ultima`
+  const chiudi = () => { elenco = null; ultima = null; sotto = null; };
   for (const grezza of String(testo || "").split("\n")) {
     const riga = grezza.trim();
+    const rientro = grezza.match(/^\s*/)[0].replace(/\t/g, "    ").length;
     const voce = riga.match(/^[-*•]\s+(.*)$/);
+    const titolo = !voce && riga.match(/^#{1,4}\s+(.*)$/);
+    const etichetta = titolo || !riga ? null : gruppo(voce ? voce[1] : riga, !!voce);
+    if (etichetta) { chiudi(); out.push(el("h5", {}, etichetta)); continue; }
     if (voce) {
-      if (!elenco) { elenco = el("ul"); out.push(elenco); }
-      elenco.append(el("li", {}, ...inline(voce[1])));
+      if (elenco && ultima && rientro > base) {
+        if (!sotto) { sotto = el("ul"); ultima.append(sotto); }
+        sotto.append(el("li", {}, ...inline(voce[1])));
+        continue;
+      }
+      if (!elenco) { elenco = el("ul"); out.push(elenco); base = rientro; }
+      ultima = el("li", {}, ...inline(voce[1]));
+      sotto = null;
+      elenco.append(ultima);
       continue;
     }
-    elenco = null;
+    chiudi();
     if (!riga) continue;
-    const titolo = riga.match(/^#{1,4}\s+(.*)$/);
     out.push(titolo ? el("h4", {}, titolo[1].replace(/\*\*/g, "")) : el("p", {}, ...inline(riga)));
   }
   return out;

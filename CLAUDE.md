@@ -257,6 +257,16 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
       `<html data-colore>`) prende il posto dell'accento su pillole attive, +, giorni, etichette dei temi,
       nome del tema aperto, pallino accanto al titolo e nel menu. Variabili `--c-<colore>*` in base.css,
       chiaro e notte. Primo caso: Tennis giallo (richiesta di Mattia).
+      **Rubriche e fonti** (29/10, dalle prime lezioni vere con Opus): nella sintesi le rubriche dentro un tema
+      («Acquisito:», «In lavorazione:», «Chiave:») uscivano come voci rientrate e l'app le appiattiva in un solo
+      elenco; ora `testoRicco` le mostra come etichette (h5) con l'elenco sotto, e il prompt chiede righe con i due
+      punti senza rientri. Una lezione ricostruita a posteriori (data cambiata) aveva nel riepilogo punti mai detti:
+      le «precedenti» erano le ultime 8 per `createdAt`, comprese quelle successive alla sua data, e il modello non
+      sapeva la data della nota. Ora precedenti = solo quelle con data anteriore, la nota porta la sua data
+      (`dataNota`), le successive si contano (con la sintesi) o si danno a parte (senza), e il riepilogo prende
+      SOLO dal testo della nota. Da valutare con Mattia: Fable 5.1 per le note dei progetti (10/50 $ per milione
+      contro 4/20 di Opus; più lento: servirebbero streaming e un tempo massimo più lungo) o Opus con `effort` alto
+      (oggi non è impostato: Opus 5.5 va a «medium»).
       **Storico della sintesi** (26/10, richiesta di Mattia): ogni cambio (spunta della proposta, modifica a mano,
       ripristino) mette la versione precedente in `projects.sintesiStorico` (ultime 10, `{ testo, at, origine }`),
       sempre via `salvaSintesi` in components/sintesi.js. «Versioni» nella vista Sintesi: si rileggono e si

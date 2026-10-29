@@ -34,8 +34,16 @@ dell'utente per il progetto:
 ${progetto.istruzioni}
 </istruzioni>
 Il riepilogo è testo semplice: righe che iniziano con "## " per i titoli di sezione, "- " per gli
-elenchi, **grassetto** solo dove serve; niente tabelle. Ciò che va ricordato sta nel riepilogo e nella
-sintesi: le azioni restano per le cose da fare, comprare, spendere o scrivere.
+elenchi, **grassetto** solo dove serve; niente tabelle, niente elenchi annidati né rientri. Per raggruppare
+dei punti sotto una rubrica, una riga breve a sé che finisce con ":" (es. "Acquisito:") e sotto le sue voci
+"- ". Ciò che va ricordato sta nel riepilogo e nella sintesi: le azioni restano per le cose da fare, comprare,
+spendere o scrivere.
+
+Il riepilogo riporta SOLO ciò che dice il testo della nota. La sintesi, le note precedenti e i documenti
+servono a capirla e a collegarla, non a completarla: un punto che non è nella nota non entra nel riepilogo,
+nemmeno se è plausibile o se torna da altre lezioni. Un collegamento con il passato si scrive come tale, con
+la data ("torna la correzione del 15 ottobre"), solo se la nota stessa lo tocca. Se la nota è breve, vaga o
+ricostruita a memoria, il riepilogo resta breve.
 
 Il progetto ha anche una "sintesi": un testo vivo che raccoglie lo stato del progetto, ciò che è emerso
 finora e va tenuto presente (non la cronaca delle singole note). Nel campo "sintesi" scrivi la sintesi
@@ -44,7 +52,9 @@ temi concreti del progetto, una sezione "## " per tema: nel tennis un colpo (Dri
 gli spostamenti, il fisico; in un altro progetto gli argomenti equivalenti. Se le istruzioni elencano i
 temi, usa quelli; altrimenti scegli nomi brevi e tienili identici da una volta all'altra, perché l'app li usa
 per collegare le note ai temi. Le rubriche che le istruzioni chiedono per il riepilogo (cosa ho imparato,
-cosa funziona, su cosa lavorare…) NON sono sezioni della sintesi: vivono dentro ogni tema, come elenchi.
+cosa funziona, su cosa lavorare…) NON sono sezioni della sintesi: vivono dentro ogni tema, ciascuna come riga
+a sé che finisce con ":" (es. "Acquisito:", "In lavorazione:") seguita dalle sue voci "- ", senza rientri;
+una voce è un punto solo, in una frase breve. Le rubriche hanno gli stessi nomi in tutti i temi.
 Oltre ai temi, al massimo due sezioni trasversali, es. "Nodi ricorrenti" (ciò che torna
 lezione dopo lezione) e "Da provare". Dentro una sezione, come prima
 riga facoltativa, "Stato: " e due-quattro parole sul punto in cui si è (es. "migliora", "da affrontare",
@@ -54,6 +64,13 @@ ripetere le date né raccontare le lezioni una per una. Lunghezza: quanto serve 
 Scrivi anche un "titolo" della nota (una riga, al massimo 60 caratteri, di cosa parla: niente data) e
 "temi": i nomi esatti delle sezioni della sintesi che la nota tocca (quelle della sintesi aggiornata,
 escluse le trasversali).`);
+    if (progetto.dopo) {
+      righe.push(`
+La nota non è l'ultima del progetto: ci sono ${progetto.dopo >= DOPO_MAX ? `almeno ${DOPO_MAX}` : progetto.dopo} note con una
+data successiva (è stata inserita dopo, con la sua data, o la si sta rianalizzando).${progetto.sintesi ? ` La sintesi
+attuale le comprende già: aggiungi solo ciò che questa nota porta di nuovo e non far tornare indietro lo
+stato di un tema per una nota più vecchia.` : ""}`);
+    }
     if (progetto.sintesi) {
       righe.push(`
 Sintesi attuale del progetto (l'utente può averla corretta a mano: rispettane struttura e scelte):
@@ -64,28 +81,35 @@ Se la nota di oggi non cambia nulla della sintesi, restituiscila identica.`);
     } else {
       righe.push(`
 Il progetto non ha ancora una sintesi: costruiscila da tutte le note che seguono e dalla nota di oggi.`);
+      if (progetto.seguenti.length) righe.push(`
+Note dello stesso progetto con una data successiva a questa (servono solo per la sintesi, non per il riepilogo):
+<successive>
+${progetto.seguenti.map((n) => `<nota data="${n.data}">\n${n.testo}\n</nota>`).join("\n")}
+</successive>`);
     }
     righe.push(sezioneDocumenti(progetto.documenti));
     righe.push(progetto.precedenti.length
       ? `
-Note precedenti dello stesso progetto, dalla più vecchia alla più recente. Servono a collegare la nota
-di oggi a ciò che è già emerso (correzioni che tornano, progressi, cose da riprendere): nel riepilogo
-non riassumerle di nuovo.
+Note precedenti dello stesso progetto (con una data anteriore a questa), dalla più vecchia alla più
+recente. Servono a collegare la nota a ciò che è già emerso (correzioni che tornano, progressi, cose da
+riprendere): nel riepilogo non riassumerle e non prenderne punti.
 <precedenti>
 ${progetto.precedenti.map((n) => `<nota data="${n.data}">\n${n.testo}\n</nota>`).join("\n")}
 </precedenti>`
-      : `
+      : progetto.dopo ? `
+Non ci sono note del progetto con una data anteriore a questa.` : `
 È la prima nota di questo progetto.`);
   }
   return righe.join("\n");
 }
 
-export function system({ oggi, altro, progetti, persone, categorie, progetto = null }) {
+export function system({ oggi, altro, progetti, persone, categorie, progetto = null, dataNota = "" }) {
   return `Sei l'assistente di un'app personale e di coppia (lista della spesa, spese condivise, task per progetti,
 manuale di casa, calendario della casa, appunti). Ricevi una nota scritta o dettata dall'utente: può contenere errori di dettatura
 e poca punteggiatura. Estrai SOLO le azioni concrete che la nota contiene o chiede, senza inventarne.
 
-Oggi è ${oggi}. L'altra persona della casa si chiama ${altro || "(non ancora indicata)"}.
+Oggi è ${oggi}.${dataNota ? ` La nota però è datata ${dataNota}: le date relative che contiene ("venerdì",
+"domani") si contano da quel giorno.` : ""} L'altra persona della casa si chiama ${altro || "(non ancora indicata)"}.
 Progetti esistenti dell'utente: ${progetti.length ? progetti.join(", ") : "nessuno"}.
 Persone in rubrica: ${persone.length ? persone.join(", ") : "nessuna"}.
 Quando la nota nomina una di queste persone (anche solo col nome proprio), scrivila come è in rubrica.
@@ -239,17 +263,31 @@ async function contesto(db, entry, uid) {
 }
 
 const PRECEDENTI = 8;         // note precedenti date come contesto, quando il progetto ha già una sintesi
+const DOPO_MAX = 20;          // note successive contate (con la sintesi) o date (senza, per costruire la prima)
 const PRIME_PRECEDENTI = 30;  // senza sintesi: tutte le note del progetto (fino a queste), per costruire la prima
 const LUNGHEZZA_NOTA = 4000;  // caratteri per nota precedente
 const LUNGHEZZA_SINTESI = 12000;
+/** La data della nota, se non è di oggi (nota inserita con un altro giorno, o rianalizzata): "" altrimenti. */
+function dataNota(t) {
+  if (!t) return "";
+  const d = t.toDate ? t.toDate() : new Date(t);
+  const giorno = (x) => new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Rome" }).format(x);
+  if (Number.isNaN(d.getTime()) || giorno(d) === giorno(new Date())) return "";
+  const lungo = new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(d);
+  return `${lungo} (${giorno(d)})`;
+}
+
 const fmtData = (t) => new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", day: "numeric", month: "long", year: "numeric" })
   .format(t?.toDate ? t.toDate() : new Date(t || Date.now()));
 
 /**
  * Il progetto della nota, se ce l'ha e l'utente lo vede (suo, o condiviso nella sua casa).
- * Con le istruzioni, anche la sintesi del progetto e le ultime note dello stesso progetto (il riepilogo
- * se c'è, se no il testo); senza sintesi, tutte le note (fino a PRIME_PRECEDENTI) per costruire la prima.
- * La query usa l'indice ownerUid + projectId + createdAt; se manca (appena pubblicato) si va avanti senza.
+ * Con le istruzioni, anche la sintesi del progetto e le note dello stesso progetto con una data anteriore a
+ * quella della nota (il riepilogo se c'è, se no il testo): le ultime PRECEDENTI, o senza sintesi fino a
+ * PRIME_PRECEDENTI per costruire la prima. Le note con una data successiva (nota inserita dopo con la sua
+ * data, o rianalizzata) non sono «precedenti» (29/10: una lezione ricostruita a posteriori aveva preso nel
+ * riepilogo punti di lezioni successive): con la sintesi se ne dice solo quante sono, senza si danno a parte.
+ * Le query usano l'indice ownerUid + projectId + createdAt; se manca (appena pubblicato) si va avanti senza.
  */
 async function progettoDellaNota(db, entry, uid, passo, clientGoogle) {
   if (!entry.projectId) return null;
@@ -261,15 +299,20 @@ async function progettoDellaNota(db, entry, uid, passo, clientGoogle) {
   const istruzioni = s(p.istruzioni).slice(0, 8000);
   const sintesi = s(p.sintesi).slice(0, LUNGHEZZA_SINTESI);
   const quante = sintesi ? PRECEDENTI : PRIME_PRECEDENTI;
-  let precedenti = [];
+  let precedenti = [], seguenti = [], dopo = 0;
   if (istruzioni) {
+    const nota = (d) => ({ data: fmtData(d.data().createdAt), testo: (s(d.data().riepilogo) || s(d.data().text)).slice(0, LUNGHEZZA_NOTA) });
     try {
-      const q = await db.collection("journal_entries")
-        .where("ownerUid", "==", uid).where("projectId", "==", entry.projectId)
-        .orderBy("createdAt", "desc").limit(quante + 1).get();
-      precedenti = q.docs.filter((d) => d.id !== entry.id).slice(0, quante).reverse()
-        .map((d) => ({ data: fmtData(d.data().createdAt), testo: (s(d.data().riepilogo) || s(d.data().text)).slice(0, LUNGHEZZA_NOTA) }))
-        .filter((n) => n.testo);
+      const base = db.collection("journal_entries").where("ownerUid", "==", uid).where("projectId", "==", entry.projectId);
+      const quando = entry.createdAt || null;
+      const [q, succ] = await Promise.all([
+        (quando ? base.where("createdAt", "<", quando) : base).orderBy("createdAt", "desc").limit(quante + 1).get(),
+        quando ? base.where("createdAt", ">", quando).orderBy("createdAt", "desc").limit(DOPO_MAX).get() : null,
+      ]);
+      precedenti = q.docs.filter((d) => d.id !== entry.id).slice(0, quante).reverse().map(nota).filter((n) => n.testo);
+      const altre = (succ?.docs || []).filter((d) => d.id !== entry.id);
+      dopo = altre.length;
+      if (!sintesi) seguenti = altre.reverse().map(nota).filter((n) => n.testo);
     } catch (err) {
       passo(`note precedenti non lette: ${err.message}`);
     }
@@ -288,7 +331,7 @@ async function progettoDellaNota(db, entry, uid, passo, clientGoogle) {
     }
     documenti = await leggiDocumenti(token, p.documenti, passo);
   }
-  return { id: snap.id, name: p.name || "senza nome", istruzioni, sintesi, precedenti, documenti };
+  return { id: snap.id, name: p.name || "senza nome", istruzioni, sintesi, precedenti, seguenti, dopo, documenti };
 }
 
 /** Spese e lista riguardano sempre la casa; le bozze sono sempre solo tue. */
@@ -314,10 +357,10 @@ export async function analyzeJournalEntry(db, entry, { uid, keys, provider, clie
   const conRiepilogo = !!progetto?.istruzioni;
   const modello = modelloPer(profilo, conRiepilogo);
   passo(`contesto pronto (${ctx.progetti.length} progetti, ${ctx.persone.length} persone`
-    + (progetto ? `, progetto con ${progetto.precedenti.length} note precedenti${progetto.documenti.filter((d) => d.testo).length ? `, ${progetto.documenti.filter((d) => d.testo).length} documenti letti` : ""}${conRiepilogo ? ", riepilogo" : ""}` : "") + `), modello ${modello}`);
+    + (progetto ? `, progetto con ${progetto.precedenti.length} note precedenti${progetto.dopo ? ` e ${progetto.dopo} successive` : ""}${progetto.documenti.filter((d) => d.testo).length ? `, ${progetto.documenti.filter((d) => d.testo).length} documenti letti` : ""}${conRiepilogo ? ", riepilogo" : ""}` : "") + `), modello ${modello}`);
   // Tetti larghi: il ragionamento del modello conta nel tetto (vedi ai/claude.js), si paga solo l'usato.
   const out = await reason({
-    system: system({ ...ctx, progetto }), user: entry.text, schema: schema(conRiepilogo), keys, provider,
+    system: system({ ...ctx, progetto, dataNota: dataNota(entry.createdAt) }), user: entry.text, schema: schema(conRiepilogo), keys, provider,
     maxTokens: conRiepilogo ? 32000 : 8000, model: modello,
   });
   passo(`risposta dell'AI (${Array.isArray(out.actions) ? out.actions.length : 0} azioni)`);

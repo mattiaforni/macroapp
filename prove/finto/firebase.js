@@ -136,7 +136,8 @@ export function httpsCallable(_f, name) {
       P.set("p" + (++seq), { ...base, visibility: "private", kind: "task", summary: "Comprare le corde nuove", payload: { text: "Comprare le corde nuove", due: "", project: progetto.name, people: "" } });
       P.set("p" + (++seq), { ...base, visibility: "private", kind: "project_summary", summary: progetto.sintesi ? `Sintesi di ${progetto.name} aggiornata` : `Prima sintesi di ${progetto.name}`,
         payload: { projectId: nota.projectId, projectName: progetto.name, prima: !progetto.sintesi,
-          sintesi: "## Dritto\nStato: migliora\n- Chiudere la spalla **prima** del colpo: correzione che torna\n\n## Rovescio a due mani\nStato: da consolidare\n- Piedi più larghi\n\n## Da provare\n- Servizio con il lancio più avanti" } });
+          // Le rubriche nei due modi visti dall'AI: voce con le sottovoci rientrate e riga a sé con i due punti.
+          sintesi: "## Dritto\nStato: migliora\n- Acquisito:\n  - Racchetta che scende\n  - Mano sinistra per la distanza\nIn lavorazione:\n- Chiudere la spalla **prima** del colpo: correzione che torna\n\n## Rovescio a due mani\nStato: da consolidare\n- Piedi più larghi\n\n## Da provare\n- Servizio con il lancio più avanti" } });
       notify();
       return { data: { proposals: 2, riepilogo: true, sintesi: true, modello: scelti.progetti || "opus" } };
     }
