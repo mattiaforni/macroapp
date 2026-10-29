@@ -70,11 +70,15 @@ il secondo telefono e le scansioni successive non toccano OFF (limite di 15 lett
 I campi `*_tags_it` arrivano già tradotti (categorie, additivi, etichette); `product_type=all` rinvia un
 cosmetico a Open Beauty Facts.
 
-**Indice** (`functions/src/prodotti/indice.js`, 0–100, sul modello di Yuka ma con regole dichiarate): Nutri-Score
-50 (A 100 … E 10), additivi 25 (nessuno 100, −20 per additivo; tetto 60 con un additivo a rischio EFSA
-«moderato», 40 con uno «alto»), NOVA 15 (1–2 100, 3 75, 4 0), bio 10. Media pesata delle componenti note; se ne
-manca una l'indice è «parziale» e lo dice; senza Nutri-Score né ingredienti non c'è indice. Un additivo a rischio
-alto porta l'indice al massimo a 49. Fasce: 75+ eccellente, 50 buono, 25 mediocre, sotto scarso. Il rischio degli
+**Indice** (`functions/src/prodotti/indice.js`, 0–100, sul modello di Yuka ma con regole dichiarate; modello 2 dal
+29/10): Nutri-Score 50 (A 100 … E 10), additivi 25 (conta il rischio, non il numero: −5 per additivo senza giudizio EFSA,
+al più −20, nulla per quelli rivalutati senza rischio; tetto 50 con un additivo a rischio EFSA «moderato», 20 con uno
+«alto»), NOVA 15 (1–2 100, 3 75, 4 25), bio 10 (ignoto se la scheda non ha ingredienti né etichetta bio). Media pesata
+delle componenti note; se ne manca una l'indice è «parziale» e lo dice; senza Nutri-Score né ingredienti non c'è indice.
+Un additivo a rischio alto porta l'indice al massimo a 49. La scheda porta `versioneIndice`: quando il modello cambia
+(`VERSIONE_INDICE`, uguale in `components/prodotto.js`), la function ricalcola dai campi salvati le schede in cache alla
+loro prossima lettura (`ricalcola`, senza Open Food Facts), e la Lista rilegge le voci il cui riassunto ha una versione
+più vecchia (`prodotto.v`) per aggiornarne il pallino (`aggiornaRiassunti`, una volta per codice e per sessione). Fasce: 75+ eccellente, 50 buono, 25 mediocre, sotto scarso. Il rischio degli
 additivi viene dalla tassonomia OFF (`efsa_evaluation_overexposure_risk`, 38 additivi «alto» — nitriti, sorbati,
 benzoati, solfiti, fosfati, carragenina, glutammato —, 14 «moderato»), estratta in `additivi.js` con
 `prove/additivi.py`. Prova senza rete: `node functions/strumenti/prova-prodotti.mjs`.
@@ -100,12 +104,11 @@ vengono dalla parte nutrizionale e dai dati, non dai pesi. Per prodotto:
   (ingredienti e categoria), poi «Rileggi» nella scheda;
 - Wasa (+8): bio secondo OFF, non secondo Yuka (il nome della scheda OFF fa pensare a un'altra versione dello stesso codice);
 - Natù: non si ricostruisce, la parte «Negativo» di Yuka non è nello screenshot.
-Proposta, **in attesa di decisione di Mattia**: additivi per rischio e non per numero (−5 per additivo senza giudizio EFSA,
-al più −20; tetto 50 con uno «moderato», 20 con uno «alto»; resta il tetto 49 sull'indice), NOVA 4 = 25 invece di 0
-(OFF assegna NOVA 4 con un solo ingrediente marcatore, e spesso il marcatore è un additivo già contato), bio «ignoto» quando
-la scheda non ha ingredienti. Sui cinque prodotti: 63, 43, 86, 88, 30. L'indice si calcola quando la scheda entra in
-`prodotti/{ean}`: cambiando il modello va ricalcolato anche per le schede in cache (dai campi salvati, o con una versione
-del modello nella scheda).
+Da qui il modello 2, **applicato il 29/10 su decisione di Mattia**: additivi per rischio e non per numero, NOVA 4 = 25
+invece di 0 (OFF assegna NOVA 4 con un solo ingrediente marcatore, e spesso il marcatore è un additivo già contato), bio
+«ignoto» quando la scheda non ha ingredienti. Sui cinque prodotti: 63, 43, 86, 88, 30 (Yuka 57, 54, 78, 73, 84); la prova
+`prova-prodotti.mjs` li controlla. Restano lontane la crema (dati OFF da completare) e la pizza (la trasformazione, che
+Yuka non conta); Natù sale invece di scendere, per il bio e l'A del Nutri-Score.
 
 ## Spese: regole e saldo
 

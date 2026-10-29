@@ -77,7 +77,7 @@ const SCHEDE_FINTE = {
     nutriscore: { grado: "a", punteggio: -3 }, nova: 1, additivi: [], etichette: [], bio: false,
     nutrienti: { kcal: 359, grassi: 2, saturi: 0.5, zuccheri: 3.5, sale: 0, fibre: 3, proteine: 12.5 },
     livelli: { fat: "low", "saturated-fat": "low", sugars: "low", salt: "low" }, ambiente: "a", completezza: 0.9, ingredientiNoti: true,
-    aggiornatoOff: 1760000000000, indice: 90, fascia: "eccellente", parziale: false, mancano: [],
+    aggiornatoOff: 1760000000000, indice: 90, fascia: "eccellente", parziale: false, mancano: [], versioneIndice: 2,
     componenti: { nutrizione: { valore: 100, peso: 50, stato: "noto" }, additivi: { valore: 100, peso: 25, stato: "noto" }, nova: { valore: 100, peso: 15, stato: "noto" }, bio: { valore: 0, peso: 10, stato: "noto" } },
   },
   8001234567890: {
@@ -87,8 +87,8 @@ const SCHEDE_FINTE = {
     additivi: [{ codice: "E250", nome: "Nitrito di sodio", classe: "conservante", rischio: "alto" }, { codice: "E301", nome: "Ascorbato di sodio", classe: "antiossidante", rischio: null }, { codice: "E621", nome: "Glutammato di monosodio", classe: "esaltatore di sapidità", rischio: "alto" }],
     etichette: [], bio: false, nutrienti: { kcal: 260, grassi: 22, saturi: 8, zuccheri: 1, sale: 2.1, fibre: null, proteine: null },
     livelli: { fat: "high", "saturated-fat": "high", sugars: "low", salt: "high" }, ambiente: null, completezza: 0.8, ingredientiNoti: true,
-    aggiornatoOff: 1760000000000, indice: 25, fascia: "mediocre", parziale: false, mancano: [],
-    componenti: { nutrizione: { valore: 30, peso: 50, stato: "noto" }, additivi: { valore: 40, peso: 25, stato: "noto" }, nova: { valore: 0, peso: 15, stato: "noto" }, bio: { valore: 0, peso: 10, stato: "noto" } },
+    aggiornatoOff: 1760000000000, indice: 24, fascia: "scarso", parziale: false, mancano: [], versioneIndice: 2,
+    componenti: { nutrizione: { valore: 30, peso: 50, stato: "noto" }, additivi: { valore: 20, peso: 25, stato: "noto" }, nova: { valore: 25, peso: 15, stato: "noto" }, bio: { valore: 0, peso: 10, stato: "noto" } },
   },
 };
 async function prodottoFinto(data = {}) {

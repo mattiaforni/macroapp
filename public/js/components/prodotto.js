@@ -11,6 +11,9 @@ import { openSheet, campo } from "./sheet.js";
 
 const chiama = httpsCallable(functions, "prodotto", { timeout: 35000 });
 
+/** Modello dell'indice in uso sul server (VERSIONE_INDICE in functions/src/prodotti/indice.js): tenerli uguali. */
+export const VERSIONE_INDICE = 2;
+
 export const NOME_FASCIA = { eccellente: "Eccellente", buono: "Buono", mediocre: "Mediocre", scarso: "Scarso" };
 const NOME_NOVA = { 1: "Non trasformato o poco", 2: "Ingrediente da cucina", 3: "Trasformato", 4: "Ultra-trasformato" };
 const NOME_COMPONENTE = { nutrizione: "Nutri-Score", additivi: "additivi", nova: "NOVA", bio: "bio" };
@@ -48,7 +51,24 @@ export function pallinoIndice(fascia, cls = "") {
 /** Riassunto da tenere nella voce della lista: quello che serve a disegnare senza rileggere la scheda. */
 export function riassunto(scheda) {
   if (!scheda?.trovato) return null;
-  return { nome: scheda.nome || null, marca: scheda.marca || null, indice: scheda.indice ?? null, fascia: scheda.fascia || null };
+  return { nome: scheda.nome || null, marca: scheda.marca || null, indice: scheda.indice ?? null, fascia: scheda.fascia || null, v: scheda.versioneIndice || 1 };
+}
+
+/**
+ * Riassunti delle voci della lista calcolati con un modello dell'indice più vecchio: si rileggono le
+ * schede (il server le ricalcola dalla cache, senza Open Food Facts) e si aggiornano i pallini.
+ * Una volta per codice e per sessione; `aggiorna(voce, riassunto)` scrive la voce.
+ */
+const giaRiletti = new Set();
+export async function aggiornaRiassunti(voci, aggiorna) {
+  const vecchie = voci.filter((v) => v.ean && v.prodotto && (v.prodotto.v || 1) < VERSIONE_INDICE && !giaRiletti.has(v.ean));
+  for (const v of vecchie) {
+    giaRiletti.add(v.ean);
+    try {
+      const r = riassunto((await chiama({ ean: v.ean })).data);
+      if (r) aggiorna(v, r);
+    } catch (e) { /* si riprova alla prossima apertura dell'app */ giaRiletti.delete(v.ean); return; }
+  }
 }
 
 /**
@@ -188,7 +208,9 @@ function corpoScheda(s, { rileggi } = {}) {
     rigaDato("Additivi", el("span", {}, s.ingredientiNoti ? String(additivi.length) : "?"), s.ingredientiNoti ? (additivi.length ? "elenco sotto" : "nessuno") : "ingredienti non noti"),
     righeAdditivi,
     rigaDato("Trasformazione", el("span", {}, s.nova ? `NOVA ${s.nova}` : "—"), s.nova ? NOME_NOVA[s.nova] : "non nota"),
-    rigaDato("Biologico", el("span", {}, s.bio ? "Sì" : "No"), s.etichette?.length ? s.etichette.slice(0, 3).join(", ") : null),
+    s.componenti?.bio?.stato === "ignoto"
+      ? rigaDato("Biologico", el("span", {}, "?"), "non noto: la scheda è senza ingredienti")
+      : rigaDato("Biologico", el("span", {}, s.bio ? "Sì" : "No"), s.etichette?.length ? s.etichette.slice(0, 3).join(", ") : null),
     valori.some(([, v]) => v != null) ? apriValori : null,
     tabella,
     fonte,

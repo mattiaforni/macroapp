@@ -2,7 +2,7 @@
 // Una chiamata per codice; il risultato normalizzato finisce in `prodotti/{ean}` (vedi index.js),
 // così il secondo telefono e le scansioni successive non richiamano OFF (limite 15 letture/min per IP).
 // OFF chiede uno User-Agent che identifichi l'app: dal browser non si può impostare, da qui sì.
-import { additivo, calcolaIndice } from "./indice.js";
+import { additivo, calcolaIndice, haBio } from "./indice.js";
 
 export const USER_AGENT = "DebitiEDoveri/1.0 (https://macroapp-b9bd0.web.app)";
 
@@ -69,7 +69,7 @@ export function normalizza(p) {
     nova,
     additivi,
     etichette,
-    bio: valutazione.componenti.bio.valore === 100,
+    bio: haBio(p.labels_tags || []),
     nutrienti: {
       kcal: num(n["energy-kcal_100g"]), grassi: num(n.fat_100g), saturi: num(n["saturated-fat_100g"]),
       zuccheri: num(n.sugars_100g), sale: num(n.salt_100g), fibre: num(n.fiber_100g), proteine: num(n.proteins_100g),
@@ -84,5 +84,6 @@ export function normalizza(p) {
     componenti: valutazione.componenti,
     parziale: valutazione.parziale,
     mancano: valutazione.mancano,
+    versioneIndice: valutazione.versioneIndice,
   };
 }

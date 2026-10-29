@@ -15,7 +15,7 @@ import { el, icon, iconaDa, toast, fascia, vuoto, toDate, fab } from "../../core
 import { create, update, remove, watchVisible, VIS } from "../../core/db.js";
 import { session } from "../../core/auth.js";
 import { openSheet, campo } from "../../components/sheet.js";
-import { scansiona, apriProdotto, pallinoIndice, riassunto, NOME_FASCIA } from "../../components/prodotto.js";
+import { scansiona, apriProdotto, pallinoIndice, riassunto, aggiornaRiassunti, NOME_FASCIA } from "../../components/prodotto.js";
 
 export const id = "lista";
 export const title = "Lista";
@@ -311,6 +311,12 @@ export function mount(container) {
   }
 
   container.append(daComprare, recenti, piu, scansionaFab);
-  const stop = watchVisible(COLL, { order: ["createdAt", "asc"] }, (docs) => { items = docs; render(); });
-  return () => { stop(); piu.remove(); scansionaFab.remove(); delete document.documentElement.dataset.fabDoppio; };
+  // Pallini calcolati con un modello dell'indice più vecchio: si aggiornano poco dopo l'apertura.
+  let rilettura = null;
+  const stop = watchVisible(COLL, { order: ["createdAt", "asc"] }, (docs) => {
+    items = docs;
+    render();
+    if (!rilettura) rilettura = setTimeout(() => aggiornaRiassunti(items, (it, r) => update(COLL, it.id, { prodotto: r })), 1200);
+  });
+  return () => { stop(); clearTimeout(rilettura); piu.remove(); scansionaFab.remove(); delete document.documentElement.dataset.fabDoppio; };
 }

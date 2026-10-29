@@ -125,7 +125,7 @@ with sync_playwright() as p:
         pg.wait_for_timeout(200)
         shot(pg, "1e-prodotto-rischio")
         pg.click("#foglio .foglio__secondarie button >> text=Da comprare")
-        pg.wait_for_selector(".tessera:not(.tessera--verde):has(.tessera__indice.indice--mediocre) >> text=Würstel")
+        pg.wait_for_selector(".tessera:not(.tessera--verde):has(.tessera__indice.indice--scarso) >> text=Würstel")
         pg.wait_for_selector("#foglio", state="hidden")
         assert pg.locator(".tessera >> text=Würstel").count() == 1, "la voce scritta a mano e quella scansionata sono una sola"
         pg.wait_for_timeout(300)
@@ -191,6 +191,18 @@ with sync_playwright() as p:
         pg.wait_for_selector("#foglio", state="hidden")
         pg.wait_for_timeout(300)
         shot(pg, "1h-lista-scansiona")
+        # Pallino calcolato col modello 1 dell'indice: rientrando nella Lista la voce si rilegge e si aggiorna.
+        step[0] = "lista, pallini del modello vecchio"
+        pg.evaluate("""async () => { const { update } = await import('/js/core/db.js');
+            const s = JSON.parse(sessionStorage.getItem('finto.firestore'));
+            const [id] = [...new Map(s.store.find(([c]) => c === 'shopping_items')[1]).entries()].find(([, v]) => v.text === 'Spaghetti');
+            await update('shopping_items', id, { prodotto: { nome: 'Spaghetti n.5', marca: 'Barilla', indice: 60, fascia: 'buono' } }); }""")
+        pg.wait_for_selector(".tessera:has(.tessera__indice.indice--buono) >> text=Spaghetti")
+        pg.click(".schede a[href='#/spese']")
+        pg.click(".schede a[href='#/lista']")
+        pg.wait_for_selector(".tessera:has(.tessera__indice.indice--eccellente) >> text=Spaghetti", timeout=5000)
+        voce = pg.evaluate("(() => { const s = JSON.parse(sessionStorage.getItem('finto.firestore')); return [...new Map(s.store.find(([c]) => c === 'shopping_items')[1]).values()].find((v) => v.text === 'Spaghetti'); })()")
+        assert voce["prodotto"]["v"] == 2 and voce["prodotto"]["indice"] == 90, f"riassunto aggiornato: {voce['prodotto']}"
 
         # ── Spese ──
         step[0] = "spese"

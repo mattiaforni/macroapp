@@ -51,7 +51,7 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 | `components/menu.js` | menu a sinistra a gruppi (Progetti — quelli con istruzioni, letti all'apertura —, Casa, Collegamenti, Account), come in Leghe Fantacalcio |
 | `components/proposals.js` | azioni proposte: `APPLICA` per tipo, `renderAzione` (la sintesi proposta si legge ripiegata) |
 | `components/sintesi.js` | sintesi di un progetto (`projects.sintesi`): `sezioniSintesi` (una sezione «## » per tema, prima riga «Stato: …» facoltativa), `tonoStato`, foglio per correggerla |
-| `components/prodotto.js` | codice a barre: `scansiona()` (fotocamera con `BarcodeDetector`, altrimenti il codice scritto; con un codice il foglio **resta aperto** e lo sostituisce `apriProdotto`: chiuderlo faceva un `history.back()` che chiudeva anche l'attesa), `apriProdotto(ean, { inLista, aggiorna })` (foglio di attesa con l'anello e il codice, dopo 6 s «ci mette più del solito»; indietro annulla; errore nello stesso foglio con «Riprova»; poi la scheda da Open Food Facts via function `prodotto`: indice e fascia, Nutri-Score, additivi con rischio EFSA, NOVA, bio, valori per 100 g, «Rileggi» in fondo che salta la cache; con `inLista` il campo «In lista come» con le voci simili (`simile`: tutte le parole della più corta nella più lunga), «Preso» a destra e «Da comprare» a sinistra), `pallinoIndice`, `riassunto` |
+| `components/prodotto.js` | codice a barre: `scansiona()` (fotocamera con `BarcodeDetector`, altrimenti il codice scritto; con un codice il foglio **resta aperto** e lo sostituisce `apriProdotto`: chiuderlo faceva un `history.back()` che chiudeva anche l'attesa), `apriProdotto(ean, { inLista, aggiorna })` (foglio di attesa con l'anello e il codice, dopo 6 s «ci mette più del solito»; indietro annulla; errore nello stesso foglio con «Riprova»; poi la scheda da Open Food Facts via function `prodotto`: indice e fascia, Nutri-Score, additivi con rischio EFSA, NOVA, bio, valori per 100 g, «Rileggi» in fondo che salta la cache; con `inLista` il campo «In lista come» con le voci simili (`simile`: tutte le parole della più corta nella più lunga), «Preso» a destra e «Da comprare» a sinistra), `pallinoIndice`, `riassunto` (con `v` = modello dell'indice), `aggiornaRiassunti`, `VERSIONE_INDICE` |
 | `components/documenti.js` | documenti di Drive collegati a un progetto o a una voce del manuale: `sceltaDocumenti` (elenco + ricerca, in un foglio), `elencoDocumenti`, `rigaDocumento` |
 | `components/registratore.js` | nota vocale: `pulsanteRegistra({ inserisci, progetto })` per la barra del foglio della nota (Registra → tempo · Ferma → «Trascrivo…»), MediaRecorder webm/opus a 32 kbit/s, schermo acceso durante la registrazione, microfono liberato a Ferma o alla chiusura del foglio; manda a `trascrivi` |
 | `components/persone.js` | scelta delle persone di un task: suggerimenti dalla rubrica e da Google Contatti, persone nuove; una voce della rubrica non collegata e il contatto Google con lo stesso nome compaiono una volta sola, e sceglierla la collega |
@@ -330,7 +330,7 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
 - [x] **Prodotti dal codice a barre** (27/10, richiesta di Mattia: «come Yuka, ma su dati aperti»). Open Food Facts
       via function `prodotto` (User-Agent, cache `prodotti/{ean}`), indice 0–100 nostro (docs/ARCHITETTURA.md,
       Prodotti: Nutri-Score 50, additivi 25 con rischio EFSA dalla tassonomia OFF, NOVA 15, bio 10; tetto 49 con un
-      additivo a rischio alto), scheda con «In lista come», «Preso»/«Da comprare», pallino sulla tessera.
+      additivo a rischio alto; dal 29/10 il modello 2, sotto), scheda con «In lista come», «Preso»/«Da comprare», pallino sulla tessera.
       Scanner: `BarcodeDetector` (Chrome Android); su iPhone non c'è e si scrive il codice (eventuale libreria ZXing).
       **Non verificato con l'API vera**: la sessione non raggiungeva openfoodfacts.org (né i dump), quindi la prova
       è su schede costruite a mano nel formato dell'API e la copertura dei prodotti italiani è da misurare dal
@@ -342,8 +342,11 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
       sostituisce, e l'attesa ha l'anello, il codice, l'avviso dopo 6 s, «Riprova»); il tondo «Scansiona» sopra il + della
       Lista (richiesta di Mattia: un passaggio in meno); «Crema mani» proposta come simile a «Crema di nocciole»; «Rileggi».
       **Confronto con Yuka** in docs/ARCHITETTURA.md (Prodotti): le distanze grandi vengono dalla parte nutrizionale e dai
-      dati OFF, non dai pesi. **In attesa di decisione di Mattia** la proposta lì descritta (additivi per rischio, NOVA 4 = 25,
-      bio ignoto senza ingredienti); applicandola, ricalcolare l'indice anche delle schede già in cache (un mese).
+      dati OFF, non dai pesi. **Modello 2 dell'indice** (29/10, deciso da Mattia): additivi per rischio (−5 per non valutato,
+      al più −20; tetti 50/20), NOVA 4 = 25, bio ignoto senza ingredienti. `VERSIONE_INDICE` (server e `components/prodotto.js`,
+      da tenere uguali): le schede in cache si ricalcolano alla prossima lettura (`ricalcola`), le voci della Lista con un
+      riassunto vecchio si rileggono all'apertura (`aggiornaRiassunti`). Da fare a mano su OFF: ingredienti e categoria
+      della crema 100% nocciole Esselunga, poi «Rileggi».
 - [ ] Identità visiva definitiva (resto dell'app): da decidere con Mattia
 
 Bassa priorità (Mattia, 23/10: la revisione delle spese è meno rilevante), previste in

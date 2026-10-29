@@ -345,7 +345,11 @@ export const prodotto = onCall(
       const attuale = snap.exists ? snap.data() : null;
       const eta = attuale?.letto?.toMillis ? Date.now() - attuale.letto.toMillis() : Infinity;
       if (attuale && !req.data?.aggiorna && eta < (attuale.trovato ? CACHE_TROVATO_MS : CACHE_ASSENTE_MS)) {
-        return { ...attuale, ean, letto: attuale.letto.toMillis(), aggiornatoOff: attuale.aggiornatoOff?.toMillis?.() || null };
+        // Scheda calcolata con un modello dell'indice più vecchio: si ricalcola dai suoi campi, senza OFF.
+        const { ricalcola } = await import("./src/prodotti/indice.js");
+        const nuovo = ricalcola(attuale);
+        if (nuovo) await ref.update(nuovo);
+        return { ...attuale, ...(nuovo || {}), ean, letto: attuale.letto.toMillis(), aggiornatoOff: attuale.aggiornatoOff?.toMillis?.() || null };
       }
       const grezzo = await off.leggiOff(ean);
       const scheda = grezzo ? off.normalizza(grezzo) : { trovato: false, fonte: "off" };
