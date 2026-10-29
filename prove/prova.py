@@ -107,7 +107,7 @@ with sync_playwright() as p:
         pg.wait_for_timeout(300)
         shot(pg, "1d-prodotto")
         pg.click("#foglio .btn--conferma >> text=Preso")
-        pg.wait_for_selector(".tessera--verde:has(.tessera__indice.indice--eccellente) >> text=Spaghetti")
+        pg.wait_for_selector(".tessera--verde:has(.tessera__indice .indice--eccellente) >> text=Spaghetti")
         pg.wait_for_selector("#foglio", state="hidden")
         voce = pg.evaluate("(() => { const s = JSON.parse(sessionStorage.getItem('finto.firestore')); return [...new Map(s.store.find(([c]) => c === 'shopping_items')[1]).values()].find((v) => v.text === 'Spaghetti'); })()")
         assert voce["ean"] == "8076809513753" and voce["prodotto"]["fascia"] == "eccellente" and voce["detail"] == "Barilla" and voce["done"] and voce["count"] == 1, f"voce dal prodotto: {voce}"
@@ -125,17 +125,33 @@ with sync_playwright() as p:
         pg.wait_for_timeout(200)
         shot(pg, "1e-prodotto-rischio")
         pg.click("#foglio .foglio__secondarie button >> text=Da comprare")
-        pg.wait_for_selector(".tessera:not(.tessera--verde):has(.tessera__indice.indice--scarso) >> text=Würstel")
+        pg.wait_for_selector(".tessera:not(.tessera--verde):has(.tessera__indice .indice--scarso) >> text=Würstel")
         pg.wait_for_selector("#foglio", state="hidden")
         assert pg.locator(".tessera >> text=Würstel").count() == 1, "la voce scritta a mano e quella scansionata sono una sola"
         pg.wait_for_timeout(300)
         shot(pg, "1f-lista-prodotti")
-        # Dal foglio Modifica si riapre la scheda; un codice sconosciuto dice che non c'è.
-        pg.locator(".tessera", has_text="Würstel").locator("button.altro").click()
+        # Il pallino della tessera apre la scheda (29/10: prima solo dai tre puntini e dal foglio Modifica); l'angolo
+        # che si tocca è largo anche se il pallino è piccolo.
+        wurstel = pg.locator(".tessera", has_text="Würstel")
+        box = wurstel.locator("button.tessera__indice").bounding_box()
+        assert box["width"] >= 34 and box["height"] >= 34, f"angolo del pallino: {box}"
+        box = wurstel.locator("button.altro").bounding_box()
+        assert box["width"] >= 34 and box["height"] >= 34, f"angolo dei tre puntini: {box}"
+        wurstel.locator("button.tessera__indice").click()
+        pg.wait_for_selector("#foglio .prodotto__nome >> text=Würstel di pollo")
+        assert pg.input_value("#foglio input[aria-label='In lista come']") == "Würstel", "la scheda è quella della voce"
+        assert pg.locator("#foglio .btn--conferma >> text=Preso").count() == 1
+        pg.wait_for_timeout(250)
+        shot(pg, "1f2-scheda-dal-pallino")
+        pg.click("#foglio button[aria-label='Indietro']")
+        pg.wait_for_selector("#foglio", state="hidden")
+        assert pg.locator(".tessera:not(.tessera--verde)", has_text="Würstel").count() == 1, "aprire la scheda non compra"
+        # Dal foglio Modifica la riga del prodotto sta in cima e riapre la scheda; un codice sconosciuto dice che non c'è.
+        wurstel.locator("button.altro").click()
         pg.wait_for_selector("#foglio .riga >> text=Würstel di pollo")
+        assert pg.evaluate("document.querySelector('#foglio .riga').getBoundingClientRect().top < document.querySelector('#foglio input').getBoundingClientRect().top"), "il prodotto prima del nome"
         pg.click("#foglio .riga >> text=Würstel di pollo")
         pg.wait_for_selector("#foglio .prodotto__nome >> text=Würstel di pollo")
-        assert pg.locator("#foglio .foglio__barra").count() == 0, "scheda di sola lettura: niente barra"
         pg.click("#foglio button[aria-label='Indietro']")
         pg.wait_for_selector("#foglio", state="hidden")
         pg.click("button.fab")
@@ -197,12 +213,41 @@ with sync_playwright() as p:
             const s = JSON.parse(sessionStorage.getItem('finto.firestore'));
             const [id] = [...new Map(s.store.find(([c]) => c === 'shopping_items')[1]).entries()].find(([, v]) => v.text === 'Spaghetti');
             await update('shopping_items', id, { prodotto: { nome: 'Spaghetti n.5', marca: 'Barilla', indice: 60, fascia: 'buono' } }); }""")
-        pg.wait_for_selector(".tessera:has(.tessera__indice.indice--buono) >> text=Spaghetti")
+        pg.wait_for_selector(".tessera:has(.tessera__indice .indice--buono) >> text=Spaghetti")
         pg.click(".schede a[href='#/spese']")
         pg.click(".schede a[href='#/lista']")
-        pg.wait_for_selector(".tessera:has(.tessera__indice.indice--eccellente) >> text=Spaghetti", timeout=5000)
+        pg.wait_for_selector(".tessera:has(.tessera__indice .indice--eccellente) >> text=Spaghetti", timeout=5000)
         voce = pg.evaluate("(() => { const s = JSON.parse(sessionStorage.getItem('finto.firestore')); return [...new Map(s.store.find(([c]) => c === 'shopping_items')[1]).values()].find((v) => v.text === 'Spaghetti'); })()")
         assert voce["prodotto"]["v"] == 2 and voce["prodotto"]["indice"] == 90, f"riassunto aggiornato: {voce['prodotto']}"
+
+        # ── Cronologia dei prodotti scansionati: l'orologio in testata della Lista ──
+        step[0] = "lista, cronologia"
+        # Una scheda letta prima che la cronologia esistesse (solo nella cache `prodotti`, con lettoDa).
+        pg.evaluate("""async () => { const f = await import('/firebase-stub.js'); const { session } = await import('/js/core/auth.js');
+            await f.setDoc(f.doc({}, 'prodotti', '8000000000009'), { ean: '8000000000009', trovato: true, nome: 'Biscotti al farro', marca: 'Mulino',
+              indice: 55, fascia: 'buono', letto: new Date('2026-09-20T10:00:00'), lettoDa: session.user.uid }); }""")
+        pg.click(".testata button[aria-label='Prodotti scansionati']")
+        pg.wait_for_selector("#page-title >> text=Prodotti scansionati")
+        pg.wait_for_selector(".lezione__titolo >> text=Würstel di pollo")
+        titoli = pg.locator(".lezione__titolo").all_inner_texts()
+        assert titoli[-1] == "Biscotti al farro", f"la scheda vecchia in fondo: {titoli}"
+        assert titoli.count("Spaghetti n.5") == 1, f"un prodotto una volta sola: {titoli}"
+        assert "Prodotto non trovato" in titoli, titoli
+        spaghetti = pg.locator(".voce-nota", has_text="Spaghetti n.5")
+        assert "volte" in spaghetti.inner_text(), "scansionato più volte"
+        assert pg.locator(".voce-nota", has_text="Würstel di pollo").locator(".lezione__stato >> text=in lista").count() == 1
+        assert pg.locator(".fascia >> text=Settembre 2026").count() == 1
+        assert pg.locator(".testata button[aria-label='Prodotti scansionati']").count() == 0, "l'orologio sta solo nella Lista"
+        pg.wait_for_timeout(250)
+        shot(pg, "1i-scansioni")
+        # Dalla cronologia la scheda, con la voce della lista già scelta
+        spaghetti.locator("button.lezione").click()
+        pg.wait_for_selector("#foglio .prodotto__nome >> text=Spaghetti n.5")
+        assert pg.input_value("#foglio input[aria-label='In lista come']") == "Spaghetti"
+        pg.click("#foglio button[aria-label='Indietro']")
+        pg.wait_for_selector("#foglio", state="hidden")
+        pg.click(".schede a[href='#/lista']")
+        pg.wait_for_selector(".testata button[aria-label='Prodotti scansionati']")
 
         # ── Spese ──
         step[0] = "spese"
@@ -602,6 +647,16 @@ with sync_playwright() as p:
         pg.click("button.pillola >> text=Progetto")
         pg.fill("#foglio input[placeholder='Nome del progetto']", "Tennis")
         pg.fill("#foglio textarea", "Riassumi cosa mi ha insegnato il maestro e cosa ricordare.")
+        # Le istruzioni si dettano come una nota: la trascrizione si aggiunge al campo
+        pg.click("#foglio button[aria-label='Registra le istruzioni']")
+        ferma_istr = pg.locator("#foglio button[aria-label='Ferma la registrazione']")
+        ferma_istr.wait_for(timeout=4000)
+        pg.wait_for_timeout(1300)
+        ferma_istr.click()
+        pg.wait_for_function("document.querySelector('#foglio textarea').value.includes('split step')", timeout=8000)
+        assert pg.locator("#foglio textarea").input_value().startswith("Riassumi cosa mi ha insegnato il maestro e cosa ricordare.\n\n"), "si aggiunge a quello scritto"
+        pg.evaluate("sessionStorage.removeItem('finto.trascrizioni')")
+        assert pg.locator("#foglio .colore").count() == 12, "undici colori e nessuno"
         pg.click("#foglio .colore[data-colore='giallo']")
         assert pg.locator("#foglio .colore[data-colore='giallo'][aria-pressed='true']").count() == 1
         pg.wait_for_timeout(150)
@@ -669,7 +724,7 @@ with sync_playwright() as p:
         pg.wait_for_selector("html[data-colore='giallo'] .pagina-progetto")
         pg.wait_for_selector(".tema__nome >> text=Dritto")
         assert pg.locator(".tema", has_text="Dritto").locator(".tema__stato--bene >> text=migliora").count() == 1, "stato del tema"
-        assert "1 lezione" in pg.locator(".tema", has_text="Dritto").inner_text(), "la nota è collegata al tema"
+        assert "1 nota" in pg.locator(".tema", has_text="Dritto").inner_text(), "la nota è collegata al tema"
         assert pg.locator(".tema", has_text="Da provare").locator(".meta").count() == 0, "tema senza lezioni"
         pg.click(".tema__testa >> text=Dritto")
         pg.wait_for_selector(".tema--aperto .tema__corpo li >> text=Chiudere la spalla")
@@ -695,8 +750,9 @@ with sync_playwright() as p:
         r.fill(r.input_value() + "\n- Servizio: lancio più avanti")
         conferma(pg)
         pg.wait_for_timeout(200)
-        # Vista Lezioni: giorno grande, titolo, temi
-        pg.click("button.pillola >> text=Lezioni")
+        # Vista Note (prima «Lezioni», che valeva solo per il tennis): giorno grande, titolo, temi
+        assert pg.locator("button.pillola >> text=Lezioni").count() == 0
+        pg.click("button.pillola >> text=\"Note\"")
         pg.wait_for_selector(".lezione__titolo >> text=Spalla chiusa sul dritto")
         assert pg.locator(".lezione__temi .etichetta >> text=Rovescio a due mani").count() == 1
         # Una lezione passata: dal + con la data cambiata finisce in fondo, nel suo mese
@@ -782,6 +838,10 @@ with sync_playwright() as p:
         pg.click("button.pillola >> text=Tutte")
         pg.wait_for_selector(".voce-nota .progetto >> text=Tennis")
         assert pg.locator(".voce-nota").count() >= 2, "in Tutte ci sono anche le altre note"
+        # Etichetta del progetto e temi nel colore del progetto (Tennis giallo: testo #6E7A00)
+        tennis = pg.locator(".voce-nota[data-colore='giallo']").first
+        assert tennis.locator(".progetto").evaluate("e => getComputedStyle(e).color") == "rgb(110, 122, 0)", "etichetta gialla"
+        assert tennis.locator(".lezione__temi .etichetta").first.evaluate("e => getComputedStyle(e).color") == "rgb(110, 122, 0)", "temi gialli"
         pg.wait_for_timeout(200)
         shot(pg, "18-diario-tutte")
         pg.click(".schede a[href='#/task']")

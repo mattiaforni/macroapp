@@ -136,6 +136,13 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Cronologia dei prodotti scansionati, per casa: la scrive solo la function `prodotto`; si può togliere una voce.
+    match /scansioni/{id} {
+      allow read: if signedIn() && canRead();
+      allow delete: if signedIn() && canDelete();
+      allow create, update: if false;
+    }
+
     // Permesso duraturo dell'account Google (refresh token: contatti, calendario, Drive): solo le Cloud
     // Functions. Lo stato del collegamento che serve all'app sta in users/{uid}.google.
     match /google_tokens/{uid} {

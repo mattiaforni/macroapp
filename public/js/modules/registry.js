@@ -15,7 +15,8 @@ import * as modelli from "./modelli/index.js";
 import * as impostazioni from "./impostazioni/index.js";
 import * as calendario from "./calendario/index.js";
 import * as google from "./google/index.js";
+import * as scansioni from "./scansioni/index.js";
 
-export const modules = [diario, lista, spese, task, progetto, manuale, proposte, banca, notifiche, modelli, impostazioni, calendario, google];
+export const modules = [diario, lista, spese, task, progetto, manuale, proposte, banca, notifiche, modelli, impostazioni, calendario, google, scansioni];
 export const navModules = modules.filter((m) => m.nav);
 export const DEFAULT_ROUTE = "diario";

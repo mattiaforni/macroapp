@@ -3,7 +3,7 @@
 // Tre viste, come pillole:
 // - Sintesi: le sezioni della sintesi (components/sintesi.js) come righe per tema, con lo stato e
 //   le lezioni in cui il tema è emerso (le note che lo portano in `temi`); una riga si apre sul posto.
-// - Lezioni: le note del progetto con le righe del Diario (rigaNota: giorno grande, titolo scritto dall'AI,
+// - Note (29/10: «Lezioni» valeva solo per il tennis): le note del progetto con le righe del Diario (rigaNota: giorno grande, titolo scritto dall'AI,
 //   anteprima, persone e temi); toccandole si legge il riepilogo intero, con la trascrizione ripiegata
 //   (apriLettura, lo stesso foglio del Diario); da lì Modifica e Rianalizza.
 // - Da fare: i task del progetto.
@@ -30,7 +30,7 @@ export { navIcon as icon };
 
 const NOTE = "journal_entries";
 const CHIAVE_PAGINA = "macroapp.progetto";
-const CHIAVE_VISTA = "macroapp.progetto.vista"; // "sintesi" | "lezioni" | "dafare"
+const CHIAVE_VISTA = "macroapp.progetto.vista"; // "sintesi" | "lezioni" (la vista Note) | "dafare"
 const CHIAVE_DIARIO = "macroapp.diario.progetto";
 
 const leggi = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch (e) { return d; } };
@@ -114,7 +114,7 @@ export function mount(container) {
         sez.nome ? el("button.tema__testa", { type: "button", "aria-expanded": aperta ? "true" : "false",
           onclick: () => { aperta ? temiAperti.delete(chiave) : temiAperti.add(chiave); render(); } },
           el("span.tema__nome", {}, sez.nome),
-          lezioni.length ? el("span.meta", {}, `${lezioni.length} ${lezioni.length === 1 ? "lezione" : "lezioni"}`) : null,
+          lezioni.length ? el("span.meta", {}, `${lezioni.length} ${lezioni.length === 1 ? "nota" : "note"}`) : null,
           el("span.spazio"),
           sez.stato ? el("span.tema__stato", { class: tono ? `tema__stato--${tono}` : "" }, sez.stato) : null,
           icon("giu"),
@@ -139,7 +139,7 @@ export function mount(container) {
   }
 
   function vistaLezioni() {
-    if (!note.length) return [!dati.ha("note") ? null : vuoto("Nessuna lezione ancora", "Tocca + e scrivi o detta: la nota finisce in questo progetto.")];
+    if (!note.length) return [!dati.ha("note") ? null : vuoto("Nessuna nota ancora", "Tocca + e scrivi o detta: la nota finisce in questo progetto.")];
     return elencoNote(note, (n, conGiorno) => rigaNota(n, {
       conGiorno,
       proposte: proposte.filter((p) => p.sourceEntryId === n.id),
@@ -172,7 +172,7 @@ export function mount(container) {
     container.classList.add("pagina-progetto");
     const aperti = tasks.filter((t) => !t.done).length;
     const riga = [
-      `${note.length} ${note.length === 1 ? "lezione" : "lezioni"}`,
+      `${note.length} ${note.length === 1 ? "nota" : "note"}`,
       aperti ? `${aperti} da fare` : null,
       progetto.visibility === VIS.SHARED ? "condiviso" : null,
     ].filter(Boolean).join(" · ");
@@ -183,7 +183,7 @@ export function mount(container) {
       el("button.tondo.tondo--piatto", { "aria-label": "Modifica progetto", onclick: () => apriProgetto(progetto) }, icon("matita")),
     ));
     const pillola = (v, testo) => el("button.pillola", { type: "button", class: vista === v ? "on" : "", onclick: () => scegli(v) }, testo);
-    pillole.replaceChildren(pillola("sintesi", "Sintesi"), pillola("lezioni", "Lezioni"), pillola("dafare", "Da fare"));
+    pillole.replaceChildren(pillola("sintesi", "Sintesi"), pillola("lezioni", "Note"), pillola("dafare", "Da fare"));
     corpo.replaceChildren(...(vista === "sintesi" ? vistaSintesi() : vista === "lezioni" ? vistaLezioni() : vistaDaFare()).filter(Boolean));
   }
 

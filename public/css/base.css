@@ -46,6 +46,13 @@
   --c-azzurro: #4FA3D8; --c-azzurro-tinta: #D9ECF7; --c-azzurro-testo: #2B6E9C; --c-azzurro-su: #1F1F1C;
   --c-rosa: #E26C8E;    --c-rosa-tinta: #F9DDE6;    --c-rosa-testo: #B23E63;    --c-rosa-su: #1F1F1C;
   --c-verde: #2F7A55;   --c-verde-tinta: #E2F0E8;   --c-verde-testo: #2F7A55;   --c-verde-su: #FFFFFF;
+  /* 29/10, richiesta di Mattia (più progetti): sei colori in più, testo sulla tinta sopra 4,5:1 */
+  --c-viola: #7E5DC7;   --c-viola-tinta: #ECE5F8;   --c-viola-testo: #5B3E9E;   --c-viola-su: #FFFFFF;
+  --c-rosso: #C94B34;   --c-rosso-tinta: #F9DFD8;   --c-rosso-testo: #A93A24;   --c-rosso-su: #FFFFFF;
+  --c-blu: #3D5FB0;     --c-blu-tinta: #DFE6F5;     --c-blu-testo: #34529A;     --c-blu-su: #FFFFFF;
+  --c-ocra: #D9A23A;    --c-ocra-tinta: #F7ECD2;    --c-ocra-testo: #8A5F10;    --c-ocra-su: #1F1F1C;
+  --c-terra: #9C6A4E;   --c-terra-tinta: #F0E4DB;   --c-terra-testo: #7A4D33;   --c-terra-su: #FFFFFF;
+  --c-grigio: #6E7480;  --c-grigio-tinta: #E7E8EB;  --c-grigio-testo: #4A505C;  --c-grigio-su: #FFFFFF;
 
   /* Nutri-Score, colori ufficiali della scala (components/prodotto.js) */
   --nutri-a: #038141; --nutri-b: #85BB2F; --nutri-c: #FECB02; --nutri-d: #EE8100; --nutri-e: #E63E11;
@@ -94,6 +101,12 @@
   --c-azzurro: #6FB8E6; --c-azzurro-tinta: #16303E; --c-azzurro-testo: #6FB8E6; --c-azzurro-su: #161615;
   --c-rosa: #EE86A4;    --c-rosa-tinta: #3E1F2A;    --c-rosa-testo: #EE86A4;    --c-rosa-su: #161615;
   --c-verde: #5BB98A;   --c-verde-tinta: #1E3A2C;   --c-verde-testo: #5BB98A;   --c-verde-su: #161615;
+  --c-viola: #B39BEB;   --c-viola-tinta: #2D2442;   --c-viola-testo: #B39BEB;   --c-viola-su: #161615;
+  --c-rosso: #EF8069;   --c-rosso-tinta: #42221B;   --c-rosso-testo: #EF8069;   --c-rosso-su: #161615;
+  --c-blu: #86A2E6;     --c-blu-tinta: #1D2642;     --c-blu-testo: #86A2E6;     --c-blu-su: #161615;
+  --c-ocra: #E8BB5C;    --c-ocra-tinta: #3B2F15;    --c-ocra-testo: #E8BB5C;    --c-ocra-su: #161615;
+  --c-terra: #CB9C7E;   --c-terra-tinta: #35271E;   --c-terra-testo: #CB9C7E;   --c-terra-su: #161615;
+  --c-grigio: #A9AFBC;  --c-grigio-tinta: #282B31;  --c-grigio-testo: #A9AFBC;  --c-grigio-su: #161615;
   color-scheme: dark;
 }
 
@@ -389,9 +402,9 @@ a.pillola { text-decoration: none; }
 .tessera b { font-weight: 500; font-size: 12px; line-height: 1.12; overflow-wrap: anywhere; hyphens: auto; -webkit-hyphens: auto;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .tessera small { font-size: 10px; opacity: .9; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-.tessera .altro { position: absolute; top: 0; right: 0; width: 24px; height: 24px; display: flex;
-  align-items: center; justify-content: center; color: var(--su-tessera); opacity: .75; }
-.tessera .altro svg { width: 13px; height: 13px; }
+.tessera .altro { position: absolute; top: 0; right: 0; width: 34px; height: 34px; display: flex; padding: 6px 3px;
+  align-items: flex-start; justify-content: flex-end; color: var(--su-tessera); opacity: .8; border-radius: 0 10px 0 12px; }
+.tessera .altro svg { width: 15px; height: 15px; }
 @media (min-width: 560px) {
   .tessere { gap: 6px; }
   .tessera { border-radius: 12px; padding: 10px 8px 9px; gap: 4px; }
@@ -399,7 +412,7 @@ a.pillola { text-decoration: none; }
   .tessera .iniziale { font-size: 32px; }
   .tessera b { font-size: 13.5px; line-height: 1.15; }
   .tessera small { font-size: 11px; }
-  .tessera .altro { top: 2px; right: 2px; width: 30px; height: 30px; }
+  .tessera .altro { width: 38px; height: 38px; padding: 8px 6px; }
   .tessera .altro svg { width: 16px; height: 16px; }
 }
 
@@ -499,7 +512,7 @@ svg.mini { width: 13px; height: 13px; vertical-align: -2px; color: var(--inchios
 select.pillola { appearance: none; -webkit-appearance: none; padding-right: 14px; }
 
 /* Colore di un progetto: cerchietti per sceglierlo; --p* valgono sulla pagina del progetto e in testata */
-.colori { display: flex; gap: 10px; padding-top: 2px; }
+.colori { display: flex; flex-wrap: wrap; gap: 10px; padding-top: 2px; }
 .colore { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--linea-forte); background: var(--c-pieno); color: var(--c-su); display: inline-flex; align-items: center; justify-content: center; flex: none; }
 .colore svg { width: 15px; height: 15px; }
 .colore--nessuno { background: transparent; color: var(--inchiostro-3); }
@@ -511,6 +524,12 @@ select.pillola { appearance: none; -webkit-appearance: none; padding-right: 14px
 [data-colore="azzurro"] { --c-pieno: var(--c-azzurro); --c-tinta: var(--c-azzurro-tinta); --c-testo: var(--c-azzurro-testo); --c-su: var(--c-azzurro-su); }
 [data-colore="rosa"]    { --c-pieno: var(--c-rosa);    --c-tinta: var(--c-rosa-tinta);    --c-testo: var(--c-rosa-testo);    --c-su: var(--c-rosa-su); }
 [data-colore="verde"]   { --c-pieno: var(--c-verde);   --c-tinta: var(--c-verde-tinta);   --c-testo: var(--c-verde-testo);   --c-su: var(--c-verde-su); }
+[data-colore="viola"]   { --c-pieno: var(--c-viola); --c-tinta: var(--c-viola-tinta); --c-testo: var(--c-viola-testo); --c-su: var(--c-viola-su); }
+[data-colore="rosso"]   { --c-pieno: var(--c-rosso); --c-tinta: var(--c-rosso-tinta); --c-testo: var(--c-rosso-testo); --c-su: var(--c-rosso-su); }
+[data-colore="blu"]     { --c-pieno: var(--c-blu); --c-tinta: var(--c-blu-tinta); --c-testo: var(--c-blu-testo); --c-su: var(--c-blu-su); }
+[data-colore="ocra"]    { --c-pieno: var(--c-ocra); --c-tinta: var(--c-ocra-tinta); --c-testo: var(--c-ocra-testo); --c-su: var(--c-ocra-su); }
+[data-colore="terra"]   { --c-pieno: var(--c-terra); --c-tinta: var(--c-terra-tinta); --c-testo: var(--c-terra-testo); --c-su: var(--c-terra-su); }
+[data-colore="grigio"]  { --c-pieno: var(--c-grigio); --c-tinta: var(--c-grigio-tinta); --c-testo: var(--c-grigio-testo); --c-su: var(--c-grigio-su); }
 /* Sulla pagina del progetto il colore prende il posto dell'accento: pillole attive, +, giorni, temi, etichette */
 html[data-colore] .testata__titolo::after { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--c-pieno); margin: 0 0 14px 8px; vertical-align: baseline; }
 html[data-colore] .pagina-progetto .pillola.on { background: var(--c-pieno); border-color: var(--c-pieno); color: var(--c-su); }
@@ -567,6 +586,9 @@ html[data-colore] .pagina-progetto .btn--piatto svg { color: var(--c-testo); }
 .lezione__ora { font-size: 12px; color: var(--inchiostro-3); font-variant-numeric: tabular-nums; }
 .persona { display: inline-flex; align-items: center; gap: 3px; font-size: 12.5px; color: var(--inchiostro-2); }
 .persona svg { width: 13px; height: 13px; flex: none; color: var(--inchiostro-3); }
+/* Nel Diario l'etichetta del progetto e i temi di una nota prendono il colore del suo progetto (data-colore sulla riga) */
+.voce-nota[data-colore] .progetto, .meta[data-colore] .progetto { color: var(--c-testo); }
+.voce-nota[data-colore] .lezione__temi .etichetta, .lezione__temi[data-colore] .etichetta { background: var(--c-tinta); border-color: transparent; color: var(--c-testo); }
 .lezione__stato { font-size: 12px; color: var(--accento); }
 .lezione__stato--errore { color: var(--frutto); }
 .lezione__stato--muto { color: var(--inchiostro-3); }
@@ -618,8 +640,15 @@ html[data-colore] .pagina-progetto .btn--piatto svg { color: var(--c-testo); }
 .indice--mediocre { --indice: var(--c-arancio); }
 .indice--scarso { --indice: var(--frutto); }
 .indice-pallino { display: inline-block; width: 11px; height: 11px; border-radius: 50%; flex: none; background: var(--indice, var(--linea-forte)); }
-.tessera__indice { position: absolute; left: 7px; top: 7px; width: 9px; height: 9px; box-shadow: 0 0 0 2px rgba(255,255,255,.75); }
-@media (min-width: 420px) { .tessera__indice { left: 9px; top: 9px; width: 10px; height: 10px; } }
+/* Cronologia dei prodotti scansionati (modules/scansioni): il pallino della fascia con l'indice sotto il nome */
+.scansione__indice { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--inchiostro-2); }
+/* Pallino della fascia sulla tessera: piccolo, ma è un pulsante grande quanto l'angolo (34 px) e apre la scheda */
+.tessera__indice { position: absolute; left: 0; top: 0; width: 34px; height: 34px; padding: 7px; display: flex;
+  align-items: flex-start; justify-content: flex-start; border-radius: 10px 0 12px 0; }
+.tessera__indice .indice-pallino { width: 11px; height: 11px; box-shadow: 0 0 0 2px rgba(255,255,255,.75); }
+button.tessera__indice:active, .tessera .altro:active { background: rgba(255,255,255,.18); }
+.tessera:has(.tessera__indice:active, .altro:active) { transform: none; }
+@media (min-width: 420px) { .tessera__indice { padding: 9px; } .tessera__indice .indice-pallino { width: 12px; height: 12px; } }
 
 .scanner { position: relative; margin-top: 14px; border-radius: var(--r-g); overflow: hidden; background: #000; aspect-ratio: 4 / 3; }
 .scanner__video { width: 100%; height: 100%; object-fit: cover; display: block; }

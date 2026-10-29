@@ -102,7 +102,17 @@ async function prodottoFinto(data = {}) {
     throw Object.assign(new Error("Open Food Facts non risponde (503)"), { code: "functions/unavailable" });
   }
   const scheda = SCHEDE_FINTE[ean];
-  if (scheda) coll("prodotti").set(ean, { ...scheda, ean, letto: new Date() });
+  if (scheda) coll("prodotti").set(ean, { ...scheda, ean, letto: new Date(), lettoDa: UID });
+  // Come la function: una scansione entra nella cronologia della casa (scansioni/{casa}_{ean}).
+  if (data?.scansione) {
+    const hid = coll("users").get(UID)?.householdId || null;
+    const S = coll("scansioni"), sid = `${hid || UID}_${ean}`, prima = S.get(sid);
+    const r = scheda || { trovato: false };
+    S.set(sid, { ...(prima || { ownerUid: UID, householdId: hid, visibility: "shared", createdAt: new Date() }), ean, trovato: !!r.trovato,
+      nome: r.nome || null, marca: r.marca || null, quantita: r.quantita || null, categoria: r.categoria || null, indice: r.indice ?? null,
+      fascia: r.fascia || null, scansionataAt: new Date(), scansionataDa: UID, volte: (prima?.volte || 0) + 1 });
+    notify();
+  }
   return { data: scheda ? { ...scheda, ean, letto: Date.now() } : { trovato: false, fonte: "off", ean, letto: Date.now() } };
 }
 
@@ -287,7 +297,7 @@ function matches(d, cond) {
   if (!cond) return true;
   if (cond.or) return cond.or.some((c) => matches(d, c));
   if (cond.and) return cond.and.every((c) => matches(d, c));
-  if (cond.f) return d[cond.f] === cond.v;
+  if (cond.f) return cond.op === "in" ? cond.v.includes(d[cond.f]) : d[cond.f] === cond.v;
   return true;
 }
 // Come Firestore sul telefono, la prima consegna di una query arriva un po' dopo (lettura della
@@ -312,3 +322,10 @@ export function onSnapshot(q, cb) {
   return () => listeners.delete(run);
 }
 export function getRedirectResult() { return Promise.resolve(null); }
+// Lettura una tantum (db.js → leggiDove): dalla rete, quindi un po' più lenta della cache.
+export async function getDocs(q) {
+  await new Promise((r) => setTimeout(r, 120));
+  const cond = q.parts.find((p) => p.or || p.and || p.f);
+  const docs = [...coll(q.coll).entries()].filter(([, d]) => (q.parts.filter((p) => p.f).length > 1 ? q.parts.filter((p) => p.f).every((c) => matches(d, c)) : matches(d, cond)));
+  return { docs: docs.map(([id, d]) => ({ id, data: () => d })) };
+}

@@ -100,7 +100,8 @@ export function sceltaVisibilita(value, onChange) {
 }
 
 /** I colori che un progetto può scegliere (variabili --c-<nome> in base.css). */
-export const COLORI = [["giallo", "Giallo pallina"], ["arancio", "Arancio"], ["azzurro", "Azzurro"], ["rosa", "Rosa"], ["verde", "Verde"]];
+export const COLORI = [["giallo", "Giallo pallina"], ["ocra", "Ocra"], ["arancio", "Arancio"], ["rosso", "Rosso"], ["rosa", "Rosa"],
+  ["viola", "Viola"], ["blu", "Blu"], ["azzurro", "Azzurro"], ["verde", "Verde"], ["terra", "Terra"], ["grigio", "Grigio"]];
 
 /** Cerchietti per scegliere il colore di un progetto: nessuno + COLORI. Ritorna il nodo; onChange(valore). */
 export function sceltaColore(value, onChange) {

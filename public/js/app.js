@@ -47,9 +47,12 @@ function renderNav(active) {
   ));
 }
 
-// Azioni in testata per pagina: per ora nessuna (impostazioni e altro stanno nel menu).
-function renderActions() {
+// Azioni in testata per pagina, a destra: le dà il modulo (`azioni()`), es. la cronologia dei prodotti nella Lista.
+// Solo orientamento: l'azione principale resta in basso a destra.
+function renderActions(id) {
   clear(actions);
+  const mod = modules.find((m) => m.id === id);
+  if (mod?.azioni) actions.append(...mod.azioni());
 }
 
 // Pulsante del menu a sinistra, prima del titolo: c'è solo quando si è dentro l'app.

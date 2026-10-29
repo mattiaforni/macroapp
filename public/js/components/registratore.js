@@ -34,9 +34,10 @@ function inBase64(blob) {
 
 /**
  * Pulsante «Registra». inserisci(testo) riceve la trascrizione; progetto() dice il progetto scelto
- * nel foglio in quel momento (per il vocabolario).
+ * nel foglio in quel momento (per il vocabolario); `cosa` completa l'etichetta per chi legge lo schermo
+ * («Registra una nota vocale», «Registra le istruzioni»).
  */
-export function pulsanteRegistra({ inserisci, progetto = () => null }) {
+export function pulsanteRegistra({ inserisci, progetto = () => null, cosa = "una nota vocale" }) {
   let stato = "fermo"; // fermo | registra | trascrive
   let rec = null, flusso = null, pezzi = [], inizio = 0, tic = null, veglia = null;
   const btn = el("button.pillola", { type: "button", onclick: () => { if (stato === "fermo") avvia(); else if (stato === "registra") ferma(); } });
@@ -44,7 +45,7 @@ export function pulsanteRegistra({ inserisci, progetto = () => null }) {
   function disegna() {
     btn.disabled = stato === "trascrive";
     btn.classList.toggle("registra--attiva", stato === "registra");
-    btn.setAttribute("aria-label", stato === "registra" ? "Ferma la registrazione" : stato === "trascrive" ? "Trascrivo" : "Registra una nota vocale");
+    btn.setAttribute("aria-label", stato === "registra" ? "Ferma la registrazione" : stato === "trascrive" ? "Trascrivo" : `Registra ${cosa}`);
     if (stato === "fermo") btn.replaceChildren(icon("microfono"), "Registra");
     else if (stato === "registra") btn.replaceChildren(el("span.registra__punto"), durata((Date.now() - inizio) / 1000), " · Ferma");
     else btn.replaceChildren(icon("microfono"), "Trascrivo…");

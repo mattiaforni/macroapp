@@ -11,7 +11,7 @@
 // Le scritture non aspettano il server: con la cache offline l'app risponde subito anche senza rete.
 
 import {
-  collection, doc, addDoc, setDoc, getDoc, updateDoc, deleteDoc, query, where, or, and, orderBy,
+  collection, doc, addDoc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, query, where, or, and, orderBy,
   onSnapshot, queryEqual, serverTimestamp, limit as qLimit,
 } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js";
 import { db } from "./firebase.js";
@@ -172,6 +172,14 @@ export function readVisible(coll, opts = {}) {
       setTimeout(() => stop && stop(), 0);
     });
   });
+}
+
+/**
+ * Lettura una tantum con vincoli dati (where), senza la condizione di visibilità: per le collezioni lette da tutti,
+ * come la cache `prodotti`. Ritorna [{ id, ... }]; [] se la lettura non riesce.
+ */
+export async function leggiDove(coll, ...vincoli) {
+  try { return docsDi(await getDocs(query(collection(db, coll), ...vincoli))); } catch (e) { console.warn(`leggiDove(${coll})`, e); return []; }
 }
 
 export { where, serverTimestamp };

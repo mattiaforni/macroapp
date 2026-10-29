@@ -37,7 +37,7 @@ Scelte: nessun framework né bundler (coerente con i progetti precedenti, deploy
   `collega` → scambia il codice, conserva il refresh token in `google_tokens/{uid}`; `token` → permesso di un'ora
   per la People API, che l'app usa direttamente; `scollega` → revoca e cancella.
 - `avvisa` (callable): notifiche push (Firebase Cloud Messaging), vedi «Notifiche» sotto.
-- `prodotto` (callable, `{ ean, aggiorna? }`): scheda di un prodotto dal codice a barre, vedi «Prodotti» sotto.
+- `prodotto` (callable, `{ ean, aggiorna?, scansione? }`): scheda di un prodotto dal codice a barre, vedi «Prodotti» sotto. Con `scansione` la mette nella cronologia della casa (`scansioni`, `src/prodotti/scansioni.js`).
 - `syncBank` (schedulata, 07:15 Europe/Rome): per ogni `bank_connections` attiva scarica i movimenti contabilizzati degli ultimi 7 giorni e crea una proposta di spesa **personale** per ogni uscita (la spesa confermata nasce condivisa). Deduplica con id deterministico della proposta (`eb_<entry_reference>`).
 - Segreti in Secret Manager, mai nel repository.
 

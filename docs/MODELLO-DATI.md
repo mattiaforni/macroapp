@@ -48,6 +48,14 @@ a tutte le case: l'id è il codice a barre, senza `ownerUid` né `householdId`. 
 (un mese di validità se trovato, un giorno se no); la legge chiunque sia autenticato. `rischio` degli additivi:
 `alto` / `moderato` / `nessuno` secondo l'EFSA, `null` = non valutato.
 
+## `scansioni/{casa}_{ean}`
+`ean, trovato, nome, marca, quantita, categoria, indice, fascia, v, scansionataAt, scansionataDa, volte` (+ i campi di base,
+`visibility: "shared"`) — cronologia dei prodotti scansionati della casa (29/10), un documento per prodotto: la scrive solo la
+function `prodotto` quando l'app la chiama con `scansione: true` (fotocamera o codice scritto, non le riletture dei pallini né
+la scheda aperta da una voce); una nuova scansione aggiorna data, riassunto e `volte`. Si legge come le altre collezioni della
+casa (indici `householdId+visibility+createdAt`, `ownerUid+createdAt`; l'ordine per `scansionataAt` lo fa la pagina) e si può
+eliminare. Le scansioni precedenti la pagina le ricava da `prodotti` con `lettoDa` tra i membri della casa (data = `letto`).
+
 ## `manual_entries`
 `type: "shop"|"person"|"info", name, category, address, phone, email, url, notes, googleId?, documenti?: [{ id, nome, mime, link }]`
 Manuale e rubrica insieme: le persone dei task sono voci `person` (private se non dici altrimenti).

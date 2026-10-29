@@ -13,6 +13,7 @@ import { create, update, remove, watchVisible, readVisible, VIS } from "../../co
 import { openSheet, campo } from "../../components/sheet.js";
 import { sceltaPersone } from "../../components/persone.js";
 import { sceltaDocumenti } from "../../components/documenti.js";
+import { pulsanteRegistra } from "../../components/registratore.js";
 import { nomiTask, suRubrica, personaDaId, modiDiContatto, canaleDa } from "../../core/rubrica.js";
 import { vaiA } from "../../core/router.js";
 
@@ -168,7 +169,17 @@ export function apriProgetto(esistente = null, onCreato) {
       el("div.campo", {}, el("label", {}, "Visibilità"), sceltaVisibilita(visibility, (v) => { visibility = v; })),
       el("p.meta", { style: "margin:-8px 0 18px" }, "Un progetto condiviso è visibile ai due membri della casa, insieme ai suoi task. Le note del diario restano solo tue."),
       campo("Istruzioni per il diario", istruzioni),
-      el("p.meta", { style: "margin-top:-10px" }, "Facoltative. Con le istruzioni, l'AI scrive un riepilogo di ogni nota del diario di questo progetto e ti propone la sintesi aggiornata del progetto."),
+      // Le istruzioni si possono dettare come una nota (29/10, richiesta di Mattia): la trascrizione si aggiunge al campo.
+      el("div.segmenti", { style: "margin-top:-10px;padding-top:0" }, pulsanteRegistra({
+        cosa: "le istruzioni",
+        progetto: () => esistente?.id || null,
+        inserisci: (testo) => {
+          const prima = istruzioni.value.trimEnd();
+          istruzioni.value = prima ? `${prima}\n\n${testo}` : testo;
+          istruzioni.dispatchEvent(new Event("input", { bubbles: true }));
+        },
+      })),
+      el("p.meta", {}, "Facoltative, scritte o dettate. Con le istruzioni, l'AI scrive un riepilogo di ogni nota del diario di questo progetto e ti propone la sintesi aggiornata del progetto."),
       documenti.node,
       el("p.meta", { style: "margin-top:-6px" }, "Facoltativi. L'agente legge Documenti, Fogli, Presentazioni e file di testo di Google come contesto quando analizza una nota del progetto (con le istruzioni); degli altri formati tiene solo il nome."),
       el("div.campo", { style: "margin-top:18px" }, el("label", {}, "Colore della pagina"), sceltaColore(colore, (c) => { colore = c; })),

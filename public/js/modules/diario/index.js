@@ -249,9 +249,10 @@ function pillolaPersona(p) {
 /**
  * Riga di una nota, come le lezioni del tennis: giorno a sinistra (solo sulla prima nota del giorno, `conGiorno`),
  * titolo, anteprima su due righe, poi ora e modello (`conOra`, nel Diario), progetto (`progetto`, nel Diario su
- * «Tutte»), persone e temi. Sotto, fuori dal pulsante, le azioni proposte ancora in attesa.
+ * «Tutte»), persone e temi, questi due nel colore del progetto (`colore`). Sotto, fuori dal pulsante, le azioni
+ * proposte ancora in attesa.
  */
-export function rigaNota(n, { conGiorno = true, conOra = false, progetto = null, proposte = [], inAnalisi = false, onApri } = {}) {
+export function rigaNota(n, { conGiorno = true, conOra = false, progetto = null, colore = null, proposte = [], inAnalisi = false, onApri } = {}) {
   const d = toDate(n.createdAt) || new Date();
   const { titolo, anteprima } = testaNota(n);
   const persone = Array.isArray(n.persone) ? n.persone.filter((p) => p?.nome) : [];
@@ -266,7 +267,8 @@ export function rigaNota(n, { conGiorno = true, conOra = false, progetto = null,
     n.sintesiEsito === "invariata" && !inAnalisi ? el("span.lezione__stato.lezione__stato--muto", {}, "sintesi invariata") : null,
   ].filter(Boolean);
   const oggi = stessoGiorno(d, new Date());
-  return el("div.voce-nota", { "data-id": n.id },
+  // Il colore del progetto della nota (29/10, richiesta di Mattia): etichetta del progetto e temi.
+  return el("div.voce-nota", { "data-id": n.id, "data-colore": colore || null },
     el("button.lezione", { type: "button", onclick: onApri },
       el("div.lezione__giorno", {}, conGiorno ? [el("b.display", {}, String(d.getDate())), el("small", {}, oggi ? "oggi" : GIORNI[d.getDay()])] : null),
       el("div.lezione__testo", {},
@@ -297,10 +299,10 @@ export function apriLettura(n, { progetto = null, proposte = [], onModifica, onA
   const sheet = openSheet({
     title: titoloDi(n) || "Nota",
     body: [
-      el("p.meta", { style: "margin-top:12px" }, quando, n.analyzed && n.modello ? ` · letta da ${nomeModello(n.modello)}` : "",
+      el("p.meta", { style: "margin-top:12px", "data-colore": progetto?.colore || null }, quando, n.analyzed && n.modello ? ` · letta da ${nomeModello(n.modello)}` : "",
         progetto ? [" · ", el("span.progetto", {}, progetto.name)] : null),
       persone.length ? el("div.lettura__persone", {}, ...persone.map(pillolaPersona)) : null,
-      n.temi?.length ? el("div.lezione__temi", {}, ...n.temi.map((t) => el("span.etichetta", {}, t))) : null,
+      n.temi?.length ? el("div.lezione__temi", { "data-colore": progetto?.colore || null }, ...n.temi.map((t) => el("span.etichetta", {}, t))) : null,
       n.riepilogo
         ? el("div.sintesi-testo.lezione__riepilogo", {}, ...testoRicco(n.riepilogo))
         : el("div.nota__testo.lettura__testo", {}, n.text),
@@ -448,6 +450,7 @@ export function mount(container) {
     return rigaNota(n, {
       conGiorno, conOra: true,
       progetto: filtro === "tutte" ? progettoDi(n.projectId) : null,
+      colore: progettoDi(n.projectId)?.colore,
       proposte: proposte.filter((p) => p.sourceEntryId === n.id),
       inAnalisi: inCorso.has(n.id),
       onApri: () => leggiNota(n),

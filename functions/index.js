@@ -344,17 +344,28 @@ export const prodotto = onCall(
       const snap = await ref.get();
       const attuale = snap.exists ? snap.data() : null;
       const eta = attuale?.letto?.toMillis ? Date.now() - attuale.letto.toMillis() : Infinity;
+      // Una scansione (non una rilettura dei pallini della Lista) entra nella cronologia della casa; se la scrittura
+      // non riesce, la scheda arriva lo stesso.
+      const segna = async (scheda) => {
+        if (!req.data?.scansione) return;
+        try {
+          const { registraScansione } = await import("./src/prodotti/scansioni.js");
+          await registraScansione(db, req.auth.uid, ean, scheda);
+        } catch (err) { console.warn("scansione non registrata", ean, String(err.message).slice(0, 160)); }
+      };
       if (attuale && !req.data?.aggiorna && eta < (attuale.trovato ? CACHE_TROVATO_MS : CACHE_ASSENTE_MS)) {
         // Scheda calcolata con un modello dell'indice più vecchio: si ricalcola dai suoi campi, senza OFF.
         const { ricalcola } = await import("./src/prodotti/indice.js");
         const nuovo = ricalcola(attuale);
         if (nuovo) await ref.update(nuovo);
+        await segna({ ...attuale, ...(nuovo || {}) });
         return { ...attuale, ...(nuovo || {}), ean, letto: attuale.letto.toMillis(), aggiornatoOff: attuale.aggiornatoOff?.toMillis?.() || null };
       }
       const grezzo = await off.leggiOff(ean);
       const scheda = grezzo ? off.normalizza(grezzo) : { trovato: false, fonte: "off" };
       const { FieldValue } = await import("firebase-admin/firestore");
       await ref.set({ ...scheda, ean, letto: FieldValue.serverTimestamp(), lettoDa: req.auth.uid }, { merge: false });
+      await segna(scheda);
       return { ...scheda, ean, letto: Date.now(), aggiornatoOff: scheda.aggiornatoOff?.getTime?.() || null };
     } catch (err) {
       if (err instanceof HttpsError) throw err;

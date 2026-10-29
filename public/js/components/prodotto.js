@@ -220,13 +220,15 @@ function corpoScheda(s, { rileggi } = {}) {
 /**
  * Scheda del prodotto `ean`. Se c'è `inLista`, in basso le azioni per metterlo nella lista:
  * inLista({ ean, scheda, nome, preso }) → la Lista crea o aggiorna la voce.
- * `voci` sono le voci esistenti (per suggerire il nome), `nomeIniziale` il nome già in lista.
+ * `voci` sono le voci esistenti (per suggerire il nome), `nomeIniziale` il nome già in lista; `scansione` dice
+ * che il codice è appena stato letto (cronologia dei prodotti scansionati, modules/scansioni).
  */
 export async function apriProdotto(ean, opzioni = {}) {
   const attesa = foglioAttesa(ean);
   let scheda;
   try {
-    scheda = (await chiama(opzioni.aggiorna ? { ean, aggiorna: true } : { ean })).data;
+    // `scansione`: il codice viene dalla fotocamera (o scritto a mano): la function lo mette nella cronologia.
+    scheda = (await chiama({ ean, ...(opzioni.aggiorna ? { aggiorna: true } : {}), ...(opzioni.scansione ? { scansione: true } : {}) })).data;
   } catch (e) {
     attesa.ferma();
     if (attesa.foglio.aperto()) foglioErrore(ean, e, opzioni);
@@ -277,7 +279,7 @@ function mostraScheda(s, opzioni = {}) {
   const { inLista, voci = [], nomeIniziale = "" } = opzioni;
   const trovato = !!s.trovato;
   // Rileggi: stessa scheda, letta di nuovo da OFF; il nome già scritto in «In lista come» resta.
-  const rileggi = () => apriProdotto(s.ean, { ...opzioni, aggiorna: true, nomeIniziale: nome?.value.trim() || nomeIniziale });
+  const rileggi = () => apriProdotto(s.ean, { ...opzioni, aggiorna: true, scansione: false, nomeIniziale: nome?.value.trim() || nomeIniziale });
   const corpo = trovato ? corpoScheda(s, { rileggi }) : [
     el("div.prodotto__testa", {}, el("div.prodotto__indice", {}, el("b.display", {}, "?"), el("small", {}, "non trovato")),
       el("div.prodotto__nome", {}, el("b", {}, "Prodotto non trovato"), el("span", {}, `Codice ${s.ean}`))),

@@ -10,8 +10,12 @@
 //   done = false → da comprare
 //   reparto      → scelto a mano nel foglio Modifica; assente = ricavato dal nome
 //   ean, prodotto → voce nata da un codice a barre (components/prodotto.js): la tessera porta il pallino
-//                   della fascia dell'indice, il foglio Modifica apre la scheda
+//                   della fascia dell'indice, che apre la scheda (29/10: prima ci si arrivava solo dai tre
+//                   puntini, troppo piccoli, e dal foglio Modifica)
+//
+// In testata, l'orologio apre la cronologia dei prodotti scansionati (modules/scansioni).
 import { el, icon, iconaDa, toast, fascia, vuoto, toDate, fab } from "../../core/ui.js";
+import { vaiA } from "../../core/router.js";
 import { create, update, remove, watchVisible, VIS } from "../../core/db.js";
 import { session } from "../../core/auth.js";
 import { openSheet, campo } from "../../components/sheet.js";
@@ -22,6 +26,10 @@ export const title = "Lista";
 export const nav = true;
 const navIcon = "lista";
 export { navIcon as icon };
+
+/** In testata, a destra: la cronologia dei prodotti scansionati (29/10, richiesta di Mattia). */
+export const azioni = () => [el("button.tondo.tondo--piatto", { type: "button", "aria-label": "Prodotti scansionati", title: "Prodotti scansionati",
+  onclick: () => vaiA("scansioni") }, icon("orologio"))];
 
 const COLL = "shopping_items";
 const RECENTI_VISIBILI = 18;
@@ -112,7 +120,7 @@ export function aggiungiVoci(raw, items = []) {
  * prodotto («Spaghetti»); la marca va nel dettaglio; ean e riassunto restano nella voce. Se una voce
  * con quel nome c'è già (o `voce` è data), si aggiorna quella; `preso` la mette tra i comprati.
  */
-function inserisciProdotto({ ean, scheda, nome, preso }, items, voce = null) {
+export function inserisciProdotto({ ean, scheda, nome, preso }, items, voce = null) {
   const esistente = voce || items.find((i) => norm(i.text) === norm(nome));
   const uid = session.user.uid;
   const dettaglio = scheda?.trovato ? (scheda.marca || (norm(scheda.nome) !== norm(nome) ? scheda.nome : "")) || "" : null;
@@ -127,17 +135,28 @@ function inserisciProdotto({ ean, scheda, nome, preso }, items, voce = null) {
 }
 
 /** Scansiona un codice e apre la scheda con le azioni della lista. `voce` = voce da collegare. */
-async function scansionaInLista(getItems, voce = null) {
+export async function scansionaInLista(getItems, voce = null) {
   const ean = await scansiona();
   if (!ean) return;
-  await apriProdotto(ean, { inLista: (r) => inserisciProdotto(r, getItems(), voce), voci: getItems(), nomeIniziale: voce?.text || "" });
+  await apriProdotto(ean, { scansione: true, inLista: (r) => inserisciProdotto(r, getItems(), voce), voci: getItems(), nomeIniziale: voce?.text || "" });
 }
 
-function tessera(it, { verde, onTap, onAltro }) {
+/** La scheda del prodotto di una voce, con «Preso» / «Da comprare» per quella voce. */
+export function apriProdottoDi(it, getItems) {
+  return apriProdotto(it.ean, { inLista: (r) => inserisciProdotto(r, getItems(), it), voci: getItems(), nomeIniziale: it.text });
+}
+
+/** Tessera: toccarla compra o rimette in lista; il pallino in alto a sinistra apre la scheda del prodotto, i tre
+ *  puntini in alto a destra il foglio Modifica. Pallino e puntini restano piccoli, ma si toccano in un angolo largo. */
+function tessera(it, { verde, onTap, onAltro, onProdotto }) {
   const nomeIcona = iconaDa(`${it.text} ${it.detail || ""}`, ICONE, null);
+  const pallino = pallinoIndice(it.prodotto?.fascia);
   return el("div.tessera", { class: verde ? "tessera--verde" : "", role: "button", tabindex: "0", onclick: onTap,
       onkeydown: (e) => { if (e.key === "Enter") onTap(); } },
-    pallinoIndice(it.prodotto?.fascia, "tessera__indice"),
+    pallino && onProdotto && it.ean
+      ? el("button.tessera__indice", { type: "button", "aria-label": `Scheda del prodotto: ${pallino.getAttribute("aria-label")}`,
+          onclick: (e) => { e.stopPropagation(); onProdotto(); } }, pallino)
+      : pallino ? el("span.tessera__indice", {}, pallino) : null,
     nomeIcona ? icon(nomeIcona) : el("span.iniziale", {}, (it.text || "?").charAt(0).toUpperCase()),
     el("b", {}, it.text),
     it.detail ? el("small", {}, it.detail) : null,
@@ -161,9 +180,9 @@ function apriModifica(it, getItems) {
   }, n)));
   disegnaReparti();
 
-  // Voce nata da un codice a barre: la riga apre la scheda del prodotto (indice, additivi…).
+  // Voce nata da un codice a barre: la riga apre la scheda del prodotto (indice, additivi…). In cima al foglio.
   const p = it.prodotto;
-  const prodotto = it.ean ? el("div.riga", { role: "button", tabindex: "0", onclick: () => apriProdotto(it.ean) },
+  const prodotto = it.ean ? el("div.riga", { role: "button", tabindex: "0", onclick: () => apriProdottoDi(it, getItems) },
     pallinoIndice(p?.fascia) || el("span.indice-pallino"),
     el("div.testo", {}, el("b", {}, p?.nome || "Prodotto scansionato"),
       el("span", {}, [p?.marca, p?.indice != null ? `${p.indice} · ${NOME_FASCIA[p.fascia]}` : "senza indice"].filter(Boolean).join(" · "))),
@@ -172,10 +191,10 @@ function apriModifica(it, getItems) {
   const sheet = openSheet({
     title: "Modifica",
     body: [
+      prodotto ? el("div", { style: "margin-top:10px" }, el("label.etichetta-campo", {}, "Prodotto"), prodotto) : null,
       campo("Nome", nome),
       campo("Dettaglio", dett),
       campo("Reparto", reparti),
-      prodotto ? el("div", { style: "margin-top:4px" }, el("label.etichetta-campo", {}, "Prodotto"), prodotto) : null,
       el("div.foglio__piede", {},
         el("button.btn.btn--pericolo", { onclick: () => { remove(COLL, it.id); sheet.close(); toast(`${it.text} eliminato`); } },
           icon("cestino"), "Elimina"),
@@ -288,7 +307,7 @@ export function mount(container) {
     daComprare.replaceChildren(...(da.length
       ? [...perReparto].filter(([, voci]) => voci.length).map(([k, voci]) => el("section.reparto", { "aria-label": NOME_REPARTO[k] },
           el("div.reparto__nome", {}, el("span", {}, NOME_REPARTO[k])),
-          el("div.tessere", {}, ...voci.map((it) => tessera(it, { onTap: () => compra(it), onAltro: () => apriModifica(it, () => items) }))),
+          el("div.tessere", {}, ...voci.map((it) => tessera(it, { onTap: () => compra(it), onAltro: () => apriModifica(it, () => items), onProdotto: () => apriProdottoDi(it, () => items) }))),
         ))
       : [vuoto("Niente da comprare", "Tocca + per aggiungere, oppure una voce tra quelle usate di recente.")]));
 
@@ -302,7 +321,7 @@ export function mount(container) {
           render();
         },
       }, recentiAperti ? "Nascondi" : `Mostra (${fatti.length})`)),
-      recentiAperti ? el("div.tessere", {}, ...visibili.map((it) => tessera(it, { verde: true, onTap: () => rimetti(it), onAltro: () => apriModifica(it, () => items) }))) : null,
+      recentiAperti ? el("div.tessere", {}, ...visibili.map((it) => tessera(it, { verde: true, onTap: () => rimetti(it), onAltro: () => apriModifica(it, () => items), onProdotto: () => apriProdottoDi(it, () => items) }))) : null,
       recentiAperti && fatti.length > RECENTI_VISIBILI
         ? el("p", { style: "text-align:center;margin-top:10px" },
             el("button.btn.btn--piatto", { onclick: () => { mostraTutti = !mostraTutti; render(); } }, mostraTutti ? "Mostra meno" : `Tutti i ${fatti.length}`))
