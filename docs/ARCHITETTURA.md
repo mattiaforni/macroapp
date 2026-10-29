@@ -85,6 +85,28 @@ come», con le voci simili già in lista da toccare per unirsi), la marca nel de
 della fascia; dal foglio Modifica si riapre la scheda. Dati ODbL: la scheda cita Open Food Facts e rimanda alla pagina
 del prodotto, anche per completarla quando è incompleta.
 
+**Confronto con Yuka** (29/10, cinque prodotti scansionati da Mattia con le due app; Yuka / D&D): cracker Belle Buone
+57 / 59, pizza margherita Le Stagioni d'Italia 54 / 35, Wasa sesamo 78 / 86, Natù fragole 73 / 80, crema 100% nocciole
+Esselunga 84 / 25. Yuka dichiara nutrizione 60, additivi 30 (quattro livelli di rischio, criteri propri: EFSA, IARC e
+altri studi), bio 10, tetto 49 con un additivo a rischio alto; la trasformazione non entra. La sua parte nutrizionale si
+ricostruisce esattamente su quattro prodotti come **80 − 5 × punti del Nutri-Score 2017** (scala continua; la frutta a
+guscio conta tra i positivi, «Frutta a guscio 100%»), mentre OFF pubblica la lettera del Nutri-Score 2023 e noi la
+convertiamo a gradini. Applicando i pesi e le regole di Yuka ai dati OFF le distanze grandi restano (crema 26, Natù 99):
+vengono dalla parte nutrizionale e dai dati, non dai pesi. Per prodotto:
+- pizza (−19): NOVA 4 vale 0 su 15 punti, e un additivo senza rischio (E330) ne toglie 20 su 100 della sua componente;
+- crema (−59): la scheda OFF non ha ingredienti (additivi e NOVA ignoti, indice parziale) e ha Nutri-Score D, quasi certamente
+  perché OFF la tratta come crema spalmabile (algoritmo generale: conta l'energia, la frutta a guscio non è più tra i
+  positivi) e non come frutta a guscio, che nel 2023 ha una categoria sua con regole più favorevoli. Si corregge su OFF
+  (ingredienti e categoria), poi «Rileggi» nella scheda;
+- Wasa (+8): bio secondo OFF, non secondo Yuka (il nome della scheda OFF fa pensare a un'altra versione dello stesso codice);
+- Natù: non si ricostruisce, la parte «Negativo» di Yuka non è nello screenshot.
+Proposta, **in attesa di decisione di Mattia**: additivi per rischio e non per numero (−5 per additivo senza giudizio EFSA,
+al più −20; tetto 50 con uno «moderato», 20 con uno «alto»; resta il tetto 49 sull'indice), NOVA 4 = 25 invece di 0
+(OFF assegna NOVA 4 con un solo ingrediente marcatore, e spesso il marcatore è un additivo già contato), bio «ignoto» quando
+la scheda non ha ingredienti. Sui cinque prodotti: 63, 43, 86, 88, 30. L'indice si calcola quando la scheda entra in
+`prodotti/{ean}`: cambiando il modello va ricalcolato anche per le schede in cache (dai campi salvati, o con una versione
+del modello nella scheda).
+
 ## Spese: regole e saldo
 
 - Saldo con `split: "equal"` (metà a testa) o `"full"` (tutta a carico dell'altro). Estensione prevista: percentuali.

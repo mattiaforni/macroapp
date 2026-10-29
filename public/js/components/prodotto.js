@@ -4,7 +4,7 @@
 // additivi 25, NOVA 15, bio 10; tetto 49 con un additivo a rischio alto).
 // Dalla scheda la voce entra nella Lista come tipo di prodotto («Spaghetti»), col prodotto nel dettaglio:
 // «Preso» (in basso a destra) tra i comprati, «Da comprare» a sinistra.
-import { el, icon, toast } from "../core/ui.js";
+import { el, icon } from "../core/ui.js";
 import { functions } from "../core/firebase.js";
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-functions.js";
 import { openSheet, campo } from "./sheet.js";
@@ -17,6 +17,18 @@ const NOME_COMPONENTE = { nutrizione: "Nutri-Score", additivi: "additivi", nova:
 const FORMATI = ["ean_13", "ean_8", "upc_a", "upc_e", "code_128"];
 
 const norm = (s) => String(s || "").trim().toLowerCase().replace(/\s+/g, " ");
+
+// Voci simili per «In lista come»: tutte le parole della più corta stanno nella più lunga, senza
+// articoli e preposizioni e senza l'ultima vocale (nocciola/nocciole). «Spaghetti» ~ «Spaghetti
+// integrali»; «Crema mani» no con «Crema di nocciole» (prima bastava la prima parola, 29/10).
+const VUOTE = new Set("di del della dello dei degli delle al alla allo ai agli alle con e ed in per da a il lo la i gli le un una".split(" "));
+const radici = (s) => norm(s).split(/[^\p{L}\p{N}]+/u).filter((p) => p && !VUOTE.has(p)).map((p) => (p.length > 4 ? p.replace(/[aeiouàèéìòù]$/, "") : p));
+export function simile(a, b) {
+  const ra = radici(a), rb = radici(b);
+  if (!ra.length || !rb.length) return false;
+  const [corta, lunga] = ra.length <= rb.length ? [ra, rb] : [rb, ra];
+  return corta.every((p) => lunga.includes(p));
+}
 const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 const n1 = (x) => (x == null ? "—" : String(x).replace(".", ","));
 
@@ -42,6 +54,9 @@ export function riassunto(scheda) {
 /**
  * Foglio «Scansiona»: inquadra il codice; se la fotocamera o il rilevatore non ci sono, si scrive il
  * codice. Ritorna una promessa con il codice (stringa) o null se chiuso.
+ * Con un codice il foglio resta aperto (fotocamera spenta) e chi chiama lo sostituisce subito con
+ * apriProdotto. Chiuderlo qui farebbe un history.back() che arriva dopo l'apertura del foglio
+ * successivo e lo chiude: era la schermata ferma durante la ricerca (29/10).
  */
 export function scansiona() {
   return new Promise((risolvi) => {
@@ -68,6 +83,7 @@ export function scansiona() {
         const c = input.value.replace(/\D/g, "");
         if (!/^\d{8,14}$/.test(c)) { input.focus(); return false; }
         chiudi(c);
+        return false; // resta aperto: lo sostituisce la scheda
       },
       confirmLabel: "Cerca",
     });
@@ -97,7 +113,7 @@ export function scansiona() {
           try {
             const codici = await rilevatore.detect(video);
             const c = codici.map((x) => x.rawValue.replace(/\D/g, "")).find((x) => /^\d{8,14}$/.test(x));
-            if (c) { if (navigator.vibrate) navigator.vibrate(40); chiudi(c); sheet.close(); }
+            if (c) { if (navigator.vibrate) navigator.vibrate(40); chiudi(c); }
           } catch (e) { /* un fotogramma non letto: si riprova */ }
         }, 180);
       } catch (e) {
@@ -120,7 +136,7 @@ function pillolaGrado(grado) {
 }
 
 /** Corpo della scheda di un prodotto trovato. */
-function corpoScheda(s) {
+function corpoScheda(s, { rileggi } = {}) {
   const testa = el("div.prodotto__testa", {},
     el("div.prodotto__indice", { class: s.fascia ? `indice--${s.fascia}` : "" },
       el("b.display", {}, s.indice == null ? "—" : String(s.indice)),
@@ -157,10 +173,13 @@ function corpoScheda(s) {
   apriValori.addEventListener("click", () => { tabella.hidden = !tabella.hidden; apriValori.setAttribute("aria-expanded", String(!tabella.hidden)); });
 
   const quando = s.aggiornatoOff ? new Date(s.aggiornatoOff) : null;
+  // La scheda resta un mese in prodotti/{ean}: dopo averla corretta su OFF, «rileggi» la riprende subito.
   const fonte = el("p.meta.prodotto__fonte", {},
     "Dati: ", el("a", { href: `https://it.openfoodfacts.org/prodotto/${s.ean}`, target: "_blank", rel: "noopener" }, "Open Food Facts"),
     " (ODbL)", quando ? `, scheda aggiornata il ${quando.toLocaleDateString("it-IT")}` : "",
-    s.completezza != null && s.completezza < 0.5 ? ". Scheda incompleta: si può completare lì." : ".");
+    s.completezza != null && s.completezza < 0.5 ? ". Scheda incompleta: si può completare lì." : ".",
+    rileggi ? " " : null,
+    rileggi ? el("a.prodotto__rileggi", { href: "#", role: "button", onclick: (e) => { e.preventDefault(); rileggi(); } }, "Rileggi") : null);
 
   return [
     testa,
@@ -181,23 +200,63 @@ function corpoScheda(s) {
  * inLista({ ean, scheda, nome, preso }) → la Lista crea o aggiorna la voce.
  * `voci` sono le voci esistenti (per suggerire il nome), `nomeIniziale` il nome già in lista.
  */
-export async function apriProdotto(ean, { inLista, voci = [], nomeIniziale = "" } = {}) {
-  const attesa = openSheet({ title: "Prodotto", body: [el("p.meta", { style: "margin-top:14px" }, "Cerco la scheda…")] });
+export async function apriProdotto(ean, opzioni = {}) {
+  const attesa = foglioAttesa(ean);
   let scheda;
   try {
-    scheda = (await chiama({ ean })).data;
+    scheda = (await chiama(opzioni.aggiorna ? { ean, aggiorna: true } : { ean })).data;
   } catch (e) {
-    attesa.close();
-    toast(messaggioErrore(e), { ms: 6000 });
+    attesa.ferma();
+    if (attesa.foglio.aperto()) foglioErrore(ean, e, opzioni);
     return null;
   }
-  mostraScheda(scheda, { inLista, voci, nomeIniziale });
+  attesa.ferma();
+  // Chiuso durante la ricerca (indietro): la scheda non ricompare da sola dopo.
+  if (attesa.foglio.aperto()) mostraScheda(scheda, opzioni);
   return scheda;
 }
 
-function mostraScheda(s, { inLista, voci, nomeIniziale }) {
+/**
+ * Attesa della scheda (function `prodotto`: alla prima chiamata dopo un po' la function parte da
+ * fredda e OFF può metterci qualche secondo). Il foglio è già quello del prodotto: al posto
+ * dell'indice un anello che gira, il codice letto, e dopo 6 s una riga che dice che è lento.
+ */
+function foglioAttesa(ean) {
+  const sotto = el("div.prodotto__lento");
+  const foglio = openSheet({
+    title: "Prodotto",
+    body: [
+      el("div.prodotto__testa", { role: "status", "aria-busy": "true" },
+        el("div.prodotto__indice.prodotto__indice--attesa", { "aria-hidden": "true" }),
+        el("div.prodotto__nome", {}, el("b", {}, "Cerco il prodotto…"), el("span", {}, `Codice ${ean} · Open Food Facts`))),
+      sotto,
+    ],
+  });
+  const timer = setTimeout(() => sotto.replaceChildren(el("p.meta", {}, "Ci mette più del solito: Open Food Facts risponde piano. Puoi aspettare o tornare indietro.")), 6000);
+  return { foglio, ferma: () => clearTimeout(timer) };
+}
+
+/** Errore della ricerca nello stesso foglio, con «Riprova» in basso a destra. */
+function foglioErrore(ean, e, opzioni) {
+  openSheet({
+    title: "Prodotto",
+    stessoFoglio: true,
+    body: [
+      el("div.prodotto__testa", {},
+        el("div.prodotto__indice", {}, el("b.display", {}, "!"), el("small", {}, "non letto")),
+        el("div.prodotto__nome", {}, el("b", {}, messaggioErrore(e)), el("span", {}, `Codice ${ean}`))),
+    ],
+    onConfirm: () => { apriProdotto(ean, opzioni); return false; },
+    confirmLabel: "Riprova",
+  });
+}
+
+function mostraScheda(s, opzioni = {}) {
+  const { inLista, voci = [], nomeIniziale = "" } = opzioni;
   const trovato = !!s.trovato;
-  const corpo = trovato ? corpoScheda(s) : [
+  // Rileggi: stessa scheda, letta di nuovo da OFF; il nome già scritto in «In lista come» resta.
+  const rileggi = () => apriProdotto(s.ean, { ...opzioni, aggiorna: true, nomeIniziale: nome?.value.trim() || nomeIniziale });
+  const corpo = trovato ? corpoScheda(s, { rileggi }) : [
     el("div.prodotto__testa", {}, el("div.prodotto__indice", {}, el("b.display", {}, "?"), el("small", {}, "non trovato")),
       el("div.prodotto__nome", {}, el("b", {}, "Prodotto non trovato"), el("span", {}, `Codice ${s.ean}`))),
     el("p.meta", {}, "Open Food Facts è una banca dati collaborativa: questo codice non c'è ancora. Puoi comunque mettere il prodotto in lista, e ",
@@ -213,7 +272,7 @@ function mostraScheda(s, { inLista, voci, nomeIniziale }) {
     const disegnaSimili = () => {
       const q = norm(nome.value);
       const parole = [q, norm(s.categoria), norm(s.nome)].filter(Boolean);
-      const scelte = voci.filter((v) => norm(v.text) !== q && parole.some((p) => p.includes(norm(v.text)) || norm(v.text).includes(p.split(" ")[0]))).slice(0, 6);
+      const scelte = voci.filter((v) => norm(v.text) !== q && parole.some((p) => simile(p, v.text))).slice(0, 6);
       simili.replaceChildren(...scelte.map((v) => el("button.pillola", { type: "button", onclick: () => { nome.value = v.text; disegnaSimili(); } }, v.text)));
     };
     nome.addEventListener("input", disegnaSimili);
@@ -229,6 +288,7 @@ function mostraScheda(s, { inLista, voci, nomeIniziale }) {
   };
   const sheet = openSheet({
     title: "Prodotto",
+    stessoFoglio: true,
     body: corpo,
     onConfirm: inLista ? () => conferma(true) : undefined,
     confirmLabel: "Preso",

@@ -192,6 +192,16 @@ html[data-passaggio="torna"]::view-transition-new(root) { animation: compare var
 .fab svg { width: 22px; height: 22px; }
 .fab--tondo { padding: 0; width: 54px; }
 .fab:active { transform: scale(.96); }
+/* Seconda azione sopra il + (Lista: Scansiona), più piccola e chiara, centrata sul +. La pagina che
+   la usa mette <html data-fab-doppio>: toast e spazio in fondo salgono di conseguenza. */
+.fab--sopra {
+  right: 21px; bottom: calc(var(--barra) + 14px + 54px + 12px); width: 44px; height: 44px; min-width: 44px; padding: 0;
+  background: var(--foglio); color: var(--inchiostro); border: 1px solid var(--linea-forte);
+  box-shadow: 0 6px 16px -8px rgba(31,31,28,.35);
+}
+.fab--sopra svg { width: 20px; height: 20px; }
+html[data-fab-doppio] .vista { padding-bottom: calc(var(--barra) + 160px); }
+html[data-fab-doppio] .toast { bottom: calc(var(--barra) + 136px); }
 
 /* ───────────── Pillole e segmenti ───────────── */
 
@@ -616,6 +626,14 @@ html[data-colore] .pagina-progetto .btn--piatto svg { color: var(--c-testo); }
 .prodotto__nome b { display: block; font-size: 17px; font-weight: 500; line-height: 1.25; overflow-wrap: anywhere; }
 .prodotto__nome span { display: block; font-size: 13px; color: var(--inchiostro-2); margin-top: 1px; }
 .prodotto__avviso { margin: 2px 0 10px; }
+/* Attesa della scheda: l'anello dell'indice vuoto, con un arco sottile che gira (fermo con «riduci movimento»). */
+.prodotto__indice--attesa { position: relative; background: none; }
+.prodotto__indice--attesa::after {
+  content: ""; position: absolute; inset: -1px; border-radius: 50%;
+  border: 1.5px solid transparent; border-top-color: var(--inchiostro-2); animation: gira .9s linear infinite;
+}
+@keyframes gira { to { transform: rotate(360deg); } }
+.prodotto__lento .meta { margin-top: 4px; }
 .prodotto__fonte { margin-top: 16px; }
 .riga--dato { cursor: default; }
 .riga--dato > span:last-child { font-weight: 500; flex: none; }

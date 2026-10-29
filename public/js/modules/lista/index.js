@@ -264,6 +264,10 @@ export function mount(container) {
   const daComprare = el("div");
   const recenti = el("div");
   const piu = fab("Aggiungi alla lista", () => apriMiServe(() => items));
+  // Scansiona subito, senza passare da «Mi serve» (29/10, richiesta di Mattia): sopra il +.
+  const scansionaFab = el("button.fab.fab--sopra", { type: "button", "aria-label": "Scansiona un prodotto", title: "Scansiona un prodotto",
+    onclick: () => scansionaInLista(() => items) }, icon("codice"));
+  document.documentElement.dataset.fabDoppio = "";
 
   function compra(it) {
     update(COLL, it.id, { done: true, boughtAt: new Date(), doneBy: session.user.uid, count: (it.count || 0) + 1 });
@@ -306,7 +310,7 @@ export function mount(container) {
     ].filter(Boolean));
   }
 
-  container.append(daComprare, recenti, piu);
+  container.append(daComprare, recenti, piu, scansionaFab);
   const stop = watchVisible(COLL, { order: ["createdAt", "asc"] }, (docs) => { items = docs; render(); });
-  return () => { stop(); piu.remove(); };
+  return () => { stop(); piu.remove(); scansionaFab.remove(); delete document.documentElement.dataset.fabDoppio; };
 }

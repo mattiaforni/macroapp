@@ -72,9 +72,11 @@ function altezzaDelTesto(area, corpo) {
  * azioni: pulsanti secondari per la barra in basso, a sinistra. Anche un div.foglio__piede
  * dentro il corpo finisce lì: è il modo in cui i fogli segnano le loro azioni secondarie.
  * Senza onConfirm né azioni la barra non c'è (fogli di sola consultazione).
- * Ritorna { close, confirm }.
+ * stessoFoglio: sostituisce il foglio aperto senza dissolvenza, perché è lo stesso foglio che riceve
+ * i suoi dati (attesa → scheda del prodotto): niente dissolvenze sull'arrivo dei dati.
+ * Ritorna { close, confirm, aperto } (aperto() = non ancora chiuso né sostituito).
  */
-export function openSheet({ title, body, onConfirm, confirmLabel = "Salva", azioni = [] }) {
+export function openSheet({ title, body, onConfirm, confirmLabel = "Salva", azioni = [], stessoFoglio = false }) {
   // Un foglio che ne sostituisce un altro (es. dalle ricorrenti al singolo modello) riusa la
   // stessa voce della cronologia: tornare indietro con history.back() farebbe arrivare il
   // popstate al foglio nuovo, che si chiuderebbe da solo.
@@ -160,7 +162,7 @@ export function openSheet({ title, body, onConfirm, confirmLabel = "Salva", azio
   host.hidden = false;
   // Durante il passaggio a una pagina (es. «Spese ricorrenti» dal menu) il foglio entra con la
   // pagina, senza una seconda dissolvenza.
-  anima(host, document.documentElement.dataset.passaggio ? null : fondoPieno ? "foglio--sostituisce" : "foglio--entra");
+  anima(host, document.documentElement.dataset.passaggio || (stessoFoglio && sostituisce) ? null : fondoPieno ? "foglio--sostituisce" : "foglio--entra");
   smettiTastiera = seguiTastiera(host);
   if (!(sostituisce && history.state && history.state.foglio)) {
     history.pushState({ ...(history.state || {}), foglio: true }, "");
@@ -184,7 +186,7 @@ export function openSheet({ title, body, onConfirm, confirmLabel = "Salva", azio
     first.focus();
   }, 60);
 
-  current = { close, confirm };
+  current = { close, confirm, aperto: () => !closed };
   return current;
 }
 

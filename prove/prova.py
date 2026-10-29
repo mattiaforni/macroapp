@@ -31,7 +31,7 @@ def menu(pg, voce):
 with sync_playwright() as p:
     # Microfono finto (un tono) per la nota vocale, con il permesso già dato.
     b = p.chromium.launch(args=["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"])
-    ctx = b.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=2, has_touch=False, permissions=["microphone"])
+    ctx = b.new_context(viewport={"width": 390, "height": 844}, device_scale_factor=2, has_touch=False, permissions=["microphone", "camera"])
     pg = ctx.new_page()
     pg.on("pageerror", lambda e: errors.append(f"[{step[0]}] pageerror: {e}"))
     pg.on("console", lambda m: errors.append(f"[{step[0]}] console.{m.type}: {m.text}") if m.type in ("error","warning","log") else None)
@@ -145,6 +145,52 @@ with sync_playwright() as p:
         pg.wait_for_selector("#foglio >> text=Prodotto non trovato")
         pg.click("#foglio button[aria-label='Indietro']")
         pg.wait_for_selector("#foglio", state="hidden")
+
+        # ── Scansiona sopra il +: fotocamera finta che legge il codice. La ricerca è lenta (come una
+        # function fredda) e il foglio resta sull'attesa finché la scheda non arriva (29/10: prima lo
+        # scanner chiudeva con un history.back() che chiudeva anche l'attesa, e la lista restava ferma).
+        step[0] = "lista, scansiona diretto"
+        assert pg.locator("button.fab--sopra[aria-label='Scansiona un prodotto']").count() == 1, "Scansiona sopra il +"
+        assert pg.evaluate("document.documentElement.hasAttribute('data-fab-doppio')"), "toast e spazio in fondo spostati"
+        pg.evaluate("""() => { sessionStorage.setItem('finto.prodotto.ritardo', '1500');
+            window.BarcodeDetector = class { constructor() { this.n = 0; } async detect() { return ++this.n > 3 ? [{ rawValue: '8076809513753' }] : []; } }; }""")
+        pg.click("button.fab--sopra")
+        pg.wait_for_selector("#foglio .scanner")
+        pg.wait_for_selector("#foglio .prodotto__indice--attesa")
+        pg.wait_for_timeout(500)
+        assert pg.locator("#foglio .prodotto__indice--attesa").count() == 1, "l'attesa resta visibile finché la scheda non arriva"
+        assert "8076809513753" in pg.locator("#foglio .prodotto__nome").inner_text(), "l'attesa mostra il codice letto"
+        shot(pg, "1g-prodotto-attesa")
+        pg.wait_for_selector("#foglio .prodotto__nome >> text=Spaghetti n.5")
+        assert "foglio--sostituisce" not in (pg.get_attribute("#foglio", "class") or ""), "la scheda prende il posto dell'attesa senza dissolvenza"
+        # «Rileggi» (dopo aver corretto la scheda su OFF): di nuovo l'attesa, poi la scheda, col nome scritto.
+        pg.fill("#foglio input[aria-label='In lista come']", "Spaghettini")
+        pg.click("#foglio .prodotto__rileggi")
+        pg.wait_for_selector("#foglio .prodotto__indice--attesa")
+        pg.wait_for_selector("#foglio .prodotto__nome >> text=Spaghetti n.5")
+        assert pg.input_value("#foglio input[aria-label='In lista come']") == "Spaghettini", "Rileggi tiene il nome scritto"
+        pg.click("#foglio button[aria-label='Indietro']")
+        pg.wait_for_selector("#foglio", state="hidden")
+        # Indietro durante l'attesa: la scheda non ricompare da sola quando arriva.
+        pg.click("button.fab--sopra")
+        pg.wait_for_selector("#foglio .prodotto__indice--attesa")
+        pg.click("#foglio button[aria-label='Indietro']")
+        pg.wait_for_selector("#foglio", state="hidden")
+        pg.wait_for_timeout(1700)
+        assert pg.locator("#foglio").is_hidden(), "chiusa l'attesa, la scheda non si riapre"
+        pg.evaluate("() => { sessionStorage.removeItem('finto.prodotto.ritardo'); delete window.BarcodeDetector; }")
+        # Errore della ricerca nello stesso foglio, «Riprova» in basso a destra.
+        pg.click("button.fab--sopra")
+        pg.fill(codice, "4000000000002")
+        conferma(pg)
+        pg.wait_for_selector("#foglio .btn--conferma >> text=Riprova")
+        assert "non risponde" in pg.locator("#foglio .prodotto__nome").inner_text(), "il foglio dice l'errore"
+        conferma(pg)
+        pg.wait_for_selector("#foglio >> text=Prodotto non trovato")
+        pg.click("#foglio button[aria-label='Indietro']")
+        pg.wait_for_selector("#foglio", state="hidden")
+        pg.wait_for_timeout(300)
+        shot(pg, "1h-lista-scansiona")
 
         # ── Spese ──
         step[0] = "spese"

@@ -92,8 +92,15 @@ const SCHEDE_FINTE = {
   },
 };
 async function prodottoFinto(data = {}) {
-  await new Promise((ok) => setTimeout(ok, 80));
+  // Ritardo come sul telefono (function fredda + Open Food Facts): la prova lo alza per guardare l'attesa.
+  const ritardo = Number(sessionStorage.getItem("finto.prodotto.ritardo") || 80);
+  await new Promise((ok) => setTimeout(ok, ritardo));
   const ean = String(data.ean || "").replace(/\D/g, "");
+  // Un codice che fallisce la prima volta e riesce alla seconda (Open Food Facts che non risponde, poi «Riprova»).
+  if (ean === "4000000000002" && !sessionStorage.getItem("finto.prodotto.fallito")) {
+    sessionStorage.setItem("finto.prodotto.fallito", "1");
+    throw Object.assign(new Error("Open Food Facts non risponde (503)"), { code: "functions/unavailable" });
+  }
   const scheda = SCHEDE_FINTE[ean];
   if (scheda) coll("prodotti").set(ean, { ...scheda, ean, letto: new Date() });
   return { data: scheda ? { ...scheda, ean, letto: Date.now() } : { trovato: false, fonte: "off", ean, letto: Date.now() } };
