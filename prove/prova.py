@@ -56,10 +56,12 @@ with sync_playwright() as p:
           v.dispatchEvent(new TouchEvent(tipo, { bubbles: true, cancelable: true, touches: fine ? [] : [mk()], changedTouches: [mk()] }));
         }"""
         def tocco(tipo, x, y, fine=False): pg.evaluate(TOCCO, [tipo, x, y, fine])
-        def scorri(dx, dy=0, durante=None):
+        def scorri(dx, dy=0, durante=None, lento=False):
+            # Un gesto simulato è istantaneo, cioè un colpo deciso: con `lento` si ferma prima di lasciare.
             x0, y0 = 180, 400
             tocco("touchstart", x0, y0); tocco("touchmove", x0 + dx / 3, y0 + dy / 3); tocco("touchmove", x0 + dx, y0 + dy)
             if durante: durante()
+            if lento: pg.wait_for_timeout(200)
             tocco("touchend", x0 + dx, y0 + dy, True)
             pg.wait_for_function("!document.documentElement.hasAttribute('data-scorro')")
         def accanto_e(testo, dx):
@@ -75,9 +77,13 @@ with sync_playwright() as p:
         pg.wait_for_selector(".schede a[aria-current='page'][href='#/spese']")
         scorri(120, durante=lambda: accanto_e("Da comprare", 120))
         pg.wait_for_selector(".schede a[aria-current='page'][href='#/lista']")
-        scorri(-40)          # troppo corto: si torna a posto
+        scorri(-40, lento=True)  # troppo corto e senza slancio: si torna a posto
         scorri(-120, 150)    # più verticale che orizzontale: è uno scorrimento della pagina
         assert sezione() == "#/lista" and pg.locator(".scorro").count() == 0, "un gesto corto o verticale non cambia sezione"
+        scorri(120)
+        pg.wait_for_selector(".schede a[aria-current='page'][href='#/diario']")
+        scorri(-50)          # un colpo corto ma deciso basta
+        pg.wait_for_selector(".schede a[aria-current='page'][href='#/lista']")
         scorri(120)
         pg.wait_for_selector(".schede a[aria-current='page'][href='#/diario']")
         scorri(120)          # dalla prima sezione a destra: resta

@@ -20,8 +20,11 @@ export function currentRoute() {
 const riduci = window.matchMedia?.("(prefers-reduced-motion: reduce)");
 let passaggi = 0;
 let forzato = null; // passaggio chiesto da vaiA per la prossima pagina
+let adottata = null; // route già montata da sostituisci(): il prossimo hashchange su di lei non rimonta
+let contenitore = null, cambio = null;
 
 export function startRouter({ container, fallback, onChange, transizione }) {
+  contenitore = container; cambio = onChange;
   async function monta(id, mount) {
     if (current?.unmount) { try { current.unmount(); } catch (e) { console.error(e); } }
     container.replaceChildren();
@@ -32,6 +35,8 @@ export function startRouter({ container, fallback, onChange, transizione }) {
   }
   function render() {
     const id = currentRoute() || fallback;
+    if (adottata === id) { adottata = null; return; }
+    adottata = null;
     const mount = routes.get(id) || routes.get(fallback);
     const tipo = !current ? null : forzato || (current.id !== id ? transizione?.(current.id, id) : null);
     forzato = null;
@@ -52,6 +57,18 @@ export function startRouter({ container, fallback, onChange, transizione }) {
   }
   window.addEventListener("hashchange", render);
   return render();
+}
+
+/** La pagina `id` è già montata altrove (lo scorrimento tra le sezioni, core/scorrimento.js): i suoi
+ *  nodi `figli` entrano nella vista al posto della pagina aperta, che si smonta, senza rimontare niente;
+ *  `smonta` è il suo smontaggio. L'hash si aggiorna senza passaggio. */
+export function sostituisci(id, smonta, figli) {
+  if (current?.unmount) { try { current.unmount(); } catch (e) { console.error(e); } }
+  contenitore.replaceChildren(...figli);
+  current = { id, unmount: smonta };
+  adottata = id;
+  location.hash = `#/${id}`;
+  cambio?.(id);
 }
 
 // Richieste di apertura: il menu può chiedere a una pagina di aprire un suo foglio

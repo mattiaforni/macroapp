@@ -7,13 +7,15 @@
 // Come: la pagina accanto si monta davvero (`mount` del modulo) in un pannello fisso a lato
 // (`.scorro`), senza il suo + (`.scorro .fab` è nascosto: il + della pagina aperta resta fermo e
 // quello della pagina nuova prende il suo posto). I figli della vista e il pannello si spostano con
-// `--scorro-dx`; con «riduci movimento» si cambia di colpo al rilascio.
-import { navigate } from "./router.js";
+// `--scorro-dx`; assestata, la pagina nuova passa nella vista così com'è (`sostituisci` del router:
+// niente rimontaggio, niente scatti). Con «riduci movimento» si cambia di colpo al rilascio.
+import { sostituisci } from "./router.js";
 
 const DECISIONE = 10;   // px dopo i quali si capisce se il gesto è orizzontale o verticale
 const BORDO = 24;       // px ai lati dello schermo lasciati al gesto del sistema
-const SOGLIA = 0.25;    // frazione della larghezza oltre la quale si cambia sezione
-const LANCIO = 0.45;    // px/ms: un colpo deciso cambia sezione anche prima della soglia
+const SOGLIA = 0.2;     // frazione della larghezza oltre la quale si cambia sezione
+const LANCIO = 0.35;    // px/ms: un colpo deciso cambia sezione anche prima della soglia
+const MEMORIA = 100;    // ms: la velocità si misura sugli ultimi spostamenti, non sull'ultimo solo
 const ASSESTA = 220;    // ms per assestarsi al rilascio (base.css, --t-scorro)
 const riduci = window.matchMedia?.("(prefers-reduced-motion: reduce)");
 
@@ -22,7 +24,7 @@ const riduci = window.matchMedia?.("(prefers-reduced-motion: reduce)");
  *  `moduloDi(id)` il modulo da montare accanto. */
 export function attivaScorrimento(elemento, ids, attuale, moduloDi) {
   const html = document.documentElement;
-  let gesto = null; // { x, y, t, asse, verso, id, pannello, smonta, ultimo: { x, t } }
+  let gesto = null; // { x, y, asse, verso, id, pannello, vista, smonta, finito, tracce: [{ x, t }] }
   let inCorso = false; // si sta assestando: niente gesti nuovi
 
   function libero(bersaglio) {
@@ -59,35 +61,35 @@ export function attivaScorrimento(elemento, ids, attuale, moduloDi) {
     pannello.style.setProperty("--scorro-lato", `${g.verso * window.innerWidth}px`);
     pannello.append(vista);
     document.body.append(pannello);
-    g.id = id; g.pannello = pannello;
+    g.id = id; g.pannello = pannello; g.vista = vista;
     html.setAttribute("data-scorro", g.verso > 0 ? "avanti" : "indietro");
-    Promise.resolve(mod.mount(vista)).then((smonta) => { g.smonta = smonta; }).catch((e) => console.error(e));
+    // Il montaggio può essere asincrono: lo smontaggio si chiama quando c'è (anche a gesto già finito).
+    Promise.resolve(mod.mount(vista)).then((smonta) => { g.smonta = smonta; if (g.finito) g.smonta?.(); }).catch((e) => console.error(e));
     return true;
   }
 
   function fine(g, dx) {
     inCorso = true;
     const larghezza = window.innerWidth;
-    const veloce = g.ultimo && (Date.now() - g.ultimo.t) < 120 ? Math.abs(dx - g.ultimo.x) / Math.max(1, Date.now() - g.ultimo.t) : 0;
-    const cambia = Math.abs(dx) > larghezza * SOGLIA || (veloce > LANCIO && Math.abs(dx) > 40 && Math.sign(dx) === -g.verso);
+    // Velocità sugli ultimi MEMORIA ms (l'ultimo movimento coincide col rilascio: da solo direbbe zero).
+    const adesso = Date.now();
+    const prima = g.tracce.find((tr) => adesso - tr.t <= MEMORIA) || g.tracce[g.tracce.length - 1];
+    const veloce = prima && adesso > prima.t ? (dx - prima.x) / (adesso - prima.t) : 0;
+    const cambia = Math.abs(dx) > larghezza * SOGLIA || (Math.abs(veloce) > LANCIO && Math.sign(veloce) === -g.verso && Math.abs(dx) > 30);
     const durata = riduci?.matches ? 0 : ASSESTA;
     const chiudi = () => {
       if (cambia) {
-        // La pagina accanto è a posto: il suo modulo si ferma (il disegno resta a coprire) e il
-        // router monta la sezione nuova nella vista; poi il pannello se ne va.
+        // La pagina accanto è a posto: passa nella vista così com'è, al posto di quella aperta.
+        sostituisci(g.id, () => { g.finito = true; g.smonta?.(); }, [...g.vista.children]);
+      } else {
+        g.finito = true;
         try { g.smonta?.(); } catch (e) { console.error(e); }
-        g.smonta = null;
-        navigate(g.id);
       }
-      const togli = () => {
-        try { g.smonta?.(); } catch (e) { console.error(e); }
-        g.pannello.remove();
-        html.removeAttribute("data-scorro");
-        html.removeAttribute("data-scorro-assesta");
-        html.style.removeProperty("--scorro-dx");
-        inCorso = false;
-      };
-      cambia ? requestAnimationFrame(() => requestAnimationFrame(togli)) : togli();
+      g.pannello.remove();
+      html.removeAttribute("data-scorro");
+      html.removeAttribute("data-scorro-assesta");
+      html.style.removeProperty("--scorro-dx");
+      inCorso = false;
     };
     sposta(cambia ? -g.verso * larghezza : 0, durata > 0);
     setTimeout(chiudi, durata + 20);
@@ -99,7 +101,7 @@ export function attivaScorrimento(elemento, ids, attuale, moduloDi) {
     const t = e.touches[0];
     if (t.clientX < BORDO || t.clientX > window.innerWidth - BORDO) return;
     if (!libero(e.target)) return;
-    gesto = { x: t.clientX, y: t.clientY, t: Date.now(), asse: null, verso: 0, id: null, pannello: null, smonta: null, ultimo: null };
+    gesto = { x: t.clientX, y: t.clientY, asse: null, verso: 0, id: null, pannello: null, vista: null, smonta: null, finito: false, tracce: [] };
   }, { passive: true });
 
   elemento.addEventListener("touchmove", (e) => {
@@ -115,7 +117,8 @@ export function attivaScorrimento(elemento, ids, attuale, moduloDi) {
     }
     // Oltre l'ultima sezione il dito non porta niente: la pagina resta.
     const utile = Math.sign(dx) === -gesto.verso ? dx : 0;
-    gesto.ultimo = { x: utile, t: Date.now() };
+    gesto.tracce.push({ x: utile, t: Date.now() });
+    if (gesto.tracce.length > 12) gesto.tracce.shift();
     if (!riduci?.matches) sposta(utile, false);
   }, { passive: true });
 
