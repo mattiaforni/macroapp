@@ -37,6 +37,7 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 |---|---|
 | `app.js` | guscio: accesso, barra in basso, pulsante del menu, router, service worker, ricorrenti all'avvio; in testata a destra le `azioni()` del modulo aperto (oggi solo l'orologio della Lista) |
 | `core/router.js` | router a hash; `vaiA(id, apri)` + `richiesto(id, apri)`: il menu chiede a una pagina di aprire un suo foglio. Passaggi tra le pagine con View Transitions (`<html data-passaggio>` = `entra` / `torna`): vaiA entra sempre, il resto lo decide `transizione(da, a)` in app.js |
+| `core/scorrimento.js` | scorrendo la pagina a sinistra o a destra si passa alla sezione accanto della barra in basso (stesso ordine della barra, cambio secco come dalla barra); solo sulle sezioni, con foglio e menu chiusi, non dai bordi (gesto «indietro» del telefono) né da pillole che scorrono in orizzontale; attivato in app.js |
 | `core/ui.js` | `el()`, icone disegnate a mano (`D`), date, importi, pillole, `sceltaColore` (cerchietti dei colori dei progetti, `COLORI`: undici dal 29/10, variabili `--c-<nome>*` in base.css, chiaro e notte); `attesa(fonti, render)`: prima comparsa di una pagina quando sono arrivate tutte le sue fonti (max 400 ms), e «vuoto» solo per una fonte arrivata |
 | `core/db.js` | `create` (non aspetta il server, ritorna `{id, saved}`), `update`, `watchVisible`, `readVisible`, `leggiDove` (lettura una tantum con soli vincoli, per la cache `prodotti`); dopo le scritture condivise di spese, task e lista chiama `segnala` (notifiche). Ascolti condivisi: la stessa query è un solo `onSnapshot`, che resta aperto 10 minuti dopo l'uscita dalla pagina; i dati già noti arrivano subito (microtask), quindi una pagina rimontata o un filtro già usato si disegnano pieni al primo fotogramma. `chiudiAscolti` all'uscita dall'account |
 | `core/modelli.js` | modelli dell'AI per l'analisi (`users.modelli` = { note, progetti }, chiavi haiku/sonnet/opus, predefiniti Sonnet e Opus), `nomeModello` |
@@ -89,7 +90,8 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
    (persone) Invio aggiunge, e a campo vuoto salva.
    **L'azione principale sta sempre in basso a destra** (zona del pollice destro): il + nelle pagine,
    «Salva» nella barra dei fogli. In alto solo orientamento (indietro, titolo, menu).
-3. Navigazione: in basso le sezioni di tutti i giorni (Diario, Lista, Spese, Task); tutto il resto nel
+3. Navigazione: in basso le sezioni di tutti i giorni (Diario, Lista, Spese, Task), tra cui si passa anche
+   scorrendo la pagina a sinistra o a destra (30/10, richiesta di Mattia); tutto il resto nel
    menu a sinistra. L'app si apre sul Diario. Riferimento di Mattia per struttura ed ergonomia (non per
    l'aspetto): l'app Leghe Fantacalcio.
 4. Nuova collezione: blocco in `firestore.rules` + indici in `firestore.indexes.json`

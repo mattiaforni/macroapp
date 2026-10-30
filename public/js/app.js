@@ -1,6 +1,7 @@
 // Shell dell'app: autenticazione, navigazione, montaggio dei moduli.
 import { startAuth, onSession, login, session, checkRedirectResult } from "./core/auth.js";
 import { addRoute, startRouter, navigate, currentRoute, vaiA } from "./core/router.js";
+import { attivaScorrimento } from "./core/scorrimento.js";
 import { el, clear, icon, toast } from "./core/ui.js";
 import { applicaTema } from "./core/theme.js";
 import { ensureMyName } from "./core/household.js";
@@ -67,6 +68,8 @@ function startApp() {
     for (const m of modules) addRoute(m.id, m.mount);
     routerStarted = true;
     const sezioni = new Set(navModules.map((m) => m.id));
+    // Tra le sezioni della barra si passa anche scorrendo la pagina a sinistra o a destra.
+    attivaScorrimento(view, navModules.map((m) => m.id), () => currentRoute() || DEFAULT_ROUTE);
     startRouter({
       container: view,
       fallback: DEFAULT_ROUTE,

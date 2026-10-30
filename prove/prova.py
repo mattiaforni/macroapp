@@ -47,6 +47,34 @@ with sync_playwright() as p:
         pg.wait_for_selector(".schede a[aria-current='page'][href='#/diario']")
         assert pg.locator(".schede a").count() == 4, "quattro sezioni in basso"
 
+        # ── Scorrendo la pagina a sinistra si va alla sezione dopo, a destra a quella prima ──
+        step[0] = "scorrimento tra le sezioni"
+        def scorri(dx, dy=0):
+            pg.evaluate("""([dx, dy]) => {
+              const v = document.getElementById("view");
+              const mk = (x, y) => new Touch({ identifier: 1, target: v, clientX: x, clientY: y });
+              const ev = (tipo, x, y, fine) => v.dispatchEvent(new TouchEvent(tipo, { bubbles: true, cancelable: true,
+                touches: fine ? [] : [mk(x, y)], changedTouches: [mk(x, y)] }));
+              const x0 = 180, y0 = 400;
+              ev("touchstart", x0, y0); ev("touchmove", x0 + dx / 3, y0 + dy / 3); ev("touchmove", x0 + dx, y0 + dy);
+              ev("touchend", x0 + dx, y0 + dy, true);
+            }""", [dx, dy])
+        scorri(-120)
+        pg.wait_for_selector(".schede a[aria-current='page'][href='#/lista']")
+        scorri(-120)
+        pg.wait_for_selector(".schede a[aria-current='page'][href='#/spese']")
+        scorri(120)
+        pg.wait_for_selector(".schede a[aria-current='page'][href='#/lista']")
+        scorri(-40)          # troppo corto: niente
+        scorri(-120, 150)    # più verticale che orizzontale: è uno scorrimento della pagina
+        pg.wait_for_timeout(150)
+        assert pg.locator(".schede a[aria-current='page']").get_attribute("href") == "#/lista", "un gesto corto o verticale non cambia sezione"
+        scorri(120)
+        pg.wait_for_selector(".schede a[aria-current='page'][href='#/diario']")
+        scorri(120)          # dalla prima sezione a destra: resta
+        pg.wait_for_timeout(150)
+        assert pg.locator(".schede a[aria-current='page']").get_attribute("href") == "#/diario", "dal Diario a destra non si va da nessuna parte"
+
         # ── Lista: il + apre «Mi serve», Invio aggiunge e resta aperto ──
         step[0] = "lista"
         pg.click(".schede a[href='#/lista']")
