@@ -68,8 +68,8 @@ function startApp() {
     for (const m of modules) addRoute(m.id, m.mount);
     routerStarted = true;
     const sezioni = new Set(navModules.map((m) => m.id));
-    // Tra le sezioni della barra si passa anche scorrendo la pagina a sinistra o a destra.
-    attivaScorrimento(view, navModules.map((m) => m.id), () => currentRoute() || DEFAULT_ROUTE);
+    // Tra le sezioni della barra si passa anche scorrendo la pagina a sinistra o a destra (segue il dito).
+    attivaScorrimento(view, navModules.map((m) => m.id), () => currentRoute() || DEFAULT_ROUTE, (id) => modules.find((m) => m.id === id));
     startRouter({
       container: view,
       fallback: DEFAULT_ROUTE,

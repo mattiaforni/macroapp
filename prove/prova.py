@@ -47,33 +47,42 @@ with sync_playwright() as p:
         pg.wait_for_selector(".schede a[aria-current='page'][href='#/diario']")
         assert pg.locator(".schede a").count() == 4, "quattro sezioni in basso"
 
-        # ── Scorrendo la pagina a sinistra si va alla sezione dopo, a destra a quella prima ──
+        # ── Scorrendo la pagina a sinistra si va alla sezione dopo, a destra a quella prima: la pagina
+        #    segue il dito, quella accanto è montata a lato, al rilascio si assesta ──
         step[0] = "scorrimento tra le sezioni"
-        def scorri(dx, dy=0):
-            pg.evaluate("""([dx, dy]) => {
-              const v = document.getElementById("view");
-              const mk = (x, y) => new Touch({ identifier: 1, target: v, clientX: x, clientY: y });
-              const ev = (tipo, x, y, fine) => v.dispatchEvent(new TouchEvent(tipo, { bubbles: true, cancelable: true,
-                touches: fine ? [] : [mk(x, y)], changedTouches: [mk(x, y)] }));
-              const x0 = 180, y0 = 400;
-              ev("touchstart", x0, y0); ev("touchmove", x0 + dx / 3, y0 + dy / 3); ev("touchmove", x0 + dx, y0 + dy);
-              ev("touchend", x0 + dx, y0 + dy, true);
-            }""", [dx, dy])
-        scorri(-120)
+        TOCCO = """([tipo, x, y, fine]) => {
+          const v = document.getElementById("view");
+          const mk = () => new Touch({ identifier: 1, target: v, clientX: x, clientY: y });
+          v.dispatchEvent(new TouchEvent(tipo, { bubbles: true, cancelable: true, touches: fine ? [] : [mk()], changedTouches: [mk()] }));
+        }"""
+        def tocco(tipo, x, y, fine=False): pg.evaluate(TOCCO, [tipo, x, y, fine])
+        def scorri(dx, dy=0, durante=None):
+            x0, y0 = 180, 400
+            tocco("touchstart", x0, y0); tocco("touchmove", x0 + dx / 3, y0 + dy / 3); tocco("touchmove", x0 + dx, y0 + dy)
+            if durante: durante()
+            tocco("touchend", x0 + dx, y0 + dy, True)
+            pg.wait_for_function("!document.documentElement.hasAttribute('data-scorro')")
+        def accanto_e(testo, dx):
+            st = pg.evaluate("""() => ({ verso: document.documentElement.dataset.scorro, dx: document.documentElement.style.getPropertyValue("--scorro-dx"),
+              figli: document.querySelector(".scorro .vista")?.childElementCount || 0, fab: !!document.querySelector(".scorro .fab:not([style*='display'])") })""")
+            assert st["verso"] == ("avanti" if dx < 0 else "indietro") and st["dx"] == f"{dx}px" and st["figli"] > 0, f"la pagina accanto è a lato e si segue il dito: {st}"
+            pg.wait_for_selector(f".scorro >> text={testo}", timeout=3000)
+        def sezione(): return pg.locator(".schede a[aria-current='page']").get_attribute("href")
+        scorri(-120, durante=lambda: accanto_e("Da comprare", -120))
         pg.wait_for_selector(".schede a[aria-current='page'][href='#/lista']")
+        assert pg.locator(".scorro").count() == 0, "il pannello a lato se ne va dopo il passaggio"
         scorri(-120)
         pg.wait_for_selector(".schede a[aria-current='page'][href='#/spese']")
-        scorri(120)
+        scorri(120, durante=lambda: accanto_e("Da comprare", 120))
         pg.wait_for_selector(".schede a[aria-current='page'][href='#/lista']")
-        scorri(-40)          # troppo corto: niente
+        scorri(-40)          # troppo corto: si torna a posto
         scorri(-120, 150)    # più verticale che orizzontale: è uno scorrimento della pagina
-        pg.wait_for_timeout(150)
-        assert pg.locator(".schede a[aria-current='page']").get_attribute("href") == "#/lista", "un gesto corto o verticale non cambia sezione"
+        assert sezione() == "#/lista" and pg.locator(".scorro").count() == 0, "un gesto corto o verticale non cambia sezione"
         scorri(120)
         pg.wait_for_selector(".schede a[aria-current='page'][href='#/diario']")
         scorri(120)          # dalla prima sezione a destra: resta
-        pg.wait_for_timeout(150)
-        assert pg.locator(".schede a[aria-current='page']").get_attribute("href") == "#/diario", "dal Diario a destra non si va da nessuna parte"
+        assert sezione() == "#/diario", "dal Diario a destra non si va da nessuna parte"
+        assert pg.locator("#view .fab").count() >= 1, "il + della pagina c'è ancora"
 
         # ── Lista: il + apre «Mi serve», Invio aggiunge e resta aperto ──
         step[0] = "lista"

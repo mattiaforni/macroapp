@@ -37,7 +37,7 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 |---|---|
 | `app.js` | guscio: accesso, barra in basso, pulsante del menu, router, service worker, ricorrenti all'avvio; in testata a destra le `azioni()` del modulo aperto (oggi solo l'orologio della Lista) |
 | `core/router.js` | router a hash; `vaiA(id, apri)` + `richiesto(id, apri)`: il menu chiede a una pagina di aprire un suo foglio. Passaggi tra le pagine con View Transitions (`<html data-passaggio>` = `entra` / `torna`): vaiA entra sempre, il resto lo decide `transizione(da, a)` in app.js |
-| `core/scorrimento.js` | scorrendo la pagina a sinistra o a destra si passa alla sezione accanto della barra in basso (stesso ordine della barra, cambio secco come dalla barra); solo sulle sezioni, con foglio e menu chiusi, non dai bordi (gesto «indietro» del telefono) né da pillole che scorrono in orizzontale; attivato in app.js |
+| `core/scorrimento.js` | scorrimento tra le sezioni della barra come in Leghe (30/10, dal video di Mattia): la pagina segue il dito e quella accanto (montata davvero, in un pannello fisso `.scorro` a lato, senza il suo +) entra con lei; al rilascio si assesta (`--t-scorro`, oltre un quarto dello schermo o con un colpo deciso), poi il router monta la sezione nuova (cambio secco sotto il pannello, che se ne va). Solo sulle sezioni, con foglio e menu chiusi, non dai bordi (gesto «indietro» del telefono) né da pillole che scorrono in orizzontale; con «riduci movimento» cambio secco. Attivato in app.js |
 | `core/ui.js` | `el()`, icone disegnate a mano (`D`), date, importi, pillole, `sceltaColore` (cerchietti dei colori dei progetti, `COLORI`: undici dal 29/10, variabili `--c-<nome>*` in base.css, chiaro e notte); `attesa(fonti, render)`: prima comparsa di una pagina quando sono arrivate tutte le sue fonti (max 400 ms), e «vuoto» solo per una fonte arrivata |
 | `core/db.js` | `create` (non aspetta il server, ritorna `{id, saved}`), `update`, `watchVisible`, `readVisible`, `leggiDove` (lettura una tantum con soli vincoli, per la cache `prodotti`); dopo le scritture condivise di spese, task e lista chiama `segnala` (notifiche). Ascolti condivisi: la stessa query è un solo `onSnapshot`, che resta aperto 10 minuti dopo l'uscita dalla pagina; i dati già noti arrivano subito (microtask), quindi una pagina rimontata o un filtro già usato si disegnano pieni al primo fotogramma. `chiudiAscolti` all'uscita dall'account |
 | `core/modelli.js` | modelli dell'AI per l'analisi (`users.modelli` = { note, progetti }, chiavi haiku/sonnet/opus, predefiniti Sonnet e Opus), `nomeModello` |
@@ -75,7 +75,7 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
    pillole, fogli a tutta altezza. Colori solo dalle variabili in `css/base.css`.
    Identità visiva definitiva ancora da decidere (l'icona sì, vedi Stato): non inventarla senza che lo chieda.
    Movimento come in Leghe Fantacalcio, solo opacità (durate `--t-*` in base.css): tra le sezioni
-   della barra in basso nessun passaggio; menu, pulsanti che portano altrove e fogli entrano sfumando
+   della barra in basso nessun passaggio dalla barra, scorrimento che segue il dito col gesto (core/scorrimento.js); menu, pulsanti che portano altrove e fogli entrano sfumando
    sul fondo (uscita breve, poi entrata); indietro e chiusura con una dissolvenza breve. Niente
    dissolvenze sull'arrivo dei dati. Con «riduci movimento» tutto cambia di colpo.
    **Mai «vuoto» prima dei dati** (26/10, dal video di Mattia): una pagina o un filtro non mostrano

@@ -66,6 +66,7 @@
   --t-uscita: 140ms;
   --t-entrata: 240ms;
   --t-ritorno: 110ms;
+  --t-scorro: 220ms;   /* assestamento dello scorrimento tra le sezioni (core/scorrimento.js, ASSESTA) */
 }
 
 :root[data-tema="notte"] {
@@ -215,6 +216,19 @@ html[data-passaggio="torna"]::view-transition-new(root) { animation: compare var
 .fab--sopra svg { width: 20px; height: 20px; }
 html[data-fab-doppio] .vista { padding-bottom: calc(var(--barra) + 160px); }
 html[data-fab-doppio] .toast { bottom: calc(var(--barra) + 136px); }
+
+/* Scorrimento tra le sezioni della barra (core/scorrimento.js): la pagina aperta segue il dito
+   (i figli della vista, non il +, che resta fermo) e la sezione accanto, montata in un pannello
+   fisso a lato, entra con lei. Testata (z 400) e barra (z 500) restano sopra. */
+html[data-scorro] { overflow-x: hidden; }
+html[data-scorro] #view > :not(.fab) { transform: translateX(var(--scorro-dx, 0px)); }
+.scorro {
+  position: fixed; inset: 0; z-index: 300; background: var(--carta); overflow: hidden;
+  transform: translateX(calc(var(--scorro-lato, 0px) + var(--scorro-dx, 0px)));
+}
+.scorro .vista { padding-left: 16px; padding-right: 16px; }
+.scorro .fab { display: none; }
+html[data-scorro-assesta] #view > :not(.fab), html[data-scorro-assesta] .scorro { transition: transform var(--t-scorro) ease-out; }
 
 /* ───────────── Pillole e segmenti ───────────── */
 
