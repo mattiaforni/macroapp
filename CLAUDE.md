@@ -48,7 +48,7 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 | `core/contatti-google.js` | Google Contatti: elenco in memoria per `cercaContatti` / `contattoUnico`; `contattiCollegati` = Google collegato con la spunta dei contatti |
 | `core/calendario.js` | calendario «Casa» (`households.calendario`): `elencoCalendari`, `scegliCalendario`, `leggiEventi` (una lettura dei prossimi 60 giorni, `finestra()`, condivisa da Calendario e Diario; in memoria e, come anteprima per l'apertura, in localStorage `macroapp.calendario.eventi`; `suEventi`, `eventiNoti`), `creaEvento` / `aggiornaEvento` / `eliminaEvento` direttamente sull'API di Calendar, `giornoMostrato`. Niente copia su Firestore |
 | `core/drive.js` | ricerca per nome in tutto il Drive (`cercaDrive`, `recentiDrive`), `tipoDocumento`, `documentoDa` |
-| `components/sheet.js` | foglio a tutta altezza: in alto indietro e titolo; in basso barra con le azioni secondarie a sinistra (anche un `div.foglio__piede` nel corpo finisce lì) e il pulsante principale a destra (`confirmLabel`, «Salva»), sopra la tastiera; il tasto indietro lo chiude. Classi di movimento `foglio--entra` / `--sostituisce` / `--chiude`; `close({ subito: true })` senza dissolvenza; `stessoFoglio: true` sostituisce senza dissolvenza (attesa → dati); `aperto()` dice se non è stato chiuso o sostituito. I campi su più righe sono alti quanto il testo (`field-sizing: content`, a mano dove manca): si scorre il foglio, mai il campo; un campo `autofocus` con testo già scritto si apre col cursore in cima |
+| `components/sheet.js` | foglio a tutta altezza: in alto indietro e titolo; in basso barra con le azioni secondarie a sinistra (anche un `div.foglio__piede` nel corpo finisce lì) e il pulsante principale a destra (`confirmLabel`, «Salva»), sopra la tastiera; il tasto indietro lo chiude. Classi di movimento `foglio--entra` / `--sostituisce` / `--chiude`; `close({ subito: true })` senza dissolvenza; `stessoFoglio: true` sostituisce senza dissolvenza (attesa → dati); `aperto()` dice se non è stato chiuso o sostituito. I campi su più righe sono alti quanto il testo (`field-sizing: content`, a mano dove manca): si scorre il foglio, mai il campo; il campo `autofocus` prende il fuoco solo se è vuoto (l'attributo si toglie prima dell'inserimento, se no Chrome lo mette da solo) |
 | `components/menu.js` | menu a sinistra a gruppi (Progetti — quelli con istruzioni, letti all'apertura —, Casa, Collegamenti, Account), come in Leghe Fantacalcio |
 | `components/proposals.js` | azioni proposte: `APPLICA` per tipo, `renderAzione` (la sintesi proposta si legge ripiegata) |
 | `components/sintesi.js` | sintesi di un progetto (`projects.sintesi`): `sezioniSintesi` (una sezione «## » per tema, prima riga «Stato: …» facoltativa), `tonoStato`, foglio per correggerla |
@@ -88,6 +88,10 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
    manuale, progetto = Invio sul primo campo salva; lista = Invio aggiunge e resta aperto per la
    prossima; nota del diario = Invio va a capo, salva il pulsante. Nei campi facoltativi a scelta
    (persone) Invio aggiunge, e a campo vuoto salva.
+   **Tastiera solo per scrivere una cosa nuova** (31/10, dal video di Mattia): un foglio si apre con la
+   tastiera solo se il primo campo è vuoto (il +, una ricerca). Aprendo una cosa già scritta (progetto,
+   task, spesa, voce, sintesi, nota, pareggio, un task nato da una nota) niente tastiera: si legge tutto
+   il foglio e la modifica comincia toccando il campo. La regola sta in `components/sheet.js`.
    **L'azione principale sta sempre in basso a destra** (zona del pollice destro): il + nelle pagine,
    «Salva» nella barra dei fogli. In alto solo orientamento (indietro, titolo, menu).
 3. Navigazione: in basso le sezioni di tutti i giorni (Diario, Lista, Spese, Task), tra cui si passa anche

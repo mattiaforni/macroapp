@@ -94,6 +94,13 @@ export function openSheet({ title, body, onConfirm, confirmLabel = "Salva", azio
   const secondarie = [...[].concat(azioni).filter(Boolean)];
   corpo.querySelectorAll(".foglio__piede").forEach((p) => { secondarie.push(...p.children); p.remove(); });
   if (CAMPI_ALTI) corpo.querySelectorAll("textarea").forEach((a) => altezzaDelTesto(a, corpo));
+  // Tastiera solo per scrivere una cosa nuova (31/10, richiesta di Mattia): il campo [autofocus]
+  // prende il fuoco solo se è vuoto. Aprendo una cosa già scritta (progetto, task, spesa, voce,
+  // sintesi, pareggio) niente tastiera: si modifica toccando il campo. L'attributo si toglie prima
+  // di mettere il foglio nella pagina: Chrome dà il fuoco da solo al primo campo autofocus inserito
+  // dopo il caricamento, anche con il testo già scritto.
+  const first = corpo.querySelector("[autofocus]");
+  first?.removeAttribute("autofocus");
 
   const confirmBtn = onConfirm
     ? el("button.btn.btn--accento.btn--conferma", { type: "button", onclick: confirm }, icon("spunta"), confirmLabel)
@@ -170,19 +177,10 @@ export function openSheet({ title, body, onConfirm, confirmLabel = "Salva", azio
   window.addEventListener("popstate", onPop);
   document.addEventListener("keydown", onKey);
 
-  // Primo campo pronto per scrivere.
-  const first = host.querySelector("[autofocus]");
+  // Primo campo pronto per scrivere, se è vuoto (vedi sopra).
   // Se nel frattempo il fuoco è già dentro il foglio (scrivi velocissimo), non lo spostiamo.
-  if (first) setTimeout(() => {
+  if (first && !first.value) setTimeout(() => {
     if (host.contains(document.activeElement)) return;
-    // Un testo su più righe già scritto si apre dall'inizio: cursore in cima, non in fondo
-    // (dove lo mette il browser dopo aver assegnato value), e foglio non scorso.
-    if (first.tagName === "TEXTAREA" && first.value) {
-      first.setSelectionRange(0, 0);
-      first.focus({ preventScroll: true });
-      corpo.scrollTop = 0;
-      return;
-    }
     first.focus();
   }, 60);
 

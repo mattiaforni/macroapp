@@ -350,6 +350,9 @@ with sync_playwright() as p:
         step[0] = "task"
         pg.click(".schede a[href='#/task']")
         pg.click("button.pillola >> text=Progetto")
+        pg.wait_for_timeout(150)
+        # Una cosa nuova invece si apre con la tastiera sul primo campo
+        assert pg.evaluate("document.activeElement === document.querySelector(\"#foglio input[placeholder='Nome del progetto']\")"), "progetto nuovo con la tastiera"
         pg.fill("#foglio input[placeholder='Nome del progetto']", "Circolo")
         pg.keyboard.press("Enter")
         pg.wait_for_selector("button.pillola.on >> text=Circolo")
@@ -592,7 +595,10 @@ with sync_playwright() as p:
         pg.click("#foglio button.pillola >> text=Task")
         pg.wait_for_selector("#foglio h2 >> text=Nuovo task")
         assert pg.locator("#foglio input.linea-input").first.input_value() == "Chiamare l'idraulico"
-        pg.wait_for_timeout(150)  # il fuoco arriva sul testo dopo l'apertura
+        pg.wait_for_timeout(150)
+        # Testo già scritto: niente tastiera all'apertura (31/10); toccando il campo, Invio salva.
+        assert pg.evaluate("!/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)"), "task dalla nota aperto senza tastiera"
+        pg.click("#foglio input.linea-input")
         pg.keyboard.press("Enter")
         pg.wait_for_timeout(200)
         assert not pg.is_visible("#foglio"), "task salvato con Invio"
@@ -821,6 +827,8 @@ with sync_playwright() as p:
         pg.wait_for_selector("#foglio >> text=Sintesi di Tennis")
         t = pg.locator("#foglio textarea")
         assert "Piedi più larghi" in t.input_value()
+        pg.wait_for_timeout(150)
+        assert pg.evaluate("!/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)"), "sintesi aperta senza tastiera"
         t.fill(t.input_value() + "\n\n## Volée\n- Racchetta davanti")
         conferma(pg)
         pg.wait_for_selector(".tema__nome >> text=Volée")
@@ -846,6 +854,9 @@ with sync_playwright() as p:
         step[0] = "documenti del progetto"
         pg.click("button[aria-label='Modifica progetto']")
         pg.wait_for_selector("#foglio label >> text=Documenti da Drive")
+        pg.wait_for_timeout(150)
+        # Un progetto già scritto si apre senza tastiera (31/10, dal video di Mattia)
+        assert pg.evaluate("!/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)"), "progetto aperto senza tastiera"
         pg.fill("#foglio input[placeholder='Cerca nel tuo Drive per nome']", "programma")
         pg.wait_for_selector("#foglio .etichetta-campo >> text=Risultati")
         pg.wait_for_selector("#foglio .riga >> text=Programma allenamenti tennis")
