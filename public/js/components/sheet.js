@@ -188,6 +188,43 @@ export function openSheet({ title, body, onConfirm, confirmLabel = "Salva", azio
   return current;
 }
 
+/**
+ * Cursore in un campo del foglio alla posizione `pos` (dove hai toccato il testo che leggevi; null = in fondo),
+ * con la tastiera. Va chiamata dentro il tocco, subito dopo openSheet: fuori da un gesto il telefono non apre la
+ * tastiera. Il foglio scorre perché la riga del cursore stia nel quarto alto, sopra la tastiera in arrivo.
+ */
+export function scriviDa(campo, pos = null) {
+  const fine = campo.value.length;
+  const p = pos == null ? fine : Math.max(0, Math.min(pos, fine));
+  campo.focus({ preventScroll: true });
+  campo.setSelectionRange(p, p);
+  const corpo = campo.closest(".foglio__corpo");
+  if (!corpo) return;
+  const y = campo.getBoundingClientRect().top + rigaDelCursore(campo, p) - corpo.getBoundingClientRect().top;
+  corpo.scrollTop += y - corpo.clientHeight / 4;
+}
+
+// Altezza della riga del cursore dentro un campo su più righe: un doppione invisibile con lo stesso testo fino
+// al cursore e le stesse misure, e un segno dove finisce.
+function rigaDelCursore(campo, pos) {
+  if (campo.tagName !== "TEXTAREA") return 0;
+  const s = getComputedStyle(campo);
+  const doppione = document.createElement("div");
+  Object.assign(doppione.style, {
+    position: "absolute", visibility: "hidden", top: "0", left: "-9999px", boxSizing: "border-box",
+    width: `${campo.clientWidth}px`, padding: s.padding, border: "0", font: s.font, letterSpacing: s.letterSpacing,
+    lineHeight: s.lineHeight, whiteSpace: "pre-wrap", overflowWrap: "break-word", wordBreak: s.wordBreak, tabSize: s.tabSize,
+  });
+  doppione.textContent = campo.value.slice(0, pos);
+  const segno = document.createElement("span");
+  segno.textContent = "​";
+  doppione.append(segno);
+  document.body.append(doppione);
+  const y = segno.offsetTop + parseFloat(s.borderTopWidth || 0);
+  doppione.remove();
+  return y;
+}
+
 /** Chiude il foglio aperto. { fromHistory: true } = senza toccare la cronologia;
  *  { subito: true } = senza dissolvenza (cambio di pagina). */
 export function closeSheet(opts) { if (current) current.close(opts); }

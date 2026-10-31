@@ -208,6 +208,33 @@ export function testoRicco(testo) {
   return out;
 }
 
+/**
+ * Dove cade un tocco su un testo mostrato (`e`, il click sul suo contenitore), nella sorgente che si modifica:
+ * serve ad aprire il campo con il cursore dove hai toccato (31/10, richiesta di Mattia). Il testo mostrato può aver
+ * perso «## », «- », «**» (testoRicco): si cerca nella sorgente, da `da` in poi, il pezzo toccato, e se lo stesso
+ * pezzo compare più volte quello con lo stesso numero d'ordine. null se il tocco non cade su un testo o non si ritrova.
+ */
+export function puntoToccato(e, sorgente, da = 0) {
+  let nodo = null;
+  let off = 0;
+  if (document.caretPositionFromPoint) {
+    const p = document.caretPositionFromPoint(e.clientX, e.clientY);
+    if (p) { nodo = p.offsetNode; off = p.offset; }
+  } else if (document.caretRangeFromPoint) {
+    const r = document.caretRangeFromPoint(e.clientX, e.clientY);
+    if (r) { nodo = r.startContainer; off = r.startOffset; }
+  }
+  const pezzo = nodo?.nodeType === Node.TEXT_NODE ? nodo.textContent : "";
+  if (!pezzo.trim() || !e.currentTarget?.contains?.(nodo)) return null;
+  let prima = 0; // pezzi uguali che vengono prima di quello toccato
+  const giro = document.createTreeWalker(e.currentTarget, NodeFilter.SHOW_TEXT);
+  for (let t = giro.nextNode(); t && t !== nodo; t = giro.nextNode()) if (t.textContent === pezzo) prima++;
+  const testo = String(sorgente || "");
+  let i = testo.indexOf(pezzo, da);
+  while (i >= 0 && prima-- > 0) i = testo.indexOf(pezzo, i + pezzo.length);
+  return i < 0 ? null : i + off;
+}
+
 // ───────────── Icone ─────────────
 // Disegnate a mano in un quadrato 24×24, tratto sottile; il colore viene dal contenitore.
 

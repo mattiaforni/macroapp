@@ -24,6 +24,43 @@ errors = []
 step = ["avvio"]
 def shot(pg, name): pg.screenshot(path=f"{OUT}/{name}.png")
 def conferma(pg): pg.click("#foglio .btn--conferma")
+
+def tocca_testo(pg, selettore, pezzo):
+    """Tocca a metà di `pezzo`, dentro l'elemento (il primo nodo di testo che lo contiene), portandolo in vista."""
+    p = pg.evaluate("""([sel, pezzo]) => {
+      const radice = document.querySelector(sel);
+      const giro = document.createTreeWalker(radice, NodeFilter.SHOW_TEXT);
+      for (let t = giro.nextNode(); t; t = giro.nextNode()) {
+        const i = t.textContent.indexOf(pezzo);
+        if (i < 0) continue;
+        const r = document.createRange(), m = i + Math.floor(pezzo.length / 2);
+        r.setStart(t, m); r.setEnd(t, m + 1);
+        const corpo = radice.closest('.foglio__corpo');
+        let b = r.getBoundingClientRect();
+        if (corpo && (b.top < 120 || b.bottom > innerHeight - 140)) { corpo.scrollTop += b.top - 240; b = r.getBoundingClientRect(); }
+        return { x: b.left + b.width / 2, y: b.top + b.height / 2 };
+      }
+      return null;
+    }""", [selettore, pezzo])
+    assert p, f"«{pezzo}» in {selettore}"
+    pg.mouse.click(p["x"], p["y"])
+
+def cursore(pg):
+    """Dove sta il cursore nel campo col fuoco: riga, se `pezzo` lo contiene, e se la riga si vede nel foglio."""
+    return pg.evaluate("""(() => {
+      const a = document.activeElement;
+      if (!/^(INPUT|TEXTAREA)$/.test(a.tagName)) return { fuoco: false };
+      const i = a.selectionStart, prima = a.value.slice(0, i);
+      const riga = a.value.slice(prima.lastIndexOf('\\n') + 1).split('\\n')[0];
+      const s = getComputedStyle(a), c = a.closest('.foglio__corpo').getBoundingClientRect();
+      const y = a.getBoundingClientRect().top + parseFloat(s.paddingTop) + (prima.split('\\n').length - 1) * parseFloat(s.lineHeight);
+      return { fuoco: true, campo: a.tagName + '.' + a.className, i, riga, valore: a.value, vista: y >= c.top && y <= c.top + c.height / 2 };
+    })()""")
+
+def dentro(c, pezzo):
+    """Il cursore sta dentro la prima volta che `pezzo` compare nel campo."""
+    j = c["valore"].find(pezzo)
+    return j >= 0 and j <= c["i"] <= j + len(pezzo)
 def menu(pg, voce):
     pg.click("button[aria-label='Menu']")
     pg.click(f".menu__voce >> text={voce}")
@@ -739,9 +776,11 @@ with sync_playwright() as p:
         pg.wait_for_selector("#foglio .nota__testo--trascrizione >> text=oggi il maestro")
         pg.wait_for_timeout(150)
         shot(pg, "16b-tennis-trascrizione")
-        # Il riepilogo si corregge dal foglio della nota (Modifica)
-        conferma(pg)
+        # Il riepilogo si corregge toccandolo: foglio della nota con il cursore lì (31/10; prima si passava da Modifica)
+        tocca_testo(pg, "#foglio .lezione__riepilogo", "chiudere prima")
         pg.wait_for_selector("#foglio label >> text=Riepilogo")
+        c = cursore(pg)
+        assert c["fuoco"] and dentro(c, "chiudere prima") and "**" in c["valore"], f"cursore nel riepilogo, sul grassetto toccato: {c}"
         r = pg.locator("#foglio .campo textarea")
         assert "Cosa ho imparato" in r.input_value(), r.input_value()
         r.fill(r.input_value() + "\n- Servizio: lancio più avanti")
@@ -784,6 +823,13 @@ with sync_playwright() as p:
         assert corpo.locator("ul").count() == 2 and corpo.locator("li").count() == 3, "due elenchi sotto le due rubriche"
         pg.wait_for_timeout(200)
         shot(pg, "17c-progetto-sintesi")
+        # Toccando il testo della sintesi si scrive lì
+        tocca_testo(pg, ".tema--aperto .tema__corpo", "Mano sinistra per la distanza")
+        pg.wait_for_selector("#foglio >> text=Sintesi di Tennis")
+        c = cursore(pg)
+        assert c["fuoco"] and dentro(c, "Mano sinistra per la distanza"), f"cursore sulla voce toccata della sintesi: {c}"
+        pg.click("#foglio button[aria-label='Indietro']")
+        pg.wait_for_timeout(300)
         # Dal tema alla lezione: foglio di lettura con riepilogo e trascrizione ripiegata
         pg.click(".tema--aperto .tema__lezioni button.pillola")
         pg.wait_for_selector("#foglio >> text=Spalla chiusa sul dritto")
@@ -1302,6 +1348,30 @@ with sync_playwright() as p:
         assert not stato["fuoco"], f"aperta per leggere, senza tastiera: {stato}"
         assert stato["cima"] < 220, f"il testo comincia in alto: {stato}"
         shot(pg, "19-nota-lunga")
+        pg.click("#foglio button[aria-label='Indietro']")
+        pg.wait_for_timeout(400)
+        # Toccando il testo da leggere si scrive lì (31/10): foglio della nota, tastiera, cursore sulla riga toccata
+        step[0] = "tocco sul testo"
+        riga.locator("button.lezione").click()
+        pg.wait_for_selector("#foglio .lettura__testo >> text=Riga 40 della riunione")
+        pg.wait_for_timeout(300)
+        tocca_testo(pg, "#foglio .lettura__testo", "Riga 30 della riunione")
+        pg.wait_for_selector("#foglio h2 >> text=Nota")
+        c = cursore(pg)
+        assert c["fuoco"] and c["campo"].startswith("TEXTAREA") and c["riga"] == "Riga 30 della riunione", f"cursore sulla riga toccata: {c}"
+        assert dentro(c, "Riga 30 della riunione") and c["vista"], f"riga del cursore in vista, sopra la tastiera: {c}"
+        pg.wait_for_timeout(200)
+        shot(pg, "19c-nota-tocco")
+        pg.click("#foglio button[aria-label='Indietro']")
+        pg.wait_for_timeout(400)
+        assert not pg.is_visible("#foglio"), "indietro chiude anche il foglio arrivato dal tocco"
+        # Il titolo in testata si tocca anche lui
+        riga.locator("button.lezione").click()
+        pg.wait_for_selector("#foglio h2 >> text=Riga 1 della riunione")
+        pg.wait_for_timeout(300)
+        pg.click("#foglio .foglio__testa h2")
+        pg.wait_for_selector("#foglio h2 >> text=Nota")
+        assert pg.evaluate("document.activeElement.classList.contains('nota__titolo-campo')"), "toccando il titolo si scrive il titolo"
         pg.click("#foglio button[aria-label='Indietro']")
         pg.wait_for_timeout(400)
         print("FLUSSO COMPLETO")

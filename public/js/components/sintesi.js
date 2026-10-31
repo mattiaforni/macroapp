@@ -9,7 +9,7 @@
 // sezioni che toccano: così ogni tema sa in quali note è emerso.
 import { el, icon, toast, toDate, testoRicco } from "../core/ui.js";
 import { update, readVisible } from "../core/db.js";
-import { openSheet } from "./sheet.js";
+import { openSheet, scriviDa } from "./sheet.js";
 
 const VERSIONI = 10; // versioni precedenti tenute in projects.sintesiStorico
 
@@ -66,17 +66,20 @@ export function apriVersioni(progetto) {
 export function sezioniSintesi(testo) {
   const out = [];
   let corrente = null;
+  let inizio = 0; // dove comincia la riga nel testo: `inizio` della sezione, per il cursore dopo un tocco
   for (const grezza of String(testo || "").split("\n")) {
+    const qui = inizio;
+    inizio += grezza.length + 1;
     const riga = grezza.trim();
     const titolo = riga.match(/^#{1,4}\s+(.*)$/);
     if (titolo) {
-      corrente = { nome: titolo[1].replace(/\*\*/g, "").trim(), stato: "", corpo: [] };
+      corrente = { nome: titolo[1].replace(/\*\*/g, "").trim(), stato: "", corpo: [], inizio: qui };
       out.push(corrente);
       continue;
     }
     if (!corrente) {
       if (!riga) continue;
-      corrente = { nome: "", stato: "", corpo: [] };
+      corrente = { nome: "", stato: "", corpo: [], inizio: qui };
       out.push(corrente);
     }
     const stato = riga.match(/^\**\s*stato\s*:\**\s*(.+)$/i);
@@ -94,8 +97,9 @@ export function tonoStato(stato) {
   return "";
 }
 
-/** Foglio per correggere la sintesi a mano. Svuotarla la toglie. */
-export function apriSintesi(progetto) {
+/** Foglio per correggere la sintesi a mano. Svuotarla la toglie.
+ *  `fuoco` = { pos }: arrivando da un tocco sul testo della sintesi, cursore lì e tastiera aperta. */
+export function apriSintesi(progetto, fuoco = null) {
   const area = el("textarea", { rows: Math.min(18, (progetto.sintesi || "").split("\n").length + 2), autofocus: true });
   area.value = progetto.sintesi || "";
   openSheet({
@@ -108,4 +112,5 @@ export function apriSintesi(progetto) {
       salvaSintesi(progetto, area.value, "mano").then(() => toast("Sintesi salvata"), () => toast("Non sono riuscito a salvare"));
     },
   });
+  if (fuoco) scriviDa(area, fuoco.pos);
 }

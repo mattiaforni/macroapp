@@ -25,8 +25,8 @@
 // `modello`: chi ha letto la nota l'ultima volta (haiku, sonnet, opus: scelta in menu → Modelli AI).
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-functions.js";
 import { functions } from "../../core/firebase.js";
-import { el, icon, toast, fascia, vuoto, attesa, toDate, meseLungo, fab, testoRicco, isoGiorno, stessoGiorno, fmtDate } from "../../core/ui.js";
-import { openSheet } from "../../components/sheet.js";
+import { el, icon, toast, fascia, vuoto, attesa, toDate, meseLungo, fab, testoRicco, isoGiorno, stessoGiorno, fmtDate, puntoToccato } from "../../core/ui.js";
+import { openSheet, scriviDa } from "../../components/sheet.js";
 import { create, update, remove, watchMine, watchVisible, readVisible, VIS, where } from "../../core/db.js";
 import { watchPending, renderAzione } from "../../components/proposals.js";
 import { aggiungiVoci } from "../lista/index.js";
@@ -83,8 +83,10 @@ const chiavePersone = (lista) => JSON.stringify((lista || []).map((p) => [p.nome
  * dall'AI. Invio nel titolo porta al testo; nel testo va a capo: una nota può avere più paragrafi.
  * Titolo e persone cambiati qui restano come li hai scritti: l'analisi non li tocca più (titoloAMano,
  * personeAMano). Svuotando il titolo, lo riscrive l'AI alla prossima analisi.
+ * `fuoco` = { campo: "titolo" | "testo" | "riepilogo", pos }: arrivando da un tocco sul testo nel foglio di lettura,
+ * cursore lì e tastiera aperta.
  */
-export function apriNota({ esistente = null, testo = "", progetti = [], projectId = null, onSalva }) {
+export function apriNota({ esistente = null, testo = "", progetti = [], projectId = null, fuoco = null, onSalva }) {
   // Una nota già scritta si apre per leggerla dall'inizio: niente tastiera finché non tocchi il testo.
   const area = el("textarea", { placeholder: "Scrivi o detta…", rows: 6, autofocus: !esistente });
   area.value = esistente?.text || testo;
@@ -172,6 +174,7 @@ export function apriNota({ esistente = null, testo = "", progetti = [], projectI
       onSalva(dati);
     },
   });
+  if (fuoco) scriviDa({ titolo, testo: area, riepilogo }[fuoco.campo] || area, fuoco.pos);
 }
 
 /**
@@ -284,12 +287,19 @@ export function rigaNota(n, { conGiorno = true, conOra = false, progetto = null,
 /**
  * Foglio di lettura di una nota (Diario e pagina del progetto): data, persone e temi, il riepilogo intero con la
  * trascrizione ripiegata o il testo, le azioni proposte. In basso Rianalizza ed Elimina a sinistra, Modifica a destra.
+ * Toccando il titolo o un testo (31/10, richiesta di Mattia) si scrive lì, senza passare da Modifica: il foglio della
+ * nota prende il posto di questo con il cursore dove hai toccato (`onModifica({ campo, pos })`). Modifica resta per
+ * persone, progetto e giorno.
  */
 export function apriLettura(n, { progetto = null, proposte = [], onModifica, onAnalizza, onElimina }) {
   const d = toDate(n.createdAt) || new Date();
   const persone = Array.isArray(n.persone) ? n.persone.filter((p) => p?.nome) : [];
+  const tocca = (campo, sorgente) => (e) => {
+    if (e.target.closest("a, button")) return;
+    onModifica?.({ campo, pos: puntoToccato(e, sorgente) });
+  };
   let aperta = false;
-  const trascrizione = el("div.nota__testo.nota__testo--trascrizione", { hidden: true }, n.text);
+  const trascrizione = el("div.nota__testo.nota__testo--trascrizione.scrivibile", { hidden: true, onclick: tocca("testo", n.text) }, n.text);
   const apri = el("button.nota__apri", { type: "button", "aria-expanded": "false", onclick: () => {
     aperta = !aperta; trascrizione.hidden = !aperta;
     apri.setAttribute("aria-expanded", aperta ? "true" : "false");
@@ -304,8 +314,8 @@ export function apriLettura(n, { progetto = null, proposte = [], onModifica, onA
       persone.length ? el("div.lettura__persone", {}, ...persone.map(pillolaPersona)) : null,
       n.temi?.length ? el("div.lezione__temi", { "data-colore": progetto?.colore || null }, ...n.temi.map((t) => el("span.etichetta", {}, t))) : null,
       n.riepilogo
-        ? el("div.sintesi-testo.lezione__riepilogo", {}, ...testoRicco(n.riepilogo))
-        : el("div.nota__testo.lettura__testo", {}, n.text),
+        ? el("div.sintesi-testo.lezione__riepilogo.scrivibile", { onclick: tocca("riepilogo", n.riepilogo) }, ...testoRicco(n.riepilogo))
+        : el("div.nota__testo.lettura__testo.scrivibile", { onclick: tocca("testo", n.text) }, n.text),
       n.riepilogo ? apri : null,
       n.riepilogo ? trascrizione : null,
       sintesiInvariata(n),
@@ -318,6 +328,10 @@ export function apriLettura(n, { progetto = null, proposte = [], onModifica, onA
     confirmLabel: "Modifica",
     onConfirm: () => { onModifica?.(); },
   });
+  // Il titolo sta nella testata del foglio: anche lui si tocca per scriverlo.
+  const testa = document.querySelector("#foglio .foglio__testa h2");
+  testa?.classList.add("scrivibile");
+  testa?.addEventListener("click", tocca("titolo", n.titolo || ""));
 }
 
 /** Note in elenco: fascia per mese, giorno solo sulla prima nota del giorno. riga(n, conGiorno) → nodo. */
@@ -386,9 +400,9 @@ export function mount(container) {
     });
   }
 
-  function modifica(n) {
+  function modifica(n, fuoco = null) {
     apriNota({
-      esistente: n, progetti,
+      esistente: n, progetti, fuoco,
       onSalva: (dati) => {
         const salvata = update(COLL, n.id, dati);
         // Spostata in un progetto con istruzioni e ancora senza riepilogo: lo scrive subito.
@@ -440,7 +454,7 @@ export function mount(container) {
     apriLettura(n, {
       progetto: progettoDi(n.projectId),
       proposte: proposte.filter((p) => p.sourceEntryId === n.id),
-      onModifica: () => modifica(n),
+      onModifica: (fuoco) => modifica(n, fuoco),
       onAnalizza: () => analizza(n.id),
       onElimina: () => { remove(COLL, n.id); toast("Nota eliminata"); },
     });

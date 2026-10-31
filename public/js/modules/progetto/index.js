@@ -11,7 +11,7 @@
 // dal foglio del progetto).
 // Il + scrive una nota nel progetto, come nel Diario. Le note restano note del diario: cambia solo
 // dove le guardi.
-import { el, icon, toast, fascia, vuoto, attesa, toDate, meseLungo, fab, testoRicco } from "../../core/ui.js";
+import { el, icon, toast, fascia, vuoto, attesa, toDate, meseLungo, fab, testoRicco, puntoToccato } from "../../core/ui.js";
 import { create, update, remove, watchMine, watchVisible, VIS, where } from "../../core/db.js";
 import { watchPending } from "../../components/proposals.js";
 import { sezioniSintesi, tonoStato, apriSintesi, apriVersioni } from "../../components/sintesi.js";
@@ -74,15 +74,15 @@ export function mount(container) {
     });
   }
 
-  function modifica(n) {
-    apriNota({ esistente: n, progetti, onSalva: (dati) => update(NOTE, n.id, dati) });
+  function modifica(n, fuoco = null) {
+    apriNota({ esistente: n, progetti, fuoco, onSalva: (dati) => update(NOTE, n.id, dati) });
   }
 
   /** Foglio di lettura di una lezione: lo stesso del Diario. */
   function apriLezione(n) {
     apriLettura(n, {
       proposte: proposte.filter((p) => p.sourceEntryId === n.id),
-      onModifica: () => modifica(n),
+      onModifica: (fuoco) => modifica(n, fuoco),
       onAnalizza: () => analizza(n.id),
       onElimina: () => { remove(NOTE, n.id); toast("Nota eliminata"); },
     });
@@ -119,7 +119,11 @@ export function mount(container) {
           sez.stato ? el("span.tema__stato", { class: tono ? `tema__stato--${tono}` : "" }, sez.stato) : null,
           icon("giu"),
         ) : null,
-        aperta ? el("div.sintesi-testo.tema__corpo", { onclick: () => apriSintesi(progetto) }, ...testoRicco(sez.corpo)) : null,
+        // Toccando il testo si scrive lì: il foglio della sintesi con il cursore dove hai toccato (31/10).
+        aperta ? el("div.sintesi-testo.tema__corpo.scrivibile", { onclick: (e) => {
+          if (e.target.closest("a, button")) return;
+          apriSintesi(progetto, { pos: puntoToccato(e, progetto.sintesi, sez.inizio) });
+        } }, ...testoRicco(sez.corpo)) : null,
         aperta && lezioni.length ? el("div.tema__lezioni", {},
           ...lezioni.slice(0, 8).map((n) => {
             const d = toDate(n.createdAt) || new Date();
