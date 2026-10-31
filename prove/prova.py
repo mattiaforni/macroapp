@@ -180,9 +180,18 @@ with sync_playwright() as p:
         pg.keyboard.press("Enter")
         pg.wait_for_selector("#foglio .prodotto__nome >> text=Spaghetti n.5")
         assert pg.locator("#foglio .prodotto__indice.indice--eccellente b").inner_text() == "90", "indice 90"
-        assert pg.locator("#foglio .grado--a").count() == 1, "Nutri-Score A"
+        assert pg.locator("#foglio .nutriscore__lettera.on").inner_text() == "A", "Nutri-Score A, in fondo"
         assert pg.input_value("#foglio input[aria-label='In lista come']") == "Spaghetti", "in lista come la categoria"
-        pg.click("#foglio button.nota__apri >> text=Valori per 100 g")
+        # Come in Yuka: Positivo con frase e pallino; niente Negativo se non c'è nulla; al tocco la scala.
+        sezioni = pg.locator("#foglio .prodotto__sezione h3").all_inner_texts()
+        assert sezioni == ["Positivo", "Additivi", "Trasformazione", "Nutri-Score"], f"sezioni: {sezioni}"
+        assert "Quantità eccellente" in pg.locator("#foglio .nutr--proteine").inner_text(), "proteine 12,5 g eccellenti"
+        assert pg.locator("#foglio .nutr--proteine .indice-pallino.liv--1").count() == 1, "pallino verde scuro"
+        assert "Senza sale" in pg.locator("#foglio .nutr--sale").inner_text(), "sale 0 → senza sale"
+        assert "Basso impatto" in pg.locator("#foglio .nutr--kcal").inner_text(), "359 kcal → basso impatto"
+        pg.click("#foglio .nutr--kcal")
+        pg.wait_for_selector("#foglio .nutr--kcal .scala__soglie >> text=360 kcal")
+        pg.click("#foglio button.nota__apri >> text=Tutti i valori per 100 g")
         pg.wait_for_selector("#foglio .valori .riga >> text=Energia")
         pg.wait_for_timeout(300)
         shot(pg, "1d-prodotto")
@@ -200,8 +209,14 @@ with sync_playwright() as p:
         pg.fill(codice, "8001234567890")
         conferma(pg)
         pg.wait_for_selector("#foglio .prodotto__nome >> text=Würstel di pollo")
-        assert pg.locator("#foglio .additivi li.rischio--alto").count() == 2, "due additivi a rischio alto"
+        assert pg.locator("#foglio .additivo.rischio--alto").count() == 2, "due additivi a rischio alto"
         assert "49" in pg.locator("#foglio .prodotto__avviso").inner_text(), "avviso del tetto a 49"
+        assert pg.locator("#foglio .nutr--saturi .indice-pallino.liv--4").count() == 1 and pg.locator("#foglio .nutr--sale .indice-pallino.liv--4").count() == 1, "saturi e sale rossi"
+        # NOVA spiegato: i quattro gruppi, il 4 evidenziato, e cosa lo ha deciso.
+        pg.click("#foglio .nutr--nova")
+        pg.wait_for_selector("#foglio .nova li.on >> text=Ultra-trasformati")
+        assert "Nitrito di sodio" in pg.locator("#foglio .nova__perche").inner_text(), "marcatori del NOVA 4"
+        pg.locator("#foglio .nutr--nova").scroll_into_view_if_needed()
         pg.wait_for_timeout(200)
         shot(pg, "1e-prodotto-rischio")
         pg.click("#foglio .foglio__secondarie button >> text=Da comprare")
@@ -232,6 +247,31 @@ with sync_playwright() as p:
         assert pg.evaluate("document.querySelector('#foglio .riga').getBoundingClientRect().top < document.querySelector('#foglio input').getBoundingClientRect().top"), "il prodotto prima del nome"
         pg.click("#foglio .riga >> text=Würstel di pollo")
         pg.wait_for_selector("#foglio .prodotto__nome >> text=Würstel di pollo")
+        pg.click("#foglio button[aria-label='Indietro']")
+        pg.wait_for_selector("#foglio", state="hidden")
+        pg.click("button.fab")
+        pg.click("#foglio .foglio__secondarie button >> text=Scansiona")
+        pg.fill(codice, "8001111111116")
+        conferma(pg)
+        # Biologico = solo la foglia accanto al nome; frutta 95% tra i positivi.
+        pg.wait_for_selector("#foglio .prodotto__nome .prodotto__bio")
+        assert "95%" in pg.locator("#foglio .nutr--frutta").inner_text(), "frutta e verdura 95%"
+        assert pg.locator("#foglio .prodotto__sezione h3", has_text="Biologico").count() == 0, "niente riga del bio"
+        pg.wait_for_timeout(200)
+        shot(pg, "1e2-prodotto-bio")
+        pg.click("#foglio button[aria-label='Indietro']")
+        pg.wait_for_selector("#foglio", state="hidden")
+        # Scheda OFF senza nome né ingredienti (il cracker del 31/10): titolo dalla marca, additivi e NOVA non noti.
+        pg.click("button.fab")
+        pg.click("#foglio .foglio__secondarie button >> text=Scansiona")
+        pg.fill(codice, "8002222222225")
+        conferma(pg)
+        pg.wait_for_selector("#foglio .prodotto__nome b >> text=Galbusera Belle Buone")
+        assert "Un po' troppo calorico" in pg.locator("#foglio .nutr--kcal").inner_text() and "Un po' troppo salato" in pg.locator("#foglio .nutr--sale").inner_text(), "480 kcal e 1,1 g di sale tra i negativi"
+        assert "non ha gli ingredienti" in pg.locator("#foglio").inner_text(), "additivi non noti detti"
+        assert "Punteggio di questo prodotto: 11" in pg.locator("#foglio").inner_text(), "punteggio del Nutri-Score"
+        pg.wait_for_timeout(200)
+        shot(pg, "1e3-prodotto-incompleto")
         pg.click("#foglio button[aria-label='Indietro']")
         pg.wait_for_selector("#foglio", state="hidden")
         pg.click("button.fab")

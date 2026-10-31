@@ -75,7 +75,7 @@ const SCHEDE_FINTE = {
     trovato: true, fonte: "off", tipo: "food", nome: "Spaghetti n.5", marca: "Barilla", quantita: "500 g", descrizione: "Pasta di semola di grano duro",
     categoria: "Spaghetti", categorie: ["Cereali e patate", "Paste alimentari", "Spaghetti"], immagine: null,
     nutriscore: { grado: "a", punteggio: -3 }, nova: 1, additivi: [], etichette: [], bio: false,
-    nutrienti: { kcal: 359, grassi: 2, saturi: 0.5, zuccheri: 3.5, sale: 0, fibre: 3, proteine: 12.5 },
+    bevanda: false, nutrienti: { kcal: 359, grassi: 2, saturi: 0.5, zuccheri: 3.5, sale: 0, fibre: 3, proteine: 12.5, frutta: null }, novaMarcatori: [], versioneScheda: 2,
     livelli: { fat: "low", "saturated-fat": "low", sugars: "low", salt: "low" }, ambiente: "a", completezza: 0.9, ingredientiNoti: true,
     aggiornatoOff: 1760000000000, indice: 90, fascia: "eccellente", parziale: false, mancano: [], versioneIndice: 2,
     componenti: { nutrizione: { valore: 100, peso: 50, stato: "noto" }, additivi: { valore: 100, peso: 25, stato: "noto" }, nova: { valore: 100, peso: 15, stato: "noto" }, bio: { valore: 0, peso: 10, stato: "noto" } },
@@ -85,10 +85,32 @@ const SCHEDE_FINTE = {
     categoria: "Würstel", categorie: ["Carni", "Salumi", "Würstel"], immagine: null,
     nutriscore: { grado: "d", punteggio: 14 }, nova: 4,
     additivi: [{ codice: "E250", nome: "Nitrito di sodio", classe: "conservante", rischio: "alto" }, { codice: "E301", nome: "Ascorbato di sodio", classe: "antiossidante", rischio: null }, { codice: "E621", nome: "Glutammato di monosodio", classe: "esaltatore di sapidità", rischio: "alto" }],
-    etichette: [], bio: false, nutrienti: { kcal: 260, grassi: 22, saturi: 8, zuccheri: 1, sale: 2.1, fibre: null, proteine: null },
+    etichette: [], bio: false, bevanda: false, nutrienti: { kcal: 260, grassi: 22, saturi: 8, zuccheri: 1, sale: 2.1, fibre: null, proteine: null, frutta: null },
+    novaMarcatori: ["E250 Nitrito di sodio", "E621 Glutammato di monosodio", "aromi"], versioneScheda: 2,
     livelli: { fat: "high", "saturated-fat": "high", sugars: "low", salt: "high" }, ambiente: null, completezza: 0.8, ingredientiNoti: true,
     aggiornatoOff: 1760000000000, indice: 24, fascia: "scarso", parziale: false, mancano: [], versioneIndice: 2,
     componenti: { nutrizione: { valore: 30, peso: 50, stato: "noto" }, additivi: { valore: 20, peso: 25, stato: "noto" }, nova: { valore: 25, peso: 15, stato: "noto" }, bio: { valore: 0, peso: 10, stato: "noto" } },
+  },
+  // Confettura bio come la Natù del 29/10: frutta 95%, NOVA 4 per la sola pectina.
+  8001111111116: {
+    trovato: true, fonte: "off", tipo: "food", nome: "Confettura di fragole", marca: "Natù", quantita: "240 g", descrizione: null,
+    categoria: "Confetture di fragole", categorie: ["Confetture", "Confetture di fragole"], immagine: null,
+    nutriscore: { grado: "a", punteggio: -1 }, nova: 4, additivi: [{ codice: "E440", nome: "Pectina", classe: "gelificante", rischio: null }],
+    etichette: ["Biologico"], bio: true, bevanda: false,
+    nutrienti: { kcal: 85, grassi: 0.1, saturi: 0, zuccheri: 12.6, sale: 0.08, fibre: 2.6, proteine: 0.5, frutta: 95 }, novaMarcatori: ["E440 Pectina"],
+    livelli: {}, ambiente: null, completezza: 0.9, ingredientiNoti: true, aggiornatoOff: 1760000000000, versioneScheda: 2,
+    indice: 88, fascia: "eccellente", parziale: false, mancano: [], versioneIndice: 2,
+    componenti: { nutrizione: { valore: 100, peso: 50, stato: "noto" }, additivi: { valore: 95, peso: 25, stato: "noto" }, nova: { valore: 25, peso: 15, stato: "noto" }, bio: { valore: 100, peso: 10, stato: "noto" } },
+  },
+  // Cracker del 31/10: scheda OFF senza nome né ingredienti, Nutri-Score D (11 punti), indice solo dal Nutri-Score.
+  8002222222225: {
+    trovato: true, fonte: "off", tipo: "food", nome: null, marca: "Galbusera Belle Buone", quantita: "5 x 40 g", descrizione: null,
+    categoria: "Crispbreads", categorie: ["Crispbreads"], immagine: null,
+    nutriscore: { grado: "d", punteggio: 11 }, nova: null, additivi: [], etichette: [], bio: false, bevanda: false,
+    nutrienti: { kcal: 480, grassi: 21.6, saturi: 2.6, zuccheri: 4, sale: 1.1, fibre: 5.4, proteine: 11.6, frutta: null }, novaMarcatori: [],
+    livelli: {}, ambiente: null, completezza: 0.3, ingredientiNoti: false, aggiornatoOff: 1760000000000, versioneScheda: 2,
+    indice: 30, fascia: "mediocre", parziale: true, mancano: ["additivi", "nova", "bio"], versioneIndice: 2,
+    componenti: { nutrizione: { valore: 30, peso: 50, stato: "noto" }, additivi: { valore: null, peso: 25, stato: "ignoto" }, nova: { valore: null, peso: 15, stato: "ignoto" }, bio: { valore: null, peso: 10, stato: "ignoto" } },
   },
 };
 async function prodottoFinto(data = {}) {

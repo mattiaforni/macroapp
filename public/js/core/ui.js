@@ -318,6 +318,12 @@ const D = {
   gelato: '<path d="M8 10.5 12 21l4-10.5"/><path d="M7.5 10.5a4.5 4.5 0 1 1 9 0z"/>',
   spray: '<path d="M9 8h6v13H9zM9 8V5h6v3M9 5H6"/><path d="M18 5h.01M20 8h.01M18 11h.01"/>',
   foglia: '<path d="M4 20c0-8 5-14 16-15 1 10-4 16-12 16H4z"/><path d="M4 20C8 16 11 13 16 11"/>',
+  // Scheda del prodotto (components/prodotto.js): zollette di zucchero, saliera, fabbrica (trasformazione),
+  // foglia piena del biologico (la venatura prende il colore del fondo dal CSS, .prodotto__bio).
+  cubo: '<path d="M12 3.5 4.5 7.5v9L12 20.5l7.5-4v-9L12 3.5z"/><path d="M4.5 7.5 12 11.5l7.5-4M12 11.5v9"/>',
+  sale: '<path d="M8.5 10.5h7l-.9 10h-5.2l-.9-10z"/><path d="M8.5 10.5c0-3.3 1.6-6 3.5-6s3.5 2.7 3.5 6"/><circle cx="10.8" cy="7.6" r=".55" fill="currentColor" stroke="none"/><circle cx="13.2" cy="7.6" r=".55" fill="currentColor" stroke="none"/><circle cx="12" cy="6" r=".55" fill="currentColor" stroke="none"/>',
+  fabbrica: '<path d="M3.5 20.5v-9.5l5 3v-3l5 3v-3l4 2.4V4.5h3v16z"/><path d="M7 17.5h1.5M11 17.5h1.5M15 17.5h1.5"/>',
+  bio: '<path d="M4.5 19.5c0-8 5-13.5 15-14.5.8 9.5-4 15-11.5 15H4.5z" fill="currentColor"/><path class="venatura" d="M5 19c3.5-3.6 6.6-6.1 10.8-8"/>',
 };
 
 export function icon(name, cls) {

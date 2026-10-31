@@ -59,7 +59,7 @@ export function mount(container) {
       el("button.lezione", { type: "button", onclick: () => apri(v) },
         el("div.lezione__giorno", {}, conGiorno ? [el("b.display", {}, String(d.getDate())), el("small", {}, stessoGiorno(d, new Date()) ? "oggi" : GIORNI[d.getDay()])] : null),
         el("div.lezione__testo", {},
-          el("div.lezione__titolo", {}, v.nome || (v.trovato ? "Prodotto senza nome" : "Prodotto non trovato")),
+          el("div.lezione__titolo", {}, v.nome || v.marca || (v.trovato ? "Prodotto senza nome" : "Prodotto non trovato")),
           el("div.lezione__anteprima", {}, [v.marca, v.quantita].filter(Boolean).join(" · ") || v.categoria || `Codice ${v.ean}`),
           el("div.lezione__temi", {}, ...piede),
         ),

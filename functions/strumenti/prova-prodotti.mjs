@@ -1,7 +1,7 @@
 // Prova senza rete dell'indice dei prodotti: schede nel formato dell'API v2 di Open Food Facts
 // (costruite a mano, non scaricate) → normalizza() → indice, fascia, componenti.
 //   node functions/strumenti/prova-prodotti.mjs
-import { normalizza, normalizzaEan } from "../src/prodotti/off.js";
+import { normalizza, normalizzaEan, marcatoriNova, VERSIONE_SCHEDA } from "../src/prodotti/off.js";
 import { calcolaIndice, additivo, punteggioAdditivi, fasciaDi, ricalcola, VERSIONE_INDICE } from "../src/prodotti/indice.js";
 
 let errori = 0;
@@ -97,6 +97,20 @@ verifica(nuova?.indice === 43 && nuova.fascia === "mediocre" && nuova.versioneIn
 verifica(ricalcola({ ...vecchia, ...nuova }) === null, "una scheda già ricalcolata non si ricalcola");
 verifica(ricalcola({ trovato: false }) === null, "prodotto non trovato: niente da ricalcolare");
 verifica(s.spaghetti.versioneIndice === VERSIONE_INDICE, "le schede nuove portano la versione del modello");
+
+console.log("Scheda, versione 2 (31/10)");
+const senzaNome = normalizza({ code: "8002222222225", brands: "Galbusera Belle Buone", quantity: "5 x 40 g", categories_tags_it: ["Crispbreads"], nutriscore_grade: "d", nutriscore_score: 11, nutriments: { "energy-kcal_100g": 480, salt_100g: 1.1 } });
+verifica(senzaNome.nome === null && senzaNome.marca === "Galbusera Belle Buone", "senza nome: nome nullo, la marca resta (l'app la usa come titolo)");
+verifica(normalizza({ product_name_en: "Sesame crackers" }).nome === "Sesame crackers", "nome inglese come ripiego");
+verifica(normalizza({ product_name: "", abbreviated_product_name: "Cracker sesamo" }).nome === "Cracker sesamo", "nome breve come ripiego");
+verifica(normalizza(SCHEDE.cola).bevanda === false && normalizza({ ...SCHEDE.cola, categories_tags: ["en:beverages", "en:sodas"] }).bevanda === true, "bevanda dalle categorie OFF");
+verifica(normalizza({ nutriments: { "fruits-vegetables-legumes-estimate-from-ingredients_100g": 95.4 } }).nutrienti.frutta === 95, "frutta e verdura stimata dagli ingredienti");
+verifica(normalizza({}).nutrienti.frutta === null, "frutta e verdura assente → null");
+const markers = { "3": [["ingredients", "en:salt"]], "4": [["additives", "en:e440"], ["ingredients", "en:flavouring"], ["ingredients", "en:some-new-marker"]] };
+verifica(JSON.stringify(marcatoriNova(markers, 4)) === JSON.stringify(["E440 Pectina", "aromi", "some new marker"]), "marcatori NOVA 4: additivo col nome, ingrediente tradotto, sconosciuto ripulito");
+verifica(marcatoriNova(markers, 3)[0] === "sale" && marcatoriNova(undefined, 4).length === 0, "marcatori del gruppo 3, e nessuno senza dati");
+verifica(normalizza({ nova_group: 4, nova_groups_markers: markers }).novaMarcatori.includes("aromi"), "la scheda porta i marcatori del suo gruppo");
+verifica(s.spaghetti.versioneScheda === VERSIONE_SCHEDA && VERSIONE_SCHEDA >= 2, "le schede nuove portano la versione della scheda");
 
 console.log(errori ? `\n${errori} controlli falliti` : "\nTutto a posto");
 process.exit(errori ? 1 : 0);

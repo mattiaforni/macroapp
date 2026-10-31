@@ -110,6 +110,27 @@ invece di 0 (OFF assegna NOVA 4 con un solo ingrediente marcatore, e spesso il m
 `prova-prodotti.mjs` li controlla. Restano lontane la crema (dati OFF da completare) e la pizza (la trasformazione, che
 Yuka non conta); Natù sale invece di scendere, per il bio e l'A del Nutri-Score.
 
+**Secondo confronto** (31/10, Belle Buone sesamo e mais, Yuka 57 / D&D 30). La scheda OFF non ha nome né ingredienti
+(additivi, NOVA e bio ignoti): l'indice parziale è il solo Nutri-Score, D = 30. I valori per 100 g coincidono con Yuka.
+Ricostruzione: Nutri-Score 2017 (Yuka) = 12 punti negativi (energia 6, zuccheri 0, saturi 2, sodio 4) − 5 (fibre) = 7, C;
+nutrizione di Yuka 80 − 5 × 7 = 45, più 30 per due additivi senza rischio = 57. Nutri-Score 2023 (OFF) = 14 negativi
+(energia 6, zuccheri 1, saturi 2, sale 5) − 3 (fibre; le proteine non contano con 11 negativi o più) = 11, D al primo punto.
+Quindi: −27 dai dati mancanti su OFF (Yuka ha gli ingredienti), il resto dalla versione del Nutri-Score (2023 più severa su
+sale e zuccheri, meno generosa sulle fibre) e dalla conversione a gradini della lettera. Con gli ingredienti su OFF
+(due additivi innocui, NOVA 3) l'indice sarebbe ~49.
+
+**Scheda come in Yuka** (31/10, richiesta di Mattia; `components/prodotto.js`): dopo il nome (con la foglia verde se bio,
+nessuna riga) le sezioni «Positivo» e «Negativo» per 100 g (100 ml se `bevanda`), una riga per valore con frase e pallino
+di quattro livelli (1 verde, 2 verdolino, 3 arancio, 4 rosso del Nutri-Score) e la scala al tocco; poi «Tutti i valori»,
+Additivi (pallino del rischio EFSA, grigio = non valutato), Trasformazione (NOVA con i quattro gruppi spiegati e gli
+ingredienti che hanno deciso il gruppo, `novaMarcatori` da `nova_groups_markers`), Nutri-Score (scala A–E e punteggio).
+Soglie nostre, dichiarate nel codice: zuccheri, saturi e sale tra «basso» e «alto» del semaforo britannico (FSA 2016,
+come i `nutrient_levels` di OFF) con la fascia media divisa a metà, «senza» dal reg. UE 1924/2006; energia dove il
+Nutri-Score dà 2, 4½ e 7 punti (160, 360, 560 kcal; bevande 21, 54, 72); fibre 3 e 6 g (reg. 1924/2006), proteine 4 e 8 g,
+frutta e verdura 40 e 80%. Sono solo lettura: l'indice non cambia. Le schede in cache prima del 31/10 non hanno
+`bevanda`, frutta e marcatori: `VERSIONE_SCHEDA` in off.js le fa rileggere da OFF alla prossima apertura (se OFF non
+risponde, resta la cache).
+
 ## Spese: regole e saldo
 
 - Saldo con `split: "equal"` (metà a testa) o `"full"` (tutta a carico dell'altro). Estensione prevista: percentuali.

@@ -33,6 +33,7 @@
   /* Lista della spesa: rossino da comprare, verdolino usati di recente */
   --tessera-rossa: #E06F69;
   --tessera-verde: #6FAE9F;
+  --bio: #6AAA3A;            /* foglia del biologico nella scheda del prodotto */
   --su-tessera: #FFFFFF;
 
   --r: 10px;
@@ -92,6 +93,7 @@
 
   --tessera-rossa: #B9585A;
   --tessera-verde: #4B8E80;
+  --bio: #84C25A;
   --su-tessera: #FFFFFF;
 
   --ombra: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.7);
@@ -693,18 +695,62 @@ button.tessera__indice:active, .tessera .altro:active { background: rgba(255,255
 .prodotto__fonte { margin-top: 16px; }
 .riga--dato { cursor: default; }
 .riga--dato > span:last-child { font-weight: 500; flex: none; }
-.grado {
-  display: inline-flex; width: 30px; height: 30px; border-radius: 8px; align-items: center; justify-content: center;
-  font-weight: 600; font-size: 15px; color: #fff; background: var(--grado); flex: none;
-}
 .grado--a { --grado: var(--nutri-a); } .grado--b { --grado: var(--nutri-b); } .grado--c { --grado: var(--nutri-c); color: #1F1F1C; }
 .grado--d { --grado: var(--nutri-d); } .grado--e { --grado: var(--nutri-e); }
-.additivi { list-style: none; margin: 0; padding: 2px 0 6px 12px; font-size: 13.5px; }
-.additivi li { padding: 5px 0; border-bottom: 1px solid var(--linea); }
-.additivi li:last-child { border-bottom: none; }
-.additivi b { font-weight: 600; }
-.additivi small { color: var(--inchiostro-2); }
-.additivi .rischio--alto .rischio { color: var(--frutto); font-weight: 600; }
-.additivi .rischio--moderato .rischio { color: var(--c-arancio-testo); font-weight: 600; }
+.valori { padding-left: 38px; }
 .valori .riga--dato { padding: 7px 0; }
-.valori .riga--dato .meta { margin-right: 4px; }
+
+/* Scheda come in Yuka (31/10): sezioni con titolo in serif e «per 100 g» a destra; righe dei valori con icona,
+   frase, valore e pallino di quattro livelli (1 verde, 2 verdolino, 3 arancio, 4 rosso, 0 grigio); al tocco la scala. */
+.liv--0 { --indice: var(--linea-forte); } .liv--1 { --indice: var(--verde); } .liv--2 { --indice: var(--tessera-verde); }
+/* Il 4 è il rosso del Nutri-Score: al buio arancio e «frutto» quasi si confondono. */
+.liv--3 { --indice: var(--c-arancio); } .liv--4 { --indice: var(--nutri-e); }
+/* Dentro .prodotto__nome, dove gli span sono righe grigie: la foglia resta in linea col nome, verde. */
+.prodotto__nome .prodotto__bio { display: inline-flex; vertical-align: -2px; margin: 0 0 0 7px; color: var(--bio); }
+.prodotto__bio svg { width: 18px; height: 18px; }
+.prodotto__bio .venatura { stroke: var(--foglio); stroke-width: 1.4; }
+.prodotto__sezione { display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  margin: 26px 0 0; padding-bottom: 8px; border-bottom: 1px solid var(--linea); }
+.prodotto__sezione h3 { font-family: var(--display); font-weight: 400; font-size: 23px; line-height: 1.1; }
+.prodotto__sezione span { font-size: 12.5px; color: var(--inchiostro-2); }
+.prodotto__vuoto, .prodotto__nota { margin: 10px 0 2px; }
+.prodotto__vuoto { padding-left: 38px; }
+.nutr, .additivo { border-bottom: 1px solid var(--linea); }
+.nutr[role="button"] { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.nutr__riga, .additivo { display: flex; align-items: center; gap: 12px; padding: 11px 0; }
+.nutr__icona, .additivo__punto { width: 26px; flex: none; display: flex; justify-content: center; color: var(--inchiostro-2); }
+.nutr__icona svg { width: 22px; height: 22px; }
+.nutr .testo, .additivo .testo { flex: 1; min-width: 0; }
+.nutr .testo b, .additivo .testo b { display: block; font-weight: 500; font-size: 15px; line-height: 1.3; }
+.nutr .testo span, .additivo .testo span { display: block; font-size: 12.5px; color: var(--inchiostro-2); margin-top: 1px; }
+.nutr__valore { font-size: 14.5px; font-variant-numeric: tabular-nums; flex: none; }
+.nutr .indice-pallino, .additivo .indice-pallino { width: 12px; height: 12px; }
+.nutr__apri { display: flex; flex: none; color: var(--inchiostro-3); }
+.nutr__apri svg { width: 17px; height: 17px; transition: transform .15s; }
+.nutr[aria-expanded="true"] .nutr__apri svg { transform: rotate(180deg); }
+.nutr__sotto { padding: 0 0 14px 38px; }
+.additivo__rischio { font-size: 12.5px; color: var(--inchiostro-2); flex: none; }
+.rischio--alto .additivo__rischio { color: var(--nutri-e); font-weight: 600; }
+.rischio--moderato .additivo__rischio { color: var(--c-arancio-testo); font-weight: 600; }
+.scala { position: relative; padding-top: 6px; margin-right: 6px; }
+.scala__barra { display: flex; gap: 2px; height: 5px; border-radius: 3px; overflow: hidden; }
+.scala__tratto { flex: 1; background: var(--indice); }
+.scala__segno { position: absolute; top: 1px; width: 3px; height: 15px; margin-left: -1.5px; border-radius: 2px;
+  background: var(--inchiostro); box-shadow: 0 0 0 2px var(--foglio); }
+.scala__soglie { position: relative; height: 18px; margin-top: 5px; font-size: 11px; color: var(--inchiostro-3); font-variant-numeric: tabular-nums; }
+.scala__soglie span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.nova__intro { font-size: 13.5px; color: var(--inchiostro); margin-top: 2px; }
+.nova { list-style: none; margin: 8px 0 6px; padding: 0; font-size: 13px; line-height: 1.4; color: var(--inchiostro-3); }
+.nova li { position: relative; padding: 4px 0 4px 26px; }
+.nova li::before { content: attr(data-n); position: absolute; left: 0; top: 4px; width: 18px; height: 18px; border-radius: 50%;
+  border: 1px solid var(--linea-forte); font-size: 11px; display: flex; align-items: center; justify-content: center; }
+.nova li b { font-weight: 500; }
+.nova li.on { color: var(--inchiostro); }
+.nova li.on::before { background: var(--indice); border-color: var(--indice); color: #fff; font-weight: 600; }
+.nova__perche { font-size: 13px; color: var(--inchiostro-2); }
+.nutriscore { display: flex; align-items: center; gap: 4px; margin: 14px 0 4px 38px; }
+.nutriscore__lettera { width: 30px; height: 30px; border-radius: 7px; display: flex; align-items: center; justify-content: center;
+  font-weight: 600; font-size: 14px; color: #fff; background: var(--grado); opacity: .3; }
+.nutriscore__lettera.grado--c { color: #1F1F1C; }
+.nutriscore__lettera.on { width: 42px; height: 42px; border-radius: 10px; font-size: 20px; opacity: 1; }
+.prodotto__nota { padding-left: 38px; }

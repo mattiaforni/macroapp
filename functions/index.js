@@ -353,15 +353,27 @@ export const prodotto = onCall(
           await registraScansione(db, req.auth.uid, ean, scheda);
         } catch (err) { console.warn("scansione non registrata", ean, String(err.message).slice(0, 160)); }
       };
-      if (attuale && !req.data?.aggiorna && eta < (attuale.trovato ? CACHE_TROVATO_MS : CACHE_ASSENTE_MS)) {
+      const valida = attuale && !req.data?.aggiorna && eta < (attuale.trovato ? CACHE_TROVATO_MS : CACHE_ASSENTE_MS);
+      // Scheda trovata ma normalizzata da una versione più vecchia (mancano campi, es. i marcatori NOVA): si rilegge
+      // da OFF; se OFF non risponde o non la trova più, va bene quella in cache.
+      const daRileggere = valida && attuale.trovato && (attuale.versioneScheda || 1) < off.VERSIONE_SCHEDA;
+      const dallaCache = async () => {
         // Scheda calcolata con un modello dell'indice più vecchio: si ricalcola dai suoi campi, senza OFF.
         const { ricalcola } = await import("./src/prodotti/indice.js");
         const nuovo = ricalcola(attuale);
         if (nuovo) await ref.update(nuovo);
         await segna({ ...attuale, ...(nuovo || {}) });
         return { ...attuale, ...(nuovo || {}), ean, letto: attuale.letto.toMillis(), aggiornatoOff: attuale.aggiornatoOff?.toMillis?.() || null };
+      };
+      if (valida && !daRileggere) return await dallaCache();
+      let grezzo;
+      try {
+        grezzo = await off.leggiOff(ean);
+      } catch (err) {
+        if (daRileggere && err instanceof off.OffError) return await dallaCache();
+        throw err;
       }
-      const grezzo = await off.leggiOff(ean);
+      if (!grezzo && daRileggere) return await dallaCache();
       const scheda = grezzo ? off.normalizza(grezzo) : { trovato: false, fonte: "off" };
       const { FieldValue } = await import("firebase-admin/firestore");
       await ref.set({ ...scheda, ean, letto: FieldValue.serverTimestamp(), lettoDa: req.auth.uid }, { merge: false });
