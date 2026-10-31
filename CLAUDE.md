@@ -392,8 +392,9 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
       da OFF alla prossima apertura. Secondo confronto con Yuka (Belle Buone sesamo e mais, 57 contro 30): la scheda OFF
       è senza ingredienti né nome, e il Nutri-Score 2023 dà D (11) dove il 2017 di Yuka dà C (7). Proposto un Nutri-Score
       continuo dentro la lettera: Mattia (31/10) «il Nutri-Score non mi interessa», quindi niente, e la sezione Nutri-Score
-      è tolta dalla scheda (negli avvisi «valori nutrizionali»). Resta comunque metà dell'indice: se Mattia lo chiede, la
-      parte nutrizionale si può calcolare dalle fasce di Positivo / Negativo invece che dalla lettera.
+      è tolta dalla scheda (negli avvisi «valori nutrizionali»). Resta metà dell'indice: proposto di ricavare la parte
+      nutrizionale dalle fasce di Positivo / Negativo, Mattia (31/10) ha scelto di tenere l'indice com'è («una media di
+      tutto, un punteggio nostro»). Non riproporlo.
 - [ ] Identità visiva definitiva (resto dell'app): da decidere con Mattia
 
 Bassa priorità (Mattia, 23/10: la revisione delle spese è meno rilevante), previste in
