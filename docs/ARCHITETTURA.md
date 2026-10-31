@@ -123,7 +123,8 @@ sale e zuccheri, meno generosa sulle fibre) e dalla conversione a gradini della 
 nessuna riga) le sezioni «Positivo» e «Negativo» per 100 g (100 ml se `bevanda`), una riga per valore con frase e pallino
 di quattro livelli (1 verde, 2 verdolino, 3 arancio, 4 rosso del Nutri-Score) e la scala al tocco; poi «Tutti i valori»,
 Additivi (pallino del rischio EFSA, grigio = non valutato), Trasformazione (NOVA con i quattro gruppi spiegati e gli
-ingredienti che hanno deciso il gruppo, `novaMarcatori` da `nova_groups_markers`), Nutri-Score (scala A–E e punteggio).
+ingredienti che hanno deciso il gruppo, `novaMarcatori` da `nova_groups_markers`). Il Nutri-Score non si mostra (31/10,
+Mattia: «non mi interessa»; tolta la sezione con la scala A–E) ma resta la componente nutrizionale dell'indice.
 Soglie nostre, dichiarate nel codice: zuccheri, saturi e sale tra «basso» e «alto» del semaforo britannico (FSA 2016,
 come i `nutrient_levels` di OFF) con la fascia media divisa a metà, «senza» dal reg. UE 1924/2006; energia dove il
 Nutri-Score dà 2, 4½ e 7 punti (160, 360, 560 kcal; bevande 21, 54, 72); fibre 3 e 6 g (reg. 1924/2006), proteine 4 e 8 g,

@@ -180,11 +180,11 @@ with sync_playwright() as p:
         pg.keyboard.press("Enter")
         pg.wait_for_selector("#foglio .prodotto__nome >> text=Spaghetti n.5")
         assert pg.locator("#foglio .prodotto__indice.indice--eccellente b").inner_text() == "90", "indice 90"
-        assert pg.locator("#foglio .nutriscore__lettera.on").inner_text() == "A", "Nutri-Score A, in fondo"
+        assert "Nutri-Score" not in pg.locator("#foglio").inner_text(), "niente Nutri-Score nella scheda (31/10)"
         assert pg.input_value("#foglio input[aria-label='In lista come']") == "Spaghetti", "in lista come la categoria"
         # Come in Yuka: Positivo con frase e pallino; niente Negativo se non c'è nulla; al tocco la scala.
         sezioni = pg.locator("#foglio .prodotto__sezione h3").all_inner_texts()
-        assert sezioni == ["Positivo", "Additivi", "Trasformazione", "Nutri-Score"], f"sezioni: {sezioni}"
+        assert sezioni == ["Positivo", "Additivi", "Trasformazione"], f"sezioni: {sezioni}"
         assert "Quantità eccellente" in pg.locator("#foglio .nutr--proteine").inner_text(), "proteine 12,5 g eccellenti"
         assert pg.locator("#foglio .nutr--proteine .indice-pallino.liv--1").count() == 1, "pallino verde scuro"
         assert "Senza sale" in pg.locator("#foglio .nutr--sale").inner_text(), "sale 0 → senza sale"
@@ -269,7 +269,7 @@ with sync_playwright() as p:
         pg.wait_for_selector("#foglio .prodotto__nome b >> text=Galbusera Belle Buone")
         assert "Un po' troppo calorico" in pg.locator("#foglio .nutr--kcal").inner_text() and "Un po' troppo salato" in pg.locator("#foglio .nutr--sale").inner_text(), "480 kcal e 1,1 g di sale tra i negativi"
         assert "non ha gli ingredienti" in pg.locator("#foglio").inner_text(), "additivi non noti detti"
-        assert "Punteggio di questo prodotto: 11" in pg.locator("#foglio").inner_text(), "punteggio del Nutri-Score"
+        assert "valori nutrizionali, " not in pg.locator("#foglio .prodotto__avviso").inner_text(), "con i valori la nutrizione è nota"
         pg.wait_for_timeout(200)
         shot(pg, "1e3-prodotto-incompleto")
         pg.click("#foglio button[aria-label='Indietro']")

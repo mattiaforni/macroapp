@@ -55,8 +55,8 @@
   --c-terra: #9C6A4E;   --c-terra-tinta: #F0E4DB;   --c-terra-testo: #7A4D33;   --c-terra-su: #FFFFFF;
   --c-grigio: #6E7480;  --c-grigio-tinta: #E7E8EB;  --c-grigio-testo: #4A505C;  --c-grigio-su: #FFFFFF;
 
-  /* Nutri-Score, colori ufficiali della scala (components/prodotto.js) */
-  --nutri-a: #038141; --nutri-b: #85BB2F; --nutri-c: #FECB02; --nutri-d: #EE8100; --nutri-e: #E63E11;
+  /* Rosso del livello 4 nella scheda del prodotto (era la E del Nutri-Score): al buio resta distinto dall'arancio. */
+  --rosso-forte: #E63E11;
 
   --ui: "Instrument Sans", system-ui, -apple-system, sans-serif;
   --display: "Instrument Serif", Georgia, serif;
@@ -695,8 +695,6 @@ button.tessera__indice:active, .tessera .altro:active { background: rgba(255,255
 .prodotto__fonte { margin-top: 16px; }
 .riga--dato { cursor: default; }
 .riga--dato > span:last-child { font-weight: 500; flex: none; }
-.grado--a { --grado: var(--nutri-a); } .grado--b { --grado: var(--nutri-b); } .grado--c { --grado: var(--nutri-c); color: #1F1F1C; }
-.grado--d { --grado: var(--nutri-d); } .grado--e { --grado: var(--nutri-e); }
 .valori { padding-left: 38px; }
 .valori .riga--dato { padding: 7px 0; }
 
@@ -704,7 +702,7 @@ button.tessera__indice:active, .tessera .altro:active { background: rgba(255,255
    frase, valore e pallino di quattro livelli (1 verde, 2 verdolino, 3 arancio, 4 rosso, 0 grigio); al tocco la scala. */
 .liv--0 { --indice: var(--linea-forte); } .liv--1 { --indice: var(--verde); } .liv--2 { --indice: var(--tessera-verde); }
 /* Il 4 è il rosso del Nutri-Score: al buio arancio e «frutto» quasi si confondono. */
-.liv--3 { --indice: var(--c-arancio); } .liv--4 { --indice: var(--nutri-e); }
+.liv--3 { --indice: var(--c-arancio); } .liv--4 { --indice: var(--rosso-forte); }
 /* Dentro .prodotto__nome, dove gli span sono righe grigie: la foglia resta in linea col nome, verde. */
 .prodotto__nome .prodotto__bio { display: inline-flex; vertical-align: -2px; margin: 0 0 0 7px; color: var(--bio); }
 .prodotto__bio svg { width: 18px; height: 18px; }
@@ -730,7 +728,7 @@ button.tessera__indice:active, .tessera .altro:active { background: rgba(255,255
 .nutr[aria-expanded="true"] .nutr__apri svg { transform: rotate(180deg); }
 .nutr__sotto { padding: 0 0 14px 38px; }
 .additivo__rischio { font-size: 12.5px; color: var(--inchiostro-2); flex: none; }
-.rischio--alto .additivo__rischio { color: var(--nutri-e); font-weight: 600; }
+.rischio--alto .additivo__rischio { color: var(--rosso-forte); font-weight: 600; }
 .rischio--moderato .additivo__rischio { color: var(--c-arancio-testo); font-weight: 600; }
 .scala { position: relative; padding-top: 6px; margin-right: 6px; }
 .scala__barra { display: flex; gap: 2px; height: 5px; border-radius: 3px; overflow: hidden; }
@@ -748,9 +746,4 @@ button.tessera__indice:active, .tessera .altro:active { background: rgba(255,255
 .nova li.on { color: var(--inchiostro); }
 .nova li.on::before { background: var(--indice); border-color: var(--indice); color: #fff; font-weight: 600; }
 .nova__perche { font-size: 13px; color: var(--inchiostro-2); }
-.nutriscore { display: flex; align-items: center; gap: 4px; margin: 14px 0 4px 38px; }
-.nutriscore__lettera { width: 30px; height: 30px; border-radius: 7px; display: flex; align-items: center; justify-content: center;
-  font-weight: 600; font-size: 14px; color: #fff; background: var(--grado); opacity: .3; }
-.nutriscore__lettera.grado--c { color: #1F1F1C; }
-.nutriscore__lettera.on { width: 42px; height: 42px; border-radius: 10px; font-size: 20px; opacity: 1; }
 .prodotto__nota { padding-left: 38px; }

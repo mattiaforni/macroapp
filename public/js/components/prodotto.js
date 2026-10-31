@@ -16,7 +16,8 @@ export const VERSIONE_INDICE = 2;
 
 export const NOME_FASCIA = { eccellente: "Eccellente", buono: "Buono", mediocre: "Mediocre", scarso: "Scarso" };
 const NOME_NOVA = { 1: "Non trasformato o poco", 2: "Ingrediente da cucina", 3: "Trasformato", 4: "Ultra-trasformato" };
-const NOME_COMPONENTE = { nutrizione: "Nutri-Score", additivi: "additivi", nova: "NOVA", bio: "bio" };
+// Negli avvisi la componente nutrizionale si chiama «valori nutrizionali»: il Nutri-Score non si mostra (31/10).
+const NOME_COMPONENTE = { nutrizione: "valori nutrizionali", additivi: "additivi", nova: "NOVA", bio: "bio" };
 const FORMATI = ["ean_13", "ean_8", "upc_a", "upc_e", "code_128"];
 
 const norm = (s) => String(s || "").trim().toLowerCase().replace(/\s+/g, " ");
@@ -148,7 +149,8 @@ export function scansiona() {
 // ───────────── Scheda come in Yuka (31/10, richiesta di Mattia) ─────────────
 // Valori per 100 g (100 ml per le bevande) divisi tra «Positivo» e «Negativo», ognuno con una frase e un pallino
 // di quattro colori (1 verde, 2 verdolino, 3 arancio, 4 rosso); toccando la riga si vede la scala. In fondo additivi,
-// trasformazione (NOVA, spiegata) e Nutri-Score; il biologico è solo la foglia accanto al nome.
+// trasformazione (NOVA, spiegata); il biologico è solo la foglia accanto al nome. Il Nutri-Score non si mostra
+// (31/10, Mattia: «non mi interessa»), anche se resta metà dell'indice.
 // Le soglie sono nostre e dichiarate (Yuka non pubblica le sue); servono a leggere la scheda, l'indice resta quello
 // del server. Zuccheri, grassi saturi e sale: «basso» e «alto» del semaforo britannico (FSA 2016, gli stessi dei
 // livelli di Open Food Facts), con la fascia di mezzo divisa a metà; «senza» dalle indicazioni nutrizionali UE
@@ -264,7 +266,7 @@ function corpoScheda(s, { rileggi } = {}) {
       s.categoria ? el("span.meta", {}, s.categoria) : null),
   );
   const avvisi = [];
-  if (s.indice == null) avvisi.push("Dati insufficienti per una valutazione: la scheda non ha Nutri-Score né ingredienti.");
+  if (s.indice == null) avvisi.push("Dati insufficienti per una valutazione: la scheda non ha valori nutrizionali né ingredienti.");
   else if (s.parziale) avvisi.push(`Valutazione parziale: ${s.mancano.map((k) => NOME_COMPONENTE[k]).join(", ")} non ${s.mancano.length > 1 ? "noti" : "noto"}.`);
   if (s.additivi?.some((a) => a.rischio === "alto")) avvisi.push("Contiene un additivo a rischio alto (EFSA): l'indice non supera 49.");
 
@@ -324,16 +326,6 @@ function corpoScheda(s, { rileggi } = {}) {
         sotto: spiegazioneNova(s.nova, s.novaMarcatori || []) })
     : rigaValore({ icona: "fabbrica", nome: "Non nota", frase: "servono gli ingredienti", classe: "nutr--nova" });
 
-  // Nutri-Score
-  const g = String(s.nutriscore?.grado || "").toLowerCase();
-  const punti = s.nutriscore?.punteggio;
-  const nutriscore = /^[a-e]$/.test(g)
-    ? [el("div.nutriscore", { role: "img", "aria-label": `Nutri-Score ${g.toUpperCase()}` },
-        ..."abcde".split("").map((l) => el("span.nutriscore__lettera", { class: `grado--${l}${l === g ? " on" : ""}` }, l.toUpperCase()))),
-      el("p.meta.prodotto__nota", {}, "Calcolato da Open Food Facts con la versione 2023: energia, zuccheri, grassi saturi e sale tolgono punti, fibre, proteine, frutta e verdura ne restituiscono",
-        punti != null ? `. Punteggio di questo prodotto: ${punti} (più è basso, meglio è).` : ".")]
-    : [el("p.meta.prodotto__vuoto", {}, g === "not-applicable" ? "Non si applica a questo prodotto." : "Non noto: mancano i valori nutrizionali.")];
-
   const quando = s.aggiornatoOff ? new Date(s.aggiornatoOff) : null;
   // La scheda resta un mese in prodotti/{ean}: dopo averla corretta su OFF, «rileggi» la riprende subito.
   const fonte = el("p.meta.prodotto__fonte", {},
@@ -351,8 +343,6 @@ function corpoScheda(s, { rileggi } = {}) {
     ...elencoAdditivi,
     sezione("Trasformazione"),
     nova,
-    sezione("Nutri-Score"),
-    ...nutriscore,
     fonte,
   ];
 }
