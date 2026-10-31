@@ -104,7 +104,8 @@ export function calcolaIndice({ nutriscore, nova, additivi = [], etichette = [],
  * rileggere Open Food Facts. Null se non serve (modello attuale, o prodotto non trovato).
  */
 export function ricalcola(scheda) {
-  if (!scheda?.trovato || (scheda.versioneIndice || 1) >= VERSIONE_INDICE) return null;
+  // I cosmetici hanno il loro voto (cosmetici.js), che non si ricalcola da qui.
+  if (!scheda?.trovato || scheda.tipo === "beauty" || (scheda.versioneIndice || 1) >= VERSIONE_INDICE) return null;
   // Il rischio degli additivi si rilegge dalla tabella, che può essere stata rigenerata nel frattempo.
   const additivi = (scheda.additivi || []).map((a) => (a?.codice ? additivo(a.codice.toLowerCase()) : a));
   const v = calcolaIndice({ nutriscore: scheda.nutriscore, nova: scheda.nova, additivi, bio: !!scheda.bio, ingredientiNoti: !!scheda.ingredientiNoti });

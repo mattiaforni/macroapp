@@ -125,6 +125,26 @@ di quattro livelli (1 verde, 2 verdolino, 3 arancio, 4 rosso del Nutri-Score) e 
 Additivi (pallino del rischio EFSA, grigio = non valutato), Trasformazione (NOVA con i quattro gruppi spiegati e gli
 ingredienti che hanno deciso il gruppo, `novaMarcatori` da `nova_groups_markers`). Il Nutri-Score non si mostra (31/10,
 Mattia: «non mi interessa»; tolta la sezione con la scala A–E) ma resta la componente nutrizionale dell'indice.
+
+**Cosmetici** (31/10, sera, richiesta di Mattia). La stessa scansione: OFF con `product_type=all` rinvia un cosmetico a
+Open Beauty Facts (stessa API, ODbL), e `normalizza` lo passa a `normalizzaCosmetico` (`product_type` «beauty»), che legge la
+lista INCI (`ingredients_text*`: virgole, non quella tra due cifre; note a piè di lista scartate) e valuta ogni ingrediente
+con `functions/src/prodotti/cosmetici.js`. OBF non dà valutazioni dei rischi; Yuka usa una sua banca dati (~12.500
+ingredienti, rivista da una tossicologa) e decide il voto dall'ingrediente peggiore (rosso → sotto 25, arancio → sotto 50).
+Noi lo stesso metodo su liste pubbliche:
+- alto: interferenti endocrini riconosciuti dall'UE (ECHA, SVHC per interferenza endocrina: butylparaben 2020, 4-MBC 2022,
+  poi vietato nei cosmetici, reg. 2024/996), ingredienti vietati (Lilial dal 2022, Lyral dal 2021), benzophenone (CMR);
+- moderato: gruppo A della lista di priorità della Commissione sui possibili interferenti endocrini nei cosmetici (2019:
+  benzophenone-3, propylparaben, resorcinol, octocrylene, homosalate, kojic acid, triclosan, triclocarban, BHT, benzyl
+  salicylate, genistein, daidzein);
+- basso: gruppo B della stessa lista (methylparaben, octinoxate, benzophenone-1/2/4/5, BHA, triphenyl phosphate, salicylic
+  acid, D5, cyclomethicone, deltamethrin) e allergeni delle fragranze del reg. UE 2023/1545 (24 storici e 58 aggiunti; gli
+  oli vegetali per genere e specie, non le acque floreali).
+Voto 100 − 30 per alto, −15 per moderato, −4 per basso; al più 24 con un alto, 49 con un moderato; senza ingredienti niente
+voto. Il «parfum» non conta: non è in nessuna lista (Yuka lo segnala). La scheda lo dice: le liste segnalano sostanze
+sospette o allergeniche, non il rischio alle dosi d'uso, che il reg. (CE) 1223/2009 già limita. I nomi INCI sono verificati
+sulla tassonomia CosIng di OBF (`taxonomies/beauty/ingredients-cosing-obf.txt` su GitHub). Le liste vanno aggiornate a mano
+quando la Commissione o l'ECHA decidono (es. resorcinol, proposto come interferente endocrino dalla Francia nel 2025).
 Soglie nostre, dichiarate nel codice: zuccheri, saturi e sale tra «basso» e «alto» del semaforo britannico (FSA 2016,
 come i `nutrient_levels` di OFF) con la fascia media divisa a metà, «senza» dal reg. UE 1924/2006; energia dove il
 Nutri-Score dà 2, 4½ e 7 punti (160, 360, 560 kcal; bevande 21, 54, 72); fibre 3 e 6 g (reg. 1924/2006), proteine 4 e 8 g,

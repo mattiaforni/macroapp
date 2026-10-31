@@ -703,6 +703,13 @@ button.tessera__indice:active, .tessera .altro:active { background: rgba(255,255
 .liv--0 { --indice: var(--linea-forte); } .liv--1 { --indice: var(--verde); } .liv--2 { --indice: var(--tessera-verde); }
 /* Il 4 è il rosso del Nutri-Score: al buio arancio e «frutto» quasi si confondono. */
 .liv--3 { --indice: var(--c-arancio); } .liv--4 { --indice: var(--rosso-forte); }
+/* Cosmetici: rischio basso in giallo, come in Yuka; nella lista INCI i segnalati in grassetto, colore del livello. */
+.liv--g { --indice: var(--c-giallo); }
+.cosmetico__inci { font-size: 13.5px; line-height: 1.55; color: var(--inchiostro-2); margin: 10px 0 0 38px; overflow-wrap: anywhere; }
+.cosmetico__inci b { font-weight: 600; color: var(--inchiostro); }
+.cosmetico__inci b.rischio--alto { color: var(--rosso-forte); }
+.cosmetico__inci b.rischio--moderato { color: var(--c-arancio-testo); }
+.additivo .testo span + span { margin-top: 0; }
 /* Dentro .prodotto__nome, dove gli span sono righe grigie: la foglia resta in linea col nome, verde. */
 .prodotto__nome .prodotto__bio { display: inline-flex; vertical-align: -2px; margin: 0 0 0 7px; color: var(--bio); }
 .prodotto__bio svg { width: 18px; height: 18px; }

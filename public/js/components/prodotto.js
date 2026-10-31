@@ -254,9 +254,10 @@ function spiegazioneNova(gruppo, marcatori = []) {
 }
 
 /** Corpo della scheda di un prodotto trovato. */
-function corpoScheda(s, { rileggi } = {}) {
+/** Testa della scheda (alimento o cosmetico): indice nel cerchio, nome con la foglia se bio, marca e categoria. */
+function testaScheda(s) {
   const titolo = s.nome || s.marca || "Prodotto senza nome";
-  const testa = el("div.prodotto__testa", {},
+  return el("div.prodotto__testa", {},
     el("div.prodotto__indice", { class: s.fascia ? `indice--${s.fascia}` : "" },
       el("b.display", {}, s.indice == null ? "—" : String(s.indice)),
       el("small", {}, s.indice == null ? "senza indice" : NOME_FASCIA[s.fascia])),
@@ -265,6 +266,69 @@ function corpoScheda(s, { rileggi } = {}) {
       el("span", {}, [s.nome ? s.marca : null, s.quantita].filter(Boolean).join(" · ") || " "),
       s.categoria ? el("span.meta", {}, s.categoria) : null),
   );
+}
+
+/** Riga della fonte in fondo: Open Food Facts o Open Beauty Facts, con «Rileggi». */
+function fonteScheda(s, rileggi) {
+  const cosmetico = s.fonte === "obf";
+  const quando = s.aggiornatoOff ? new Date(s.aggiornatoOff) : null;
+  // La scheda resta un mese in prodotti/{ean}: dopo averla corretta su OFF, «rileggi» la riprende subito.
+  return el("p.meta.prodotto__fonte", {},
+    "Dati: ", el("a", { href: `https://it.${cosmetico ? "openbeautyfacts" : "openfoodfacts"}.org/prodotto/${s.ean}`, target: "_blank", rel: "noopener" },
+      cosmetico ? "Open Beauty Facts" : "Open Food Facts"),
+    " (ODbL)", quando ? `, scheda aggiornata il ${quando.toLocaleDateString("it-IT")}` : "",
+    s.completezza != null && s.completezza < 0.5 ? ". Scheda incompleta: si può completare lì." : ".",
+    rileggi ? " " : null,
+    rileggi ? el("a.prodotto__rileggi", { href: "#", role: "button", onclick: (e) => { e.preventDefault(); rileggi(); } }, "Rileggi") : null);
+}
+
+// ───────────── Cosmetici (31/10) ─────────────
+// Livelli e motivi li decide il server (functions/src/prodotti/cosmetici.js): interferenti endocrini dalla lista
+// della Commissione UE e dall'ECHA, allergeni delle fragranze dal reg. UE 2023/1545. Il voto lo decide l'ingrediente
+// peggiore, come in Yuka. Pallini: alto rosso, moderato arancio, basso giallo.
+const LIVELLO_COSMETICO = { alto: ["rischio alto", "4"], moderato: ["rischio moderato", "3"], basso: ["rischio basso", "g"] };
+const ORDINE_LIVELLO = { alto: 0, moderato: 1, basso: 2 };
+
+/** Corpo della scheda di un cosmetico: ingredienti segnalati, lista INCI, nota sui limiti delle liste. */
+function corpoCosmetico(s, { rileggi } = {}) {
+  const ingredienti = s.ingredienti || [];
+  const segnalati = ingredienti.filter((i) => i.livello).sort((a, b) => ORDINE_LIVELLO[a.livello] - ORDINE_LIVELLO[b.livello]);
+  const avvisi = [];
+  if (!s.ingredientiNoti) avvisi.push("Open Beauty Facts non ha gli ingredienti di questo prodotto: senza, non c'è un voto. Si possono aggiungere dalla sua pagina.");
+  else if (s.conteggi?.alto) avvisi.push(`Contiene ${s.conteggi.alto > 1 ? "ingredienti" : "un ingrediente"} a rischio alto: il voto non supera 24.`);
+  else if (s.conteggi?.moderato) avvisi.push(`Contiene ${s.conteggi.moderato > 1 ? "ingredienti" : "un ingrediente"} a rischio moderato: il voto non supera 49.`);
+
+  const righe = !s.ingredientiNoti ? [] : segnalati.length
+    ? segnalati.map((i) => {
+        const [testo, liv] = LIVELLO_COSMETICO[i.livello];
+        return el("div.additivo", { class: `rischio--${i.livello}` },
+          el("span.additivo__punto", {}, el("span.indice-pallino", { class: `liv--${liv}` })),
+          el("div.testo", {}, el("b", {}, i.nome), ...(i.motivi || []).map((m) => el("span", {}, m))),
+          el("span.additivo__rischio", {}, testo));
+      })
+    : [rigaValore({ nome: "Nessun ingrediente segnalato", frase: "Nessuno nelle liste europee usate qui", liv: 1, classe: "additivo" })];
+
+  const elenco = ingredienti.length
+    ? [sezione("Ingredienti", String(ingredienti.length)),
+       el("p.cosmetico__inci", {}, ...ingredienti.flatMap((i, k) => [k ? ", " : null, i.livello ? el("b", { class: `rischio--${i.livello}` }, i.nome) : i.nome]))]
+    : [];
+
+  return [
+    testaScheda(s),
+    ...avvisi.map((t) => el("p.meta.prodotto__avviso", {}, t)),
+    ...(s.ingredientiNoti ? [sezione("Da sapere", segnalati.length ? String(segnalati.length) : "niente")] : []),
+    ...righe,
+    ...elenco,
+    s.ingredientiNoti ? el("p.meta.prodotto__nota.cosmetico__nota", {},
+      "Le liste segnalano sostanze sospette (possibili interferenti endocrini, per la Commissione UE e l'ECHA) o allergeniche "
+      + "(regolamento UE 2023/1545), non il rischio alle dosi di un cosmetico, che il regolamento europeo già limita.") : null,
+    fonteScheda(s, rileggi),
+  ];
+}
+
+function corpoScheda(s, { rileggi } = {}) {
+  if (s.tipo === "beauty") return corpoCosmetico(s, { rileggi });
+  const testa = testaScheda(s);
   const avvisi = [];
   if (s.indice == null) avvisi.push("Dati insufficienti per una valutazione: la scheda non ha valori nutrizionali né ingredienti.");
   else if (s.parziale) avvisi.push(`Valutazione parziale: ${s.mancano.map((k) => NOME_COMPONENTE[k]).join(", ")} non ${s.mancano.length > 1 ? "noti" : "noto"}.`);
@@ -326,14 +390,7 @@ function corpoScheda(s, { rileggi } = {}) {
         sotto: spiegazioneNova(s.nova, s.novaMarcatori || []) })
     : rigaValore({ icona: "fabbrica", nome: "Non nota", frase: "servono gli ingredienti", classe: "nutr--nova" });
 
-  const quando = s.aggiornatoOff ? new Date(s.aggiornatoOff) : null;
-  // La scheda resta un mese in prodotti/{ean}: dopo averla corretta su OFF, «rileggi» la riprende subito.
-  const fonte = el("p.meta.prodotto__fonte", {},
-    "Dati: ", el("a", { href: `https://it.openfoodfacts.org/prodotto/${s.ean}`, target: "_blank", rel: "noopener" }, "Open Food Facts"),
-    " (ODbL)", quando ? `, scheda aggiornata il ${quando.toLocaleDateString("it-IT")}` : "",
-    s.completezza != null && s.completezza < 0.5 ? ". Scheda incompleta: si può completare lì." : ".",
-    rileggi ? " " : null,
-    rileggi ? el("a.prodotto__rileggi", { href: "#", role: "button", onclick: (e) => { e.preventDefault(); rileggi(); } }, "Rileggi") : null);
+  const fonte = fonteScheda(s, rileggi);
 
   return [
     testa,

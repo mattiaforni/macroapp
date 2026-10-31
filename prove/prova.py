@@ -274,6 +274,26 @@ with sync_playwright() as p:
         shot(pg, "1e3-prodotto-incompleto")
         pg.click("#foglio button[aria-label='Indietro']")
         pg.wait_for_selector("#foglio", state="hidden")
+        # Cosmetico (Open Beauty Facts, 31/10 sera): ingredienti segnalati, lista INCI, nota sui limiti, fonte OBF.
+        step[0] = "lista, cosmetico"
+        pg.click("button.fab")
+        pg.click("#foglio .foglio__secondarie button >> text=Scansiona")
+        pg.fill(codice, "3600000000004")
+        conferma(pg)
+        pg.wait_for_selector("#foglio .prodotto__nome b >> text=Crema mani alla lavanda")
+        assert pg.locator("#foglio .prodotto__bio").count() == 1, "foglia del bio"
+        sezioni = pg.locator("#foglio .prodotto__sezione h3").all_inner_texts()
+        assert sezioni == ["Da sapere", "Ingredienti"], f"sezioni del cosmetico: {sezioni}"
+        assert pg.locator("#foglio .additivo.rischio--moderato").count() == 2 and pg.locator("#foglio .additivo.rischio--basso").count() == 5, "2 moderati, 5 bassi"
+        assert pg.locator("#foglio .additivo").first.locator("b").inner_text() in ("Propylparaben", "Benzyl Salicylate"), "i moderati per primi"
+        assert "non supera 49" in pg.locator("#foglio .prodotto__avviso").inner_text(), "avviso del tetto"
+        assert "Open Beauty Facts" in pg.locator("#foglio .prodotto__fonte").inner_text(), "fonte OBF"
+        assert "Positivo" not in pg.locator("#foglio").inner_text(), "niente sezioni degli alimenti"
+        pg.wait_for_timeout(200)
+        shot(pg, "1e4-cosmetico")
+        pg.click("#foglio .foglio__secondarie button >> text=Da comprare")
+        pg.wait_for_selector("section.reparto[aria-label='Casa e persona'] .tessera >> text=Creme per le mani")
+        pg.wait_for_selector("#foglio", state="hidden")
         pg.click("button.fab")
         pg.click("#foglio .foglio__secondarie button >> text=Scansiona")
         pg.fill(codice, "4000000000001")

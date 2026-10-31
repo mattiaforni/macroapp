@@ -2,7 +2,8 @@
 // Una chiamata per codice; il risultato normalizzato finisce in `prodotti/{ean}` (vedi index.js),
 // così il secondo telefono e le scansioni successive non richiamano OFF (limite 15 letture/min per IP).
 // OFF chiede uno User-Agent che identifichi l'app: dal browser non si può impostare, da qui sì.
-import { additivo, calcolaIndice, haBio } from "./indice.js";
+import { additivo, calcolaIndice, haBio, VERSIONE_INDICE } from "./indice.js";
+import { analizzaIngredienti, votoCosmetico } from "./cosmetici.js";
 
 export const USER_AGENT = "DebitiEDoveri/1.0 (https://macroapp-b9bd0.web.app)";
 
@@ -11,16 +12,17 @@ const CAMPI = [
   "code", "product_type", "product_name", "product_name_it", "abbreviated_product_name", "product_name_en", "product_name_fr",
   "generic_name_it", "brands", "quantity", "nova_groups_markers",
   "categories_tags", "categories_tags_it", "nutriscore_grade", "nutriscore_score", "nova_group",
-  "additives_tags", "labels_tags", "labels_tags_it", "ingredients_text_it", "ingredients_text",
+  "additives_tags", "labels_tags", "labels_tags_it", "ingredients_text_it", "ingredients_text", "ingredients_text_en", "ingredients_text_fr",
   "nutriments", "nutrient_levels", "image_front_small_url", "image_front_url", "completeness", "last_modified_t",
   "environmental_score_grade", "ecoscore_grade",
 ].join(",");
 
 /**
  * Versione di normalizza(): sale quando la scheda guadagna campi (31/10: nome di ripiego, bevanda, frutta e verdura,
- * marcatori NOVA). Una scheda in cache più vecchia si rilegge da OFF alla prossima apertura (vedi index.js).
+ * marcatori NOVA; 31/10 sera, v3: i cosmetici di Open Beauty Facts con la loro scheda). Una scheda in cache più
+ * vecchia si rilegge da OFF alla prossima apertura (vedi index.js).
  */
-export const VERSIONE_SCHEDA = 2;
+export const VERSIONE_SCHEDA = 3;
 
 export class OffError extends Error {
   constructor(message, status) { super(message); this.status = status; }
@@ -82,8 +84,66 @@ export function marcatoriNova(markers, gruppo) {
 const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 const pulisci = (s) => String(s || "").replace(/\s+/g, " ").trim();
 
+// Campi comuni ad alimenti e cosmetici: nome (con i ripieghi), marca, categorie, etichette.
+function comuni(p) {
+  const categorie = (p.categories_tags_it || p.categories_tags || []).map((c) => cap(pulisci(String(c).replace(/^[a-z]{2}:/, "").replace(/-/g, " "))));
+  const etichette = (p.labels_tags_it || p.labels_tags || []).map((c) => cap(pulisci(String(c).replace(/^[a-z]{2}:/, "").replace(/-/g, " "))));
+  // Senza nome italiano né principale, prima il nome breve e la denominazione, poi inglese e francese.
+  const nome = [p.product_name_it, p.product_name, p.abbreviated_product_name, p.generic_name_it, p.product_name_en, p.product_name_fr]
+    .map(pulisci).find(Boolean) || null;
+  return {
+    trovato: true,
+    nome,
+    marca: pulisci(p.brands).split(",")[0] || null,
+    quantita: pulisci(p.quantity) || null,
+    descrizione: pulisci(p.generic_name_it) || null,
+    // L'ultima categoria è la più specifica («Spaghetti»): è il tipo che va sulla tessera della lista.
+    categoria: categorie.length ? categorie[categorie.length - 1] : null,
+    categorie: categorie.slice(-3),
+    immagine: p.image_front_small_url || p.image_front_url || null,
+    etichette,
+    bio: haBio(p.labels_tags || []),
+    completezza: typeof p.completeness === "number" ? Math.round(p.completeness * 100) / 100 : null,
+    aggiornatoOff: p.last_modified_t ? new Date(p.last_modified_t * 1000) : null,
+    versioneScheda: VERSIONE_SCHEDA,
+  };
+}
+
+/**
+ * Cosmetico (Open Beauty Facts, `product_type` «beauty»): ingredienti INCI con livello e motivo, voto deciso
+ * dall'ingrediente peggiore (cosmetici.js). Gli stessi campi vuoti degli alimenti, così le altre pagine non cambiano.
+ */
+export function normalizzaCosmetico(p) {
+  const testo = pulisci(p.ingredients_text_it || p.ingredients_text || p.ingredients_text_en || p.ingredients_text_fr);
+  const ingredienti = testo ? analizzaIngredienti(testo) : [];
+  const ingredientiNoti = ingredienti.length > 0;
+  const voto = votoCosmetico(ingredienti, ingredientiNoti);
+  return {
+    ...comuni(p),
+    fonte: "obf",
+    tipo: "beauty",
+    ingredienti,
+    ingredientiNoti,
+    conteggi: voto.conteggi,
+    additivi: [],
+    nutriscore: { grado: null, punteggio: null },
+    nova: null,
+    novaMarcatori: [],
+    bevanda: false,
+    nutrienti: {},
+    livelli: {},
+    indice: voto.indice,
+    fascia: voto.fascia,
+    componenti: {},
+    parziale: voto.parziale,
+    mancano: voto.mancano,
+    versioneIndice: VERSIONE_INDICE,
+  };
+}
+
 /** Dal prodotto OFF ai dati che l'app mostra e salva. */
 export function normalizza(p) {
+  if (p.product_type === "beauty") return normalizzaCosmetico(p);
   const n = p.nutriments || {};
   const additivi = (p.additives_tags || []).map(additivo);
   const ingredientiNoti = Array.isArray(p.additives_tags) || !!pulisci(p.ingredients_text_it || p.ingredients_text);

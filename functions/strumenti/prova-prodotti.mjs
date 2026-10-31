@@ -112,5 +112,26 @@ verifica(marcatoriNova(markers, 3)[0] === "sale" && marcatoriNova(undefined, 4).
 verifica(normalizza({ nova_group: 4, nova_groups_markers: markers }).novaMarcatori.includes("aromi"), "la scheda porta i marcatori del suo gruppo");
 verifica(s.spaghetti.versioneScheda === VERSIONE_SCHEDA && VERSIONE_SCHEDA >= 2, "le schede nuove portano la versione della scheda");
 
+console.log("Cosmetici (31/10)");
+const { valutaIngrediente, analizzaIngredienti, votoCosmetico } = await import("../src/prodotti/cosmetici.js");
+const { ricalcola: ricalcolaIndice } = await import("../src/prodotti/indice.js");
+verifica(valutaIngrediente("Butylparaben").livello === "alto" && valutaIngrediente("3-(4-Methylbenzylidene) Camphor").livello === "alto", "interferenti endocrini riconosciuti → alto");
+verifica(valutaIngrediente("PROPYLPARABEN").livello === "moderato" && valutaIngrediente("Methylparaben").livello === "basso", "gruppo A → moderato, gruppo B → basso");
+verifica(valutaIngrediente("CITRUS LIMON (LEMON) PEEL OIL").livello === "basso" && valutaIngrediente("Lavandula Angustifolia Oil").livello === "basso", "oli essenziali allergeni, anche col nome comune tra parentesi");
+verifica(valutaIngrediente("Rosa Damascena Flower Water").livello === null && valutaIngrediente("Parfum").livello === null, "acqua di rose e profumo non segnalati");
+verifica(valutaIngrediente("Camphor").livello === "basso" && valutaIngrediente("Glycerin").livello === null, "canfora allergene, glicerina no");
+const bs = valutaIngrediente("Benzyl Salicylate");
+verifica(bs.livello === "moderato" && bs.motivi.length === 2, "benzyl salicylate: gruppo A e allergene, vale il peggiore, due motivi");
+const lista = analizzaIngredienti("Ingredients: AQUA, 1,2-HEXANEDIOL, LINALOOL*, CI 77891. *da agricoltura biologica");
+verifica(lista.map((i) => i.nome).join("|") === "AQUA|1,2-HEXANEDIOL|LINALOOL|CI 77891", "lista INCI: virgole tra cifre, note a piè di lista, asterischi");
+verifica(votoCosmetico([]).indice === null, "senza ingredienti niente voto");
+verifica(votoCosmetico([{ livello: null }, { livello: "basso" }, { livello: "basso" }]).indice === 92, "due allergeni → 92");
+verifica(votoCosmetico([{ livello: "moderato" }]).indice === 49 && votoCosmetico([{ livello: "alto" }]).indice === 24, "tetti: moderato 49, alto 24");
+const crema = normalizza({ product_type: "beauty", product_name: "Crema mani", brands: "Marca", labels_tags: ["en:cosmos-organic"],
+  categories_tags_it: ["it:creme-per-le-mani"], ingredients_text: "Aqua, Glycerin, Propylparaben, Limonene, Linalool" });
+verifica(crema.tipo === "beauty" && crema.fonte === "obf" && crema.indice === 49 && crema.fascia === "mediocre", "crema: un moderato e due allergeni → 77, col tetto 49");
+verifica(crema.bio === true && crema.categoria === "Creme per le mani" && crema.nutriscore.grado === null, "crema: bio, categoria, campi degli alimenti vuoti");
+verifica(ricalcolaIndice(crema) === null, "il voto di un cosmetico non si ricalcola col modello degli alimenti");
+
 console.log(errori ? `\n${errori} controlli falliti` : "\nTutto a posto");
 process.exit(errori ? 1 : 0);

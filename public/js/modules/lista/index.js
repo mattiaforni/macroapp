@@ -125,6 +125,8 @@ export function inserisciProdotto({ ean, scheda, nome, preso }, items, voce = nu
   const uid = session.user.uid;
   const dettaglio = scheda?.trovato ? (scheda.marca || (norm(scheda.nome) !== norm(nome) ? scheda.nome : "")) || "" : null;
   const campi = { text: nome, ean, prodotto: riassunto(scheda) };
+  // Un cosmetico va in «Casa e persona» anche se il nome non lo dice («Gel doccia», «Balsamo»).
+  if (scheda?.tipo === "beauty" && !esistente?.reparto) campi.reparto = "casa";
   if (dettaglio) campi.detail = dettaglio;
   const stato = preso
     ? { done: true, boughtAt: new Date(), doneBy: uid, count: (esistente?.count || 0) + 1 }
