@@ -166,6 +166,12 @@ async function prodottoFinto(data = {}) {
     sessionStorage.setItem("finto.prodotto.fallito", "1");
     throw Object.assign(new Error("Open Food Facts non risponde (503)"), { code: "functions/unavailable" });
   }
+  // OFF lento dopo un contributo: la rilettura dà ancora la scheda di prima, segnata «in aggiornamento».
+  if (sessionStorage.getItem("finto.off.lento") && data.aggiorna) {
+    const n = Number(sessionStorage.getItem("finto.off.lento.letture") || 0) + 1;
+    sessionStorage.setItem("finto.off.lento.letture", String(n));
+    return { data: { trovato: false, fonte: "off", ean, letto: Date.now(), inAggiornamento: true } };
+  }
   const scheda = SCHEDE_FINTE[ean] || aggiunte()[ean];
   if (scheda) coll("prodotti").set(ean, { ...scheda, ean, letto: new Date(), lettoDa: UID });
   // Come la function: una scansione entra nella cronologia della casa (scansioni/{casa}_{ean}).

@@ -282,6 +282,8 @@ async function manda(ean, foto, campi, tipo, conto, mostra, rifiutato) {
     return;
   }
   if (!foglio.aperto()) return;
-  toast(r.avvisi?.length ? "Scheda aggiornata (qualche foto non è passata)" : "Grazie: scheda aggiornata su Open Food Facts", { ms: 4000 });
+  // Scheda non ancora pubblicata da OFF: lo dice la riga in cima alla scheda, che poi si aggiorna da sola.
+  if (!r.scheda?.inAggiornamento) toast(r.avvisi?.length ? "Scheda aggiornata (qualche foto non è passata)" : "Grazie: scheda aggiornata su Open Food Facts", { ms: 4000 });
+  else if (r.avvisi?.length) toast("Contributo inviato (qualche foto non è passata)", { ms: 4000 });
   mostra(r.scheda);
 }

@@ -362,15 +362,20 @@ with sync_playwright() as p:
         assert len({r["destra"] for r in rientri}) == 1, f"cifre in colonna: {rientri}"
         assert rientri[2]["x"] > rientri[1]["x"] and rientri[4]["x"] == rientri[2]["x"], f"«di cui» rientrati: {rientri}"
         shot(pg, "1l-completa-valori")
-        # OFF lento: la rilettura dopo l'invio dà ancora la scheda di prima → avviso con «Rileggi», niente «Completa».
+        # OFF lento: la rilettura dopo l'invio dà ancora la scheda di prima → in cima «Contributo inviato» con l'anello,
+        # niente «Completa», e la scheda si rilegge da sola finché arriva quella nuova (1/11: «Rileggi» in fondo era scomodo).
         pg.evaluate("sessionStorage.setItem('finto.off.lento', '1')")
         conferma(pg)
-        pg.wait_for_selector("#foglio .contributo__inviato")
-        assert pg.locator("#foglio .contributo__riga").count() == 0, "contributo appena inviato: niente «Completa»"
+        pg.wait_for_selector("#foglio .contributo__inviato .contributo__segno--gira")
+        assert pg.locator("#foglio .contributo__riga:not(.contributo__inviato)").count() == 0, "contributo appena inviato: niente «Completa»"
+        assert pg.locator("#foglio .foglio__secondarie .btn--rileggi").is_visible(), "Rileggi nella barra in basso"
+        pg.wait_for_timeout(200)
+        shot(pg, "1m-completa-in-pubblicazione")
+        pg.wait_for_function("Number(sessionStorage.getItem('finto.off.lento.letture')) >= 1", timeout=6000)
+        assert pg.locator("#foglio .contributo__inviato").count() == 1, "ancora la scheda di prima: la riga resta"
         pg.evaluate("sessionStorage.removeItem('finto.off.lento')")
-        pg.click("#foglio .contributo__inviato .prodotto__rileggi")
-        pg.wait_for_selector("#foglio .prodotto__nome b >> text=Gallette di riso")
-        assert pg.locator("#foglio .contributo__inviato").count() == 0, "riletta: scheda nuova senza avviso"
+        pg.wait_for_selector("#foglio .prodotto__nome b >> text=Gallette di riso", timeout=8000)
+        assert pg.locator("#foglio .contributo__inviato").count() == 0, "arrivata la scheda nuova: niente più riga"
         pg.click("#foglio button[aria-label='Indietro']")
         pg.wait_for_selector("#foglio", state="hidden")
 
@@ -393,7 +398,7 @@ with sync_playwright() as p:
         assert "foglio--sostituisce" not in (pg.get_attribute("#foglio", "class") or ""), "la scheda prende il posto dell'attesa senza dissolvenza"
         # «Rileggi» (dopo aver corretto la scheda su OFF): di nuovo l'attesa, poi la scheda, col nome scritto.
         pg.fill("#foglio input[aria-label='In lista come']", "Spaghettini")
-        pg.click("#foglio .prodotto__rileggi")
+        pg.click("#foglio .foglio__secondarie .btn--rileggi")
         pg.wait_for_selector("#foglio .prodotto__indice--attesa")
         pg.wait_for_selector("#foglio .prodotto__nome >> text=Spaghetti n.5")
         assert pg.input_value("#foglio input[aria-label='In lista come']") == "Spaghettini", "Rileggi tiene il nome scritto"

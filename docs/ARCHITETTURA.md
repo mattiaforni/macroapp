@@ -165,8 +165,10 @@ prodotto.js, flusso in `components/contributo.js`, function `contribuisci`, logi
    «Rileggi» sono «fresche» (`leggiOff(ean, { fresco: true })`: parametro `_` in più e `Cache-Control: no-cache`); la
    rilettura riprova fino a ~10 s finché `last_modified_t` non è più recente di quello di prima; se no la cache prende
    `rileggere: { prima, dal }`, la function `prodotto` la rilegge fresca a ogni apertura per un giorno, e la scheda arriva
-   con `inAggiornamento` (avviso «Contributo inviato: Open Food Facts sta ancora aggiornando la scheda · Rileggi», senza
-   «Completa», che rimanderebbe gli stessi dati).
+   con `inAggiornamento`: in cima la riga «Contributo inviato · La scheda si aggiorna da sola tra poco» con l'anello che
+   gira, senza «Completa» (rimanderebbe gli stessi dati); l'app richiama `prodotto` con `aggiorna` dopo 3, 4, 5, 6, 8 e
+   10 s e, quando la scheda non è più `inAggiornamento`, la mette al posto di questa; se no la riga diventa «tocca per
+   riprovare». «Rileggi» sta nella barra in basso del foglio (↻ accanto a «Da comprare»), non più in fondo alla scheda.
 I cosmetici vanno su Open Beauty Facts (stessi account). Costo: una lettura di Sonnet con tre immagini, ~1–2 centesimi.
 Soglie nostre, dichiarate nel codice: zuccheri, saturi e sale tra «basso» e «alto» del semaforo britannico (FSA 2016,
 come i `nutrient_levels` di OFF) con la fascia media divisa a metà, «senza» dal reg. UE 1924/2006; energia dove il

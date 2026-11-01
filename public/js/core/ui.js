@@ -256,6 +256,7 @@ const D = {
   giu: '<path d="m6 9 6 6 6-6"/>',
   calendario: '<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
   orologio: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  aggiorna: '<path d="M19.5 12A7.5 7.5 0 1 1 17 6.4"/><path d="M17.5 3v3.8h-3.8"/>',
   ripeti: '<path d="M4 11V9.5A3.5 3.5 0 0 1 7.5 6H19l-3-3"/><path d="M20 13v1.5a3.5 3.5 0 0 1-3.5 3.5H5l3 3"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h10"/>',
   banca: '<path d="M3.5 9.5 12 4.5l8.5 5"/><path d="M5.5 10.5v7M9.8 10.5v7M14.2 10.5v7M18.5 10.5v7"/><path d="M3.5 19.5h17"/>',

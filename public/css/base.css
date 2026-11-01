@@ -706,6 +706,15 @@ button.tessera__indice:active, .tessera .altro:active { background: rgba(255,255
 .prodotto__fonte { margin-top: 16px; }
 /* «Completa» (components/contributo.js): riga nella scheda, foto con la fotocamera nell'app, riepilogo da confermare. */
 .contributo__riga { margin: 4px 0 6px; border-top: 1px solid var(--linea); border-bottom: 1px solid var(--linea); }
+/* Contributo in pubblicazione: il pallino è un anello con un arco che gira, come l'attesa della scheda. */
+.contributo__inviato[role="status"] { cursor: default; }
+.contributo__segno { position: relative; background: none; color: var(--accento); }
+.contributo__segno--gira::after {
+  content: ""; position: absolute; inset: -1px; border-radius: 50%;
+  border: 1.5px solid transparent; border-top-color: var(--accento); animation: gira .9s linear infinite;
+}
+/* «Rileggi» nella barra del foglio della scheda: con «Da comprare» accanto, solo l'icona. */
+.foglio__secondarie .btn--rileggi:not(:only-child) span { display: none; }
 .contributo__passo { margin-top: 14px; }
 .contributo__passo b { display: block; font-size: 17px; font-weight: 500; }
 .contributo__passo span { display: block; font-size: 13px; color: var(--inchiostro-2); margin-top: 2px; }

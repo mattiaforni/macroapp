@@ -4,7 +4,7 @@
 // additivi 25, NOVA 15, bio 10; tetto 49 con un additivo a rischio alto).
 // Dalla scheda la voce entra nella Lista come tipo di prodotto («Spaghetti»), col prodotto nel dettaglio:
 // «Preso» (in basso a destra) tra i comprati, «Da comprare» a sinistra.
-import { el, icon } from "../core/ui.js";
+import { el, icon, toast } from "../core/ui.js";
 import { functions } from "../core/firebase.js";
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-functions.js";
 import { openSheet, campo } from "./sheet.js";
@@ -269,8 +269,8 @@ function testaScheda(s) {
   );
 }
 
-/** Riga della fonte in fondo: Open Food Facts o Open Beauty Facts, con «Rileggi». */
-function fonteScheda(s, rileggi) {
+/** Riga della fonte in fondo: Open Food Facts o Open Beauty Facts. «Rileggi» sta nella barra in basso (1/11). */
+function fonteScheda(s) {
   const cosmetico = s.fonte === "obf";
   const quando = s.aggiornatoOff ? new Date(s.aggiornatoOff) : null;
   // La scheda resta un mese in prodotti/{ean}: dopo averla corretta su OFF, «rileggi» la riprende subito.
@@ -278,9 +278,7 @@ function fonteScheda(s, rileggi) {
     "Dati: ", el("a", { href: `https://it.${cosmetico ? "openbeautyfacts" : "openfoodfacts"}.org/prodotto/${s.ean}`, target: "_blank", rel: "noopener" },
       cosmetico ? "Open Beauty Facts" : "Open Food Facts"),
     " (ODbL)", quando ? `, scheda aggiornata il ${quando.toLocaleDateString("it-IT")}` : "",
-    s.completezza != null && s.completezza < 0.5 ? ". Scheda incompleta: si può completare lì." : ".",
-    rileggi ? " " : null,
-    rileggi ? el("a.prodotto__rileggi", { href: "#", role: "button", onclick: (e) => { e.preventDefault(); rileggi(); } }, "Rileggi") : null);
+    s.completezza != null && s.completezza < 0.5 ? ". Scheda incompleta: si può completare lì." : ".");
 }
 
 // ───────────── Cosmetici (31/10) ─────────────
@@ -291,7 +289,7 @@ const LIVELLO_COSMETICO = { alto: ["rischio alto", "4"], moderato: ["rischio mod
 const ORDINE_LIVELLO = { alto: 0, moderato: 1, basso: 2 };
 
 /** Corpo della scheda di un cosmetico: ingredienti segnalati, lista INCI, nota sui limiti delle liste. */
-function corpoCosmetico(s, { rileggi } = {}) {
+function corpoCosmetico(s) {
   const ingredienti = s.ingredienti || [];
   const segnalati = ingredienti.filter((i) => i.livello).sort((a, b) => ORDINE_LIVELLO[a.livello] - ORDINE_LIVELLO[b.livello]);
   const avvisi = [];
@@ -323,12 +321,12 @@ function corpoCosmetico(s, { rileggi } = {}) {
     s.ingredientiNoti ? el("p.meta.prodotto__nota.cosmetico__nota", {},
       "Le liste segnalano sostanze sospette (possibili interferenti endocrini, per la Commissione UE e l'ECHA) o allergeniche "
       + "(regolamento UE 2023/1545), non il rischio alle dosi di un cosmetico, che il regolamento europeo già limita.") : null,
-    fonteScheda(s, rileggi),
+    fonteScheda(s),
   ];
 }
 
-function corpoScheda(s, { rileggi } = {}) {
-  if (s.tipo === "beauty") return corpoCosmetico(s, { rileggi });
+function corpoScheda(s) {
+  if (s.tipo === "beauty") return corpoCosmetico(s);
   const testa = testaScheda(s);
   const avvisi = [];
   if (s.indice == null) avvisi.push("Dati insufficienti per una valutazione: la scheda non ha valori nutrizionali né ingredienti.");
@@ -391,7 +389,7 @@ function corpoScheda(s, { rileggi } = {}) {
         sotto: spiegazioneNova(s.nova, s.novaMarcatori || []) })
     : rigaValore({ icona: "fabbrica", nome: "Non nota", frase: "servono gli ingredienti", classe: "nutr--nova" });
 
-  const fonte = fonteScheda(s, rileggi);
+  const fonte = fonteScheda(s);
 
   return [
     testa,
@@ -479,19 +477,24 @@ function mostraScheda(s, opzioni = {}) {
   const trovato = !!s.trovato;
   // Rileggi: stessa scheda, letta di nuovo da OFF; il nome già scritto in «In lista come» resta.
   const rileggi = () => apriProdotto(s.ean, { ...opzioni, aggiorna: true, scansione: false, nomeIniziale: nome?.value.trim() || nomeIniziale });
-  const corpo = trovato ? corpoScheda(s, { rileggi }) : [
+  const corpo = trovato ? corpoScheda(s) : [
     el("div.prodotto__testa", {}, el("div.prodotto__indice", {}, el("b.display", {}, "?"), el("small", {}, "non trovato")),
       el("div.prodotto__nome", {}, el("b", {}, "Prodotto non trovato"), el("span", {}, `Codice ${s.ean}`))),
     s.inAggiornamento ? null : el("p.meta", {}, "Open Food Facts è una banca dati collaborativa e questo codice non c'è ancora. Puoi metterlo in lista lo stesso, o aggiungerlo con tre foto."),
   ].filter(Boolean);
   // «Completa» (1/11): scheda mancante o senza nome, ingredienti o valori → tre foto e un tocco (components/contributo.js).
   const dopo = corpo.reduce((k, n, i) => (n?.classList?.contains("prodotto__avviso") || n?.classList?.contains("prodotto__testa") || (!trovato && i === 1) ? i + 1 : k), 1);
+  // Contributo inviato ma OFF dà ancora la scheda di prima (1/11, Mattia: «Rileggi» in fondo era scomodo): in cima una
+  // riga con l'anello che gira, e la scheda si rilegge da sola finché arriva quella nuova (`aspetta`, sotto). Niente
+  // «Completa», che proporrebbe di rimandare gli stessi dati.
+  let attesaOff = null;
   if (s.inAggiornamento) {
-    // Contributo inviato ma OFF dà ancora la scheda di prima (il server la rilegge alla prossima apertura): niente
-    // «Completa», che proporrebbe di rimandare gli stessi dati.
-    corpo.splice(dopo, 0, el("p.meta.prodotto__avviso.contributo__inviato", {},
-      "Contributo inviato: Open Food Facts sta ancora aggiornando la scheda. ",
-      el("a.prodotto__rileggi", { href: "#", role: "button", onclick: (e) => { e.preventDefault(); rileggi(); } }, "Rileggi")));
+    const segno = el("span.pallino.contributo__segno", { "aria-hidden": "true" });
+    const sotto = el("span", {});
+    const riga = el("div.riga.contributo__riga.contributo__inviato", { role: "status" },
+      segno, el("div.testo", {}, el("b", {}, "Contributo inviato"), sotto));
+    attesaOff = { riga, segno, sotto };
+    corpo.splice(dopo, 0, riga);
   } else if (daCompletare(s)) {
     corpo.splice(dopo, 0, el("div.riga.contributo__riga", { role: "button", tabindex: "0",
         onclick: () => completaScheda(s, { mostra: (nuova) => mostraScheda(nuova, opzioni) }),
@@ -525,13 +528,43 @@ function mostraScheda(s, opzioni = {}) {
     if (!testo) { nome.focus(); return false; }
     inLista({ ean: s.ean, scheda: s, nome: testo, preso });
   };
+  // «Rileggi» nella barra in basso, a portata di pollice (1/11: in fondo alla scheda era scomodo); con la Lista
+  // accanto a «Da comprare» solo l'icona (le due scritte non stanno insieme accanto a «Preso»; base.css).
+  const rileggiBtn = el("button.btn.btn--rileggi", { type: "button", "aria-label": "Rileggi da Open Food Facts", onclick: rileggi },
+    icon("aggiorna"), el("span", {}, "Rileggi"));
   const sheet = openSheet({
     title: "Prodotto",
     stessoFoglio: true,
     body: corpo,
     onConfirm: inLista ? () => conferma(true) : undefined,
     confirmLabel: "Preso",
-    azioni: inLista ? [el("button.btn", { type: "button", onclick: () => { if (conferma(false) !== false) sheet.close(); } }, icon("lista"), "Da comprare")] : [],
+    azioni: [rileggiBtn, inLista ? el("button.btn", { type: "button", onclick: () => { if (conferma(false) !== false) sheet.close(); } }, icon("lista"), "Da comprare") : null],
   });
   if (nome) nome.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); sheet.confirm(); } });
+
+  // Dopo un contributo: la scheda si rilegge da sola (OFF lo pubblica di solito in pochi secondi) e, quando arriva
+  // quella nuova, prende il posto di questa senza passare dall'attesa. Dopo una quarantina di secondi la riga diventa
+  // un pulsante per riprovare.
+  const aspetta = async () => {
+    const { riga, segno, sotto } = attesaOff;
+    riga.onclick = null; riga.setAttribute("role", "status"); riga.removeAttribute("tabindex");
+    segno.replaceChildren(); segno.classList.add("contributo__segno--gira");
+    sotto.textContent = "La scheda si aggiorna da sola tra poco";
+    for (const pausa of [3000, 4000, 5000, 6000, 8000, 10000]) {
+      await new Promise((ok) => setTimeout(ok, pausa));
+      if (!sheet.aperto()) return;
+      const nuova = await chiama({ ean: s.ean, aggiorna: true }).then((r) => r.data, () => null);
+      if (!sheet.aperto()) return;
+      if (nuova && !nuova.inAggiornamento) {
+        mostraScheda(nuova, { ...opzioni, nomeIniziale: nome?.value.trim() || nomeIniziale });
+        toast("Scheda aggiornata", { ms: 3000 });
+        return;
+      }
+    }
+    segno.classList.remove("contributo__segno--gira"); segno.replaceChildren(icon("aggiorna"));
+    sotto.textContent = "Non ancora pubblicato: tocca per riprovare";
+    riga.setAttribute("role", "button"); riga.tabIndex = 0;
+    riga.onclick = aspetta;
+  };
+  if (attesaOff) aspetta();
 }
