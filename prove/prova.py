@@ -299,6 +299,61 @@ with sync_playwright() as p:
         pg.fill(codice, "4000000000001")
         conferma(pg)
         pg.wait_for_selector("#foglio >> text=Prodotto non trovato")
+        # «Completa» (1/11): tre foto con la fotocamera finta, lettura, riepilogo, account la prima volta, scheda.
+        step[0] = "lista, completa su Open Food Facts"
+        pg.click("#foglio .contributo__riga")
+        pg.wait_for_selector("#foglio .contributo__passo >> text=1 di 3 · Fronte")
+        pg.wait_for_function("document.querySelector('#foglio video')?.readyState >= 2", timeout=5000)
+        conferma(pg)
+        pg.wait_for_selector("#foglio .contributo__passo >> text=2 di 3 · Ingredienti")
+        conferma(pg)
+        pg.wait_for_selector("#foglio .contributo__passo >> text=3 di 3 · Valori nutrizionali")
+        assert pg.locator("#foglio .foto-miniature img").count() == 2, "due miniature"
+        pg.wait_for_timeout(200)
+        shot(pg, "1i-completa-foto")
+        conferma(pg)
+        pg.wait_for_selector("#foglio .foglio__testa h2 >> text=Da aggiungere")
+        assert pg.input_value("#foglio input[aria-label='Nome']") == "Gallette di riso", "nome letto"
+        assert pg.input_value("#foglio input[aria-label='Sale']") == "0,2", "sale con la virgola"
+        assert pg.locator("#foglio .contributo__account").is_visible(), "la prima volta si chiede l'account"
+        pg.fill("#foglio input[aria-label='Nome']", "Gallette di riso integrale")
+        conferma(pg)
+        assert pg.evaluate("document.activeElement?.getAttribute('aria-label')") == "Nome utente di Open Food Facts", "senza account Invia porta al nome utente"
+        pg.fill("#foglio input[aria-label='Nome utente di Open Food Facts']", "sbagliato")
+        pg.fill("#foglio input[aria-label='Password di Open Food Facts']", "x")
+        pg.wait_for_timeout(200)
+        shot(pg, "1j-completa-riepilogo")
+        conferma(pg)
+        pg.wait_for_selector("#foglio .contributo__rifiutato")
+        assert pg.input_value("#foglio input[aria-label='Nome']") == "Gallette di riso integrale", "le correzioni restano dopo il rifiuto"
+        pg.fill("#foglio input[aria-label='Nome utente di Open Food Facts']", "mattia")
+        pg.fill("#foglio input[aria-label='Password di Open Food Facts']", "giusta")
+        conferma(pg)
+        pg.wait_for_selector("#foglio .prodotto__nome b >> text=Gallette di riso integrale")
+        assert pg.locator("#foglio .contributo__riga").count() == 0, "scheda completa: niente più «Completa»"
+        chiamate = pg.evaluate("JSON.parse(sessionStorage.getItem('finto.contributi'))")
+        invii = [c for c in chiamate if c["azione"] == "invia"]
+        assert [c["azione"] for c in chiamate][0] == "leggi" and len(invii) == 2, f"una lettura e due invii: {chiamate}"
+        assert invii[-1]["foto"] == ["front", "ingredients", "nutrition"] and invii[-1]["campi"]["nutrizione"]["sale"] == 0.2, f"foto e valori inviati: {invii[-1]}"
+        pg.wait_for_timeout(200)
+        shot(pg, "1k-completa-fatto")
+        pg.click("#foglio button[aria-label='Indietro']")
+        pg.wait_for_selector("#foglio", state="hidden")
+        # La seconda volta l'account non si chiede più: «Invio come mattia».
+        pg.evaluate("sessionStorage.removeItem('finto.off.aggiunte')")
+        pg.click("button.fab")
+        pg.click("#foglio .foglio__secondarie button >> text=Scansiona")
+        pg.fill(codice, "4000000000003")
+        conferma(pg)
+        pg.wait_for_selector("#foglio .contributo__riga")
+        pg.click("#foglio .contributo__riga")
+        pg.wait_for_selector("#foglio .contributo__passo >> text=1 di 3")
+        pg.wait_for_function("document.querySelector('#foglio video')?.readyState >= 2", timeout=5000)
+        conferma(pg)
+        pg.click("#foglio .foglio__secondarie button >> text=Salta")
+        pg.click("#foglio .foglio__secondarie button >> text=Salta")
+        pg.wait_for_selector("#foglio .contributo__chi >> text=Invio come mattia")
+        assert not pg.locator("#foglio .contributo__account").is_visible(), "account già dato: campi nascosti"
         pg.click("#foglio button[aria-label='Indietro']")
         pg.wait_for_selector("#foglio", state="hidden")
 

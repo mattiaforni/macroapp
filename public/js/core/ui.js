@@ -320,6 +320,7 @@ const D = {
   foglia: '<path d="M4 20c0-8 5-14 16-15 1 10-4 16-12 16H4z"/><path d="M4 20C8 16 11 13 16 11"/>',
   // Scheda del prodotto (components/prodotto.js): zollette di zucchero, saliera, fabbrica (trasformazione),
   // foglia piena del biologico (la venatura prende il colore del fondo dal CSS, .prodotto__bio).
+  fotocamera: '<path d="M4 8.5h3.2l1.6-2.5h6.4l1.6 2.5H20v11H4z"/><circle cx="12" cy="13.5" r="3.4"/>',
   cubo: '<path d="M12 3.5 4.5 7.5v9L12 20.5l7.5-4v-9L12 3.5z"/><path d="M4.5 7.5 12 11.5l7.5-4M12 11.5v9"/>',
   sale: '<path d="M8.5 10.5h7l-.9 10h-5.2l-.9-10z"/><path d="M8.5 10.5c0-3.3 1.6-6 3.5-6s3.5 2.7 3.5 6"/><circle cx="10.8" cy="7.6" r=".55" fill="currentColor" stroke="none"/><circle cx="13.2" cy="7.6" r=".55" fill="currentColor" stroke="none"/><circle cx="12" cy="6" r=".55" fill="currentColor" stroke="none"/>',
   fabbrica: '<path d="M3.5 20.5v-9.5l5 3v-3l5 3v-3l4 2.4V4.5h3v16z"/><path d="M7 17.5h1.5M11 17.5h1.5M15 17.5h1.5"/>',

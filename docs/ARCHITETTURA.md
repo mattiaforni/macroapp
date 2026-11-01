@@ -145,6 +145,21 @@ voto. Il «parfum» non conta: non è in nessuna lista (Yuka lo segnala). La sch
 sospette o allergeniche, non il rischio alle dosi d'uso, che il reg. (CE) 1223/2009 già limita. I nomi INCI sono verificati
 sulla tassonomia CosIng di OBF (`taxonomies/beauty/ingredients-cosing-obf.txt` su GitHub). Le liste vanno aggiornate a mano
 quando la Commissione o l'ECHA decidono (es. resorcinol, proposto come interferente endocrino dalla Francia nel 2025).
+
+**Completa su Open Food Facts** (1/11, richiesta di Mattia). Una scheda che non c'è, o senza nome, ingredienti o (per gli
+alimenti) valori nutrizionali, ha in cima «Completa la scheda» / «Aggiungilo a Open Food Facts» (`daCompletare` in
+prodotto.js, flusso in `components/contributo.js`, function `contribuisci`, logica in `functions/src/prodotti/contributo.js`):
+1. foto con la fotocamera dentro l'app: fronte, ingredienti, valori nutrizionali (due per un cosmetico già noto); «Salta» per
+   quella che non c'è. ImageCapture (scatto con la messa a fuoco) dove c'è, altrimenti il fotogramma; lato lungo 2000 px, JPEG.
+2. `contribuisci leggi`: Claude (Sonnet) legge le foto con istruzioni strette (solo ciò che si legge, valori solo per 100 g o
+   100 ml, nota se c'è un dubbio); in parallelo il server rilegge il prodotto su OFF e dice quali campi mancano (`mancanti`).
+3. «Da aggiungere»: solo i campi mancanti, già compilati e correggibili; la prima volta nome utente e password di OFF.
+4. `contribuisci invia`: `product_jqm2.pl` con i soli campi mancanti (`campiOff`: niente sovrascritture), poi le foto con
+   `product_image_upload.pl`; account dell'utente, `app_name`, `app_version`, `app_uuid` (sha256 dell'uid con un sale) e
+   `comment`, come OFF chiede alle app che scrivono. Un errore sui campi ferma tutto, una foto rifiutata è un avviso.
+   L'account si salva in `off_account/{uid}` (regole: nessun accesso dall'app) solo dopo una scrittura riuscita; se OFF lo
+   rifiuta l'app torna al riepilogo a chiederlo. Poi rilettura da OFF e cache `prodotti/{ean}`: la scheda nuova compare subito.
+I cosmetici vanno su Open Beauty Facts (stessi account). Costo: una lettura di Sonnet con tre immagini, ~1–2 centesimi.
 Soglie nostre, dichiarate nel codice: zuccheri, saturi e sale tra «basso» e «alto» del semaforo britannico (FSA 2016,
 come i `nutrient_levels` di OFF) con la fascia media divisa a metà, «senza» dal reg. UE 1924/2006; energia dove il
 Nutri-Score dà 2, 4½ e 7 punti (160, 360, 560 kcal; bevande 21, 54, 72); fibre 3 e 6 g (reg. 1924/2006), proteine 4 e 8 g,

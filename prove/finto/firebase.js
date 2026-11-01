@@ -115,6 +115,43 @@ const SCHEDE_FINTE = {
     componenti: { nutrizione: { valore: 30, peso: 50, stato: "noto" }, additivi: { valore: null, peso: 25, stato: "ignoto" }, nova: { valore: null, peso: 15, stato: "ignoto" }, bio: { valore: null, peso: 10, stato: "ignoto" } },
   },
 };
+// Prodotti aggiunti con «Completa» (funzione `contribuisci` finta): da lì in poi la scheda si trova.
+function aggiunte() { try { return JSON.parse(sessionStorage.getItem("finto.off.aggiunte") || "{}"); } catch (e) { return {}; } }
+
+// Funzione `contribuisci` finta: «leggi» restituisce un'etichetta letta (sempre la stessa), «invia» vuole l'account
+// (quello sbagliato, «sbagliato», è rifiutato come da OFF), tiene le chiamate per la prova e aggiunge la scheda.
+async function contribuisciFinto(data = {}) {
+  await new Promise((ok) => setTimeout(ok, 120));
+  const chiamate = JSON.parse(sessionStorage.getItem("finto.contributi") || "[]");
+  chiamate.push({ azione: data.azione, ean: data.ean, foto: (data.foto || []).map((f) => f.campo), campi: data.campi || null, account: data.account ? data.account.utente : null });
+  sessionStorage.setItem("finto.contributi", JSON.stringify(chiamate));
+  const conto = sessionStorage.getItem("finto.off.account");
+  if (data.azione === "leggi") {
+    return { data: {
+      letti: { tipo: "food", nome: "Gallette di riso", marca: "Marca Bio", quantita: "130 g", categoria: "Gallette di riso",
+        ingredienti: "Riso integrale*, sale. *biologico", linguaIngredienti: "it",
+        nutrizione: { per: "100g", kcal: 387, kj: 1638, grassi: 2.8, saturi: 0.6, carboidrati: 81, zuccheri: 0.5, fibre: 3.2, proteine: 8, sale: 0.2 }, nota: null },
+      tipo: "food", esiste: false, mancanti: ["nome", "marca", "quantita", "categoria", "ingredienti", "nutrizione"], account: conto ? { utente: conto } : null,
+    } };
+  }
+  if (data.account?.utente === "sbagliato") throw Object.assign(new Error("Open Food Facts non accetta nome utente e password"), { code: "functions/permission-denied" });
+  if (!data.account && !conto) throw Object.assign(new Error("Serve l'account di Open Food Facts"), { code: "functions/failed-precondition" });
+  if (data.account) sessionStorage.setItem("finto.off.account", data.account.utente);
+  const c = data.campi || {};
+  const scheda = {
+    trovato: true, fonte: "off", tipo: "food", nome: c.nome, marca: c.marca, quantita: c.quantita, categoria: c.categoria, categorie: [c.categoria],
+    nutriscore: { grado: "b", punteggio: 1 }, nova: 3, additivi: [], etichette: [], bio: false, bevanda: false,
+    nutrienti: { kcal: c.nutrizione?.kcal ?? null, grassi: c.nutrizione?.grassi ?? null, saturi: c.nutrizione?.saturi ?? null, zuccheri: c.nutrizione?.zuccheri ?? null,
+      sale: c.nutrizione?.sale ?? null, fibre: c.nutrizione?.fibre ?? null, proteine: c.nutrizione?.proteine ?? null, frutta: null },
+    novaMarcatori: ["sale"], livelli: {}, completezza: 0.8, ingredientiNoti: true, aggiornatoOff: Date.now(), versioneScheda: 3,
+    indice: 79, fascia: "eccellente", parziale: false, mancano: [], versioneIndice: 2,
+    componenti: { nutrizione: { valore: 80, peso: 50, stato: "noto" }, additivi: { valore: 100, peso: 25, stato: "noto" }, nova: { valore: 75, peso: 15, stato: "noto" }, bio: { valore: 0, peso: 10, stato: "noto" } },
+  };
+  sessionStorage.setItem("finto.off.aggiunte", JSON.stringify({ ...aggiunte(), [data.ean]: scheda }));
+  coll("prodotti").set(data.ean, { ...scheda, ean: data.ean, letto: new Date(), lettoDa: UID });
+  return { data: { scheda: { ...scheda, ean: data.ean, letto: Date.now() }, campi: Object.keys(c), avvisi: [] } };
+}
+
 async function prodottoFinto(data = {}) {
   // Ritardo come sul telefono (function fredda + Open Food Facts): la prova lo alza per guardare l'attesa.
   const ritardo = Number(sessionStorage.getItem("finto.prodotto.ritardo") || 80);
@@ -125,7 +162,7 @@ async function prodottoFinto(data = {}) {
     sessionStorage.setItem("finto.prodotto.fallito", "1");
     throw Object.assign(new Error("Open Food Facts non risponde (503)"), { code: "functions/unavailable" });
   }
-  const scheda = SCHEDE_FINTE[ean];
+  const scheda = SCHEDE_FINTE[ean] || aggiunte()[ean];
   if (scheda) coll("prodotti").set(ean, { ...scheda, ean, letto: new Date(), lettoDa: UID });
   // Come la function: una scansione entra nella cronologia della casa (scansioni/{casa}_{ean}).
   if (data?.scansione) {
@@ -144,6 +181,7 @@ export function httpsCallable(_f, name) {
   if (name === "bank") return bankFinto;
   if (name === "avvisa") return async (data) => ({ data: avvisaFinto(data) });
   if (name === "prodotto") return prodottoFinto;
+  if (name === "contribuisci") return contribuisciFinto;
   // Trascrizione finta: segna cosa ha ricevuto (formato, dimensione, progetto) per le asserzioni della prova.
   if (name === "trascrivi") return async (data) => {
     await new Promise((r) => setTimeout(r, 300));

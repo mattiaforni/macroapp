@@ -8,6 +8,7 @@ import { el, icon } from "../core/ui.js";
 import { functions } from "../core/firebase.js";
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-functions.js";
 import { openSheet, campo } from "./sheet.js";
+import { completaScheda } from "./contributo.js";
 
 const chiama = httpsCallable(functions, "prodotto", { timeout: 35000 });
 
@@ -462,6 +463,17 @@ function foglioErrore(ean, e, opzioni) {
   });
 }
 
+/** Scheda da completare su Open Food Facts: non trovata, o senza nome, ingredienti o (alimenti) valori nutrizionali. */
+export function daCompletare(s) {
+  if (!s?.trovato) return !!s?.ean;
+  if (s.tipo === "beauty") return !s.ingredientiNoti || !s.nome;
+  return !s.ingredientiNoti || s.nutrienti?.kcal == null || !s.nome;
+}
+function cosaManca(s) {
+  const m = [!s.nome && "nome", !s.ingredientiNoti && "ingredienti", s.tipo !== "beauty" && s.nutrienti?.kcal == null && "valori"].filter(Boolean);
+  return m.length > 1 ? `${m.slice(0, -1).join(", ")} e ${m[m.length - 1]}` : m[0];
+}
+
 function mostraScheda(s, opzioni = {}) {
   const { inLista, voci = [], nomeIniziale = "" } = opzioni;
   const trovato = !!s.trovato;
@@ -470,9 +482,19 @@ function mostraScheda(s, opzioni = {}) {
   const corpo = trovato ? corpoScheda(s, { rileggi }) : [
     el("div.prodotto__testa", {}, el("div.prodotto__indice", {}, el("b.display", {}, "?"), el("small", {}, "non trovato")),
       el("div.prodotto__nome", {}, el("b", {}, "Prodotto non trovato"), el("span", {}, `Codice ${s.ean}`))),
-    el("p.meta", {}, "Open Food Facts è una banca dati collaborativa: questo codice non c'è ancora. Puoi comunque mettere il prodotto in lista, e ",
-      el("a", { href: `https://it.openfoodfacts.org/prodotto/${s.ean}`, target: "_blank", rel: "noopener" }, "aggiungerlo lì"), " quando hai tempo."),
+    el("p.meta", {}, "Open Food Facts è una banca dati collaborativa e questo codice non c'è ancora. Puoi metterlo in lista lo stesso, o aggiungerlo con tre foto."),
   ];
+  // «Completa» (1/11): scheda mancante o senza nome, ingredienti o valori → tre foto e un tocco (components/contributo.js).
+  if (daCompletare(s)) {
+    const dopo = corpo.reduce((k, n, i) => (n?.classList?.contains("prodotto__avviso") || n?.classList?.contains("prodotto__testa") || (!trovato && i === 1) ? i + 1 : k), 1);
+    corpo.splice(dopo, 0, el("div.riga.contributo__riga", { role: "button", tabindex: "0",
+        onclick: () => completaScheda(s, { mostra: (nuova) => mostraScheda(nuova, opzioni) }),
+        onkeydown: (e) => { if (e.key === "Enter") e.currentTarget.click(); } },
+      el("span.pallino.pallino--accento", {}, icon("fotocamera")),
+      el("div.testo", {}, el("b", {}, trovato ? "Completa la scheda" : "Aggiungilo a Open Food Facts"),
+        el("span", {}, trovato ? `Mancano ${cosaManca(s)}: tre foto, le leggo io` : "Tre foto: le leggo io, tu confermi")),
+      icon("freccia", "freccia-riga")));
+  }
 
   let nome = null;
   if (inLista) {

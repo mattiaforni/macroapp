@@ -18,7 +18,7 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
   conclusione del consenso, scollega, lettura a richiesta; `src/banking/enable.js`), `google` (account
   Google: collegamento una tantum con le spunte Contatti, Calendario e Drive, permessi di un'ora, `src/google/account.js`), `avvisa` (notifiche push,
   `src/avvisi.js`), `prodotto` (scheda di un prodotto da Open Food Facts con l'indice, cache in `prodotti/{ean}`;
-  `src/prodotti/`, i cosmetici da Open Beauty Facts con `cosmetici.js`; con `scansione: true` anche la cronologia `scansioni`), `syncBank` (lettura quotidiana alle 7:15, poi le notifiche della banca). firebase-admin, agente e banca si importano dentro i gestori, non all'avvio.
+  `src/prodotti/`, i cosmetici da Open Beauty Facts con `cosmetici.js`; con `scansione: true` anche la cronologia `scansioni`), `contribuisci` (1/11: «Completa» su Open Food Facts / Open Beauty Facts: `leggi` le foto con Claude, `invia` i soli campi mancanti e le foto con l'account OFF dell'utente in `off_account/{uid}`, solo server; `src/prodotti/contributo.js`), `syncBank` (lettura quotidiana alle 7:15, poi le notifiche della banca). firebase-admin, agente e banca si importano dentro i gestori, non all'avvio.
 - **Pubblicazione**: push su `main` → `.github/workflows/deploy.yml` pubblica hosting,
   regole, indici e functions (secret `FIREBASE_SERVICE_ACCOUNT`). Si può rilanciare a mano.
 - **Segreti** in Secret Manager (ANTHROPIC_API_KEY, GEMINI_API_KEY, ENABLE_BANKING_*):
@@ -53,6 +53,7 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 | `components/proposals.js` | azioni proposte: `APPLICA` per tipo, `renderAzione` (la sintesi proposta si legge ripiegata) |
 | `components/sintesi.js` | sintesi di un progetto (`projects.sintesi`): `sezioniSintesi` (una sezione «## » per tema, prima riga «Stato: …» facoltativa), `tonoStato`, foglio per correggerla |
 | `components/prodotto.js` | codice a barre: `scansiona()` (fotocamera con `BarcodeDetector`, altrimenti il codice scritto; con un codice il foglio **resta aperto** e lo sostituisce `apriProdotto`: chiuderlo faceva un `history.back()` che chiudeva anche l'attesa), `apriProdotto(ean, { inLista, aggiorna })` (foglio di attesa con l'anello e il codice, dopo 6 s «ci mette più del solito»; indietro annulla; errore nello stesso foglio con «Riprova»; poi la scheda da Open Food Facts via function `prodotto`, **come in Yuka** (31/10): indice, nome con la foglia se bio, Positivo / Negativo (righe dei valori con frase, pallino a quattro livelli `liv--1..4` e scala al tocco; soglie `NEGATIVI` / `POSITIVI` dichiarate nel file), Tutti i valori, Additivi, Trasformazione (NOVA spiegato, `novaMarcatori`), «Rileggi» che salta la cache; il Nutri-Score non si mostra (31/10, Mattia: «non mi interessa»); per un cosmetico (`tipo` «beauty», 31/10) `corpoCosmetico`: Da sapere (ingredienti segnalati col pallino e il motivo), Ingredienti (lista INCI), nota sui limiti delle liste, fonte Open Beauty Facts; con `inLista` il campo «In lista come» con le voci simili (`simile`: tutte le parole della più corta nella più lunga), «Preso» a destra e «Da comprare» a sinistra), `pallinoIndice`, `riassunto` (con `v` = modello dell'indice), `aggiornaRiassunti`, `VERSIONE_INDICE` |
+| `components/contributo.js` | «Completa» (1/11): `completaScheda(s, { mostra })` → foto con la fotocamera dentro l'app (fronte, ingredienti, valori; «Scatta» in basso a destra, «Salta» a sinistra; ImageCapture se c'è, lato lungo 2000 px; senza fotocamera il file del telefono) → «Leggo le etichette…» (`contribuisci leggi`) → «Da aggiungere»: solo i campi che su OFF mancano, correggibili, account OFF la prima volta (rifiutato → si richiede, le correzioni restano) → «Invia» → scheda aggiornata nello stesso foglio. In `prodotto.js` la riga «Completa la scheda» / «Aggiungilo a Open Food Facts» (`daCompletare`) |
 | `components/documenti.js` | documenti di Drive collegati a un progetto o a una voce del manuale: `sceltaDocumenti` (elenco + ricerca, in un foglio), `elencoDocumenti`, `rigaDocumento` |
 | `components/registratore.js` | nota vocale: `pulsanteRegistra({ inserisci, progetto, cosa })` per la barra del foglio della nota e sotto le istruzioni del progetto (Registra → tempo · Ferma → «Trascrivo…»), MediaRecorder webm/opus a 32 kbit/s, schermo acceso durante la registrazione, microfono liberato a Ferma o alla chiusura del foglio; manda a `trascrivi` |
 | `components/persone.js` | scelta delle persone di un task: suggerimenti dalla rubrica e da Google Contatti, persone nuove; una voce della rubrica non collegata e il contatto Google con lo stesso nome compaiono una volta sola, e sceglierla la collega. Con `perNota` (persone di una nota) niente entra in rubrica: `valore()` → [{ nome, voceId?, googleId? }] |
@@ -404,6 +405,17 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
       Nomi INCI verificati sulla tassonomia CosIng di OBF (GitHub raw, raggiungibile dalla sessione; edlists.org ed EUR-Lex no).
       Un cosmetico entra in Lista nel reparto «Casa e persona». `VERSIONE_SCHEDA` 3: tutte le schede in cache si rileggono
       una volta. **Da verificare dal telefono**: copertura di OBF sui prodotti italiani e qualità delle liste INCI.
+      **Completa su Open Food Facts** (1/11, richiesta di Mattia: «zero fatica o quasi»; account OFF creato da lui): dalla
+      scheda mancante o senza nome/ingredienti/valori, tre foto → Claude (Sonnet, output strutturato con soli testi,
+      `pulisciLettura` converte i numeri) legge → riepilogo dei soli campi mancanti → «Invia» → `product_jqm2.pl` (campi, mai
+      sovrascritture; prodotto nuovo con `lang=it`; categoria come `add_categories=it:…`; valori per 100 g, anche per 100 ml)
+      e `product_image_upload.pl` (`front_it`, `ingredients_it`, `nutrition_it`), con `app_name` DebitiEDoveri, `app_uuid`
+      (sha256 dell'uid) e commento; poi rilettura e cache. Scelta: confermare prima di pubblicare (un errore di lettura
+      finirebbe pubblico col nome di Mattia); account chiesto nell'app e non in Secret Manager, così ognuno usa il suo.
+      Prova senza rete: `node functions/strumenti/prova-contributo.mjs`. **Non verificato con OFF vero** (la sessione non
+      raggiunge openfoodfacts.org): da controllare al primo uso la risposta di `product_jqm2.pl` con l'account (status 1) e
+      di `product_image_upload.pl`, che la categoria in italiano venga riconosciuta e che OFF calcoli subito il Nutri-Score.
+      Da fare (Mattia o Claude): il modulo d'uso dell'API di OFF che le app che scrivono devono compilare.
 - [ ] Identità visiva definitiva (resto dell'app): da decidere con Mattia
 
 Bassa priorità (Mattia, 23/10: la revisione delle spese è meno rilevante), previste in

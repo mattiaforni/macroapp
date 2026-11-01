@@ -284,6 +284,75 @@ const CACHE_ASSENTE_MS = 24 * 3600 * 1000;
  * autenticato, la scrive solo il server); { aggiorna: true } la rilegge da OFF comunque.
  * Ritorna la scheda ({ trovato: false, ean } se il codice non c'è).
  */
+/**
+ * Contributo a Open Food Facts / Open Beauty Facts (1/11): dalla scheda di un prodotto mancante o incompleto.
+ * { azione: "leggi", ean, foto } → Claude legge le foto → { letti, mancanti, tipo, esiste, account: { utente } | null }.
+ * { azione: "invia", ean, foto, campi, tipo, account? } → scrive su OFF/OBF solo i campi mancanti e carica le foto,
+ * con l'account OFF dell'utente (dato la prima volta dall'app, tenuto in off_account/{uid}, che legge solo il server;
+ * si salva dopo una scrittura riuscita), poi rilegge la scheda e aggiorna la cache → { scheda, avvisi }.
+ * Vedi src/prodotti/contributo.js.
+ */
+export const contribuisci = onCall(
+  { secrets: [ANTHROPIC_API_KEY], timeoutSeconds: 120, memory: "512MiB" },
+  async (req) => {
+    if (!req.auth) throw new HttpsError("unauthenticated", "Accesso richiesto");
+    const off = await import("./src/prodotti/off.js");
+    const c = await import("./src/prodotti/contributo.js");
+    const ean = off.normalizzaEan(req.data?.ean);
+    if (!ean) throw new HttpsError("invalid-argument", "Codice a barre non valido");
+    const foto = c.fotoValide(req.data?.foto);
+    const uid = req.auth.uid;
+    const db = await getDb();
+    const refAccount = db.collection("off_account").doc(uid);
+    const leggiProdotto = () => off.leggiOff(ean).catch((err) => {
+      if (err instanceof off.OffError) throw new HttpsError("unavailable", err.message);
+      throw err;
+    });
+    try {
+      if (req.data?.azione === "leggi") {
+        if (!foto.length) throw new HttpsError("invalid-argument", "Nessuna foto da leggere");
+        const { reason } = await import("./src/ai/claude.js");
+        const [conto, grezzo, letti] = await Promise.all([
+          refAccount.get(),
+          leggiProdotto(),
+          c.leggiEtichette({ foto, key: ANTHROPIC_API_KEY.value(), chiedi: reason }),
+        ]);
+        const tipo = grezzo?.product_type === "beauty" || (!grezzo && letti.tipo === "beauty") ? "beauty" : "food";
+        console.log("contribuisci leggi", ean, tipo, grezzo ? "esiste" : "nuovo", foto.map((f) => f.campo).join(","));
+        return { letti, tipo, esiste: !!grezzo, mancanti: c.mancanti(grezzo, tipo), account: conto.exists ? { utente: conto.data().utente } : null };
+      }
+      if (req.data?.azione === "invia") {
+        const dato = req.data?.account;
+        const nuovoAccount = dato && String(dato.utente || "").trim() && String(dato.password || "") ? { utente: String(dato.utente).trim(), password: String(dato.password) } : null;
+        const conto = nuovoAccount ? null : await refAccount.get();
+        const account = nuovoAccount || (conto?.exists ? { utente: conto.data().utente, password: conto.data().password } : null);
+        if (!account) throw new HttpsError("failed-precondition", "Serve l'account di Open Food Facts");
+        const grezzo = await leggiProdotto();
+        const tipo = grezzo?.product_type === "beauty" || (!grezzo && req.data?.tipo === "beauty") ? "beauty" : "food";
+        const campi = c.campiOff(req.data?.campi || {}, c.mancanti(grezzo, tipo), tipo, !grezzo);
+        const { avvisi } = await c.inviaAOff({ ean, tipo, foto, campi, account, uuid: c.appUuid(uid) });
+        const { FieldValue } = await import("firebase-admin/firestore");
+        if (nuovoAccount) await refAccount.set({ ...nuovoAccount, aggiornato: FieldValue.serverTimestamp() });
+        // Rilettura: la scheda col nuovo indice entra nella cache, come una «Rileggi».
+        const nuovo = await off.leggiOff(ean).catch(() => null);
+        const scheda = nuovo ? off.normalizza(nuovo) : { trovato: false, fonte: tipo === "beauty" ? "obf" : "off" };
+        await db.collection("prodotti").doc(ean).set({ ...scheda, ean, letto: FieldValue.serverTimestamp(), lettoDa: uid }, { merge: false });
+        console.log("contribuisci invia", ean, tipo, Object.keys(campi).join(","), foto.length, "foto", avvisi.length ? `avvisi: ${avvisi.join("; ")}` : "");
+        return { scheda: { ...scheda, ean, letto: Date.now(), aggiornatoOff: scheda.aggiornatoOff?.getTime?.() || null }, campi: Object.keys(campi), avvisi };
+      }
+      throw new HttpsError("invalid-argument", "Azione sconosciuta");
+    } catch (err) {
+      if (err instanceof HttpsError) throw err;
+      const msg = String(err.message || err);
+      console.error("contribuisci", ean, err.status || "", msg.slice(0, 300));
+      if (err instanceof c.ContributoError && err.status === 401) throw new HttpsError("permission-denied", err.message);
+      if (err instanceof off.OffError) throw new HttpsError("unavailable", err.message);
+      if (/Claude 4\d\d|Claude: /.test(msg)) throw new HttpsError("internal", `Lettura delle foto non riuscita (${msg.slice(0, 120)})`);
+      throw new HttpsError("internal", `Contributo non riuscito (${msg.slice(0, 160)})`);
+    }
+  },
+);
+
 // ───────────── Trascrizione delle note vocali ─────────────
 
 // Formati che il telefono registra (MediaRecorder) e che Gemini accetta. Chrome: webm/opus; Safari: mp4 (= m4a).
