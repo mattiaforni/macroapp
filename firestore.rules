@@ -155,6 +155,12 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Stato degli avvisi a orario per casa (ultimo giro, eventi annunciati, promemoria mandati, riepilogo del
+    // giorno): solo la function `giroAvvisi`.
+    match /avvisi_stato/{hid} {
+      allow read, write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

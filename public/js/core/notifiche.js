@@ -5,6 +5,8 @@
 // su tutti i suoi telefoni: users/{uid}.notifiche.<categoria> (false = spenta, assente = accesa).
 // Chi riceve cosa lo decide la funzione `avvisa` (functions/src/avvisi.js): l'app la chiama dopo
 // ogni scrittura condivisa che può interessare l'altra persona (`segnala`, chiamata da core/db.js).
+// Calendario, promemoria e riepilogo del mattino li manda il server da solo (giroAvvisi, ogni 5 minuti);
+// la fine di un'analisi del diario l'avvisa analyzeEntry, se l'app nel frattempo è in secondo piano.
 // La notifica la mostra il service worker (sw.js); toccandola si apre la pagina giusta.
 import { doc, getDoc, updateDoc, deleteField, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js";
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-functions.js";
@@ -15,13 +17,31 @@ const SDK = "https://www.gstatic.com/firebasejs/11.3.0/firebase-messaging.js";
 const CHIAVE_ID = "macroapp.notifiche.dispositivo";
 const CHIAVE_TOKEN = "macroapp.notifiche.token"; // ultimo token salvato da questo telefono
 
-/** [chiave, titolo, descrizione, icona] */
-export const CATEGORIE = [
-  ["spese", "Spese condivise", "Spese e pareggi aggiunti dall'altra persona", "spese"],
-  ["task", "Task condivisi", "Task nuovi e task fatti", "task"],
-  ["lista", "Lista della spesa", "Cose aggiunte, riunite in una notifica sola", "lista"],
-  ["banca", "Banca, solo per te", "Spese da confermare, consenso interrotto", "banca"],
+/**
+ * Le categorie, in due gruppi: quello che fa l'altra persona e quello che riguarda solo te.
+ * [chiave, titolo, descrizione, icona]; le chiavi sono quelle di functions/src/avvisi.js (CATEGORIE).
+ */
+export const GRUPPI = [
+  { titolo: "Dall'altra persona", spiega: "Quando fa qualcosa di condiviso, mai per quello che fai tu.", categorie: [
+    ["spese", "Spese condivise", "Spese e pareggi aggiunti, modificati o eliminati", "spese"],
+    ["task", "Task condivisi", "Task nuovi e task fatti", "task"],
+    ["lista", "Lista della spesa", "Cose aggiunte, in una notifica sola", "lista"],
+    ["calendario", "Calendario della casa", "Eventi nuovi, anche aggiunti da Google Calendar", "calendario"],
+  ] },
+  { titolo: "Per te", spiega: "Riguardano solo te.", categorie: [
+    ["promemoria", "Promemoria degli eventi", "Eventi con orario dei tuoi calendari, se Google non ti avvisa già", "orologio"],
+    ["riepilogo", "Riepilogo del mattino", "Alle 7:30: eventi di oggi, task in scadenza o in ritardo, banca", "sole"],
+    ["diario", "Analisi del diario", "A fine analisi di una nota, se nel frattempo hai lasciato l'app", "scintilla"],
+    ["banca", "Banca", "Spese da confermare, consenso interrotto o in scadenza: nel riepilogo, se è acceso", "banca"],
+  ] },
 ];
+export const CATEGORIE = GRUPPI.flatMap((g) => g.categorie);
+
+/** Anticipo dei promemoria in minuti (users.notifiche.anticipo), come ANTICIPI in functions/src/avvisi-calendario.js. */
+export const ANTICIPI = [[15, "15 min"], [30, "30 min"], [60, "1 ora"], [120, "2 ore"]];
+export const ANTICIPO = 60;
+/** Fascia silenziosa (users.notifiche.silenzio, assente = sì): la decide il server, SILENZIO in avvisi.js. */
+export const SILENZIO = "22:30–7:30";
 
 const avvisa = httpsCallable(functions, "avvisa");
 
@@ -109,9 +129,12 @@ export async function disattiva() {
   scrivi(CHIAVE_TOKEN, null);
 }
 
-/** Accende o spegne una categoria per la persona (tutti i suoi telefoni). */
-export function scegliCategoria(chiave, accesa) {
-  return updateDoc(doc(db, "users", session.user.uid), { [`notifiche.${chiave}`]: accesa });
+/**
+ * Una preferenza per la persona (tutti i suoi telefoni): una categoria accesa o spenta, l'anticipo dei
+ * promemoria (minuti), il silenzio di notte.
+ */
+export function scegliCategoria(chiave, valore) {
+  return updateDoc(doc(db, "users", session.user.uid), { [`notifiche.${chiave}`]: valore });
 }
 
 /** Notifica di prova ai propri telefoni. Ritorna quanti l'hanno ricevuta. */
@@ -138,8 +161,10 @@ export async function aggiornaAllAvvio() {
  * documento e decide. Si chiama a scrittura arrivata sul server (senza rete parte quando torna).
  */
 let attesaLista = null;
-export function segnala(coll, id, evento) {
-  const manda = () => avvisa({ coll, id, evento }).catch((e) => console.warn("notifiche: avviso non inviato", e.code || e.message));
+export function segnala(coll, id, evento, extra = {}) {
+  // `extra`: per una spesa modificata `prima` (i campi di prima, per dire cosa è cambiato), per una eliminata
+  // `copia` (il documento non c'è più e il server non lo può rileggere).
+  const manda = () => avvisa({ coll, id, evento, ...extra }).catch((e) => console.warn("notifiche: avviso non inviato", e.code || e.message));
   // Lista: «latte, uova, pane» sono tre scritture, ma basta l'ultima chiamata (il server riassume
   // le aggiunte recenti della stessa persona). Si aspetta un attimo che finiscano.
   if (coll !== "shopping_items") { manda(); return; }

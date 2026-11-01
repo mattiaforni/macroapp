@@ -1450,6 +1450,24 @@ with sync_playwright() as p:
         assert voce["addedBy"] == "uid-test" and voce["text"].lower() == "ceci", f"l'ultima voce, con chi l'ha aggiunta: {voce}"
         pg.click("#foglio button[aria-label='Indietro']")
         pg.wait_for_selector("#foglio", state="hidden")
+        # Spesa modificata: la segnalazione porta i campi di prima; spesa eliminata: una copia (il server non la rilegge).
+        pg.evaluate("sessionStorage.removeItem('finto.avvisi')")
+        pg.click(".schede a[href='#/spese']")
+        pg.click(".riga >> text=Multa")
+        pg.wait_for_selector("#foglio h2 >> text=Modifica spesa")
+        pg.fill("#foglio input[placeholder='0,00']", "18")
+        conferma(pg)
+        pg.wait_for_selector(".riga:has-text('Multa') >> text=18,00")
+        pg.click(".riga >> text=Gpl")
+        pg.wait_for_selector("#foglio h2 >> text=Modifica spesa")
+        pg.click("#foglio button >> text=Elimina")
+        pg.wait_for_selector(".riga >> text=Gpl", state="detached")
+        pg.wait_for_timeout(300)
+        avvisi = pg.evaluate("JSON.parse(sessionStorage.getItem('finto.avvisi') || '[]')")
+        mod = [a for a in avvisi if a.get("evento") == "modificata"]
+        eli = [a for a in avvisi if a.get("evento") == "eliminata"]
+        assert len(mod) == 1 and mod[0]["coll"] == "expenses" and mod[0]["prima"]["amount"] == 15 and mod[0]["prima"]["description"] == "Multa" and len(mod[0]["prima"]["date"]) == 10, f"modifica segnalata con i campi di prima: {avvisi}"
+        assert len(eli) == 1 and eli[0]["copia"] == {"description": "Gpl", "amount": 25, "type": "", "visibility": "shared"}, f"eliminazione segnalata con la copia: {avvisi}"
 
         # ── Notifiche: pagina dal menu, attivazione in basso a destra, categorie, prova ──
         step[0] = "notifiche, pagina"
@@ -1474,14 +1492,35 @@ with sync_playwright() as p:
         utente = pg.evaluate("(() => { const s = JSON.parse(sessionStorage.getItem('finto.firestore')); return new Map(s.store.find(([c]) => c === 'users')[1]).get('uid-test'); })()")
         disp = list((utente.get("dispositivi") or {}).values())
         assert len(disp) == 1 and disp[0]["token"] == "token-finto", f"token salvato: {utente.get('dispositivi')}"
-        assert pg.locator(".spunta.on").count() == 4, "quattro categorie, accese all'inizio"
+        assert pg.locator(".spunta.on").count() == 9, "otto categorie e il silenzio di notte, accesi all'inizio"
+        titoli = pg.locator(".blocco h3").all_inner_texts()
+        assert titoli[:4] == ["Questo telefono", "Dall'altra persona", "Per te", "Di notte"], f"gruppi: {titoli}"
+        assert pg.locator(".blocco:has(h3:text-is(\"Dall'altra persona\")) .riga").count() == 4 and pg.locator(".blocco:has(h3:text-is('Per te')) .riga").count() == 4
+        assert pg.locator(".riga:has-text('Promemoria degli eventi') .anticipo .pillola.on").inner_text() == "1 ora", "anticipo predefinito: un'ora"
         pg.click(".riga:has-text('Lista della spesa')")
         pg.wait_for_selector(".riga:has-text('Lista della spesa') .spunta:not(.on)")
-        assert pg.locator(".spunta.on").count() == 3
+        assert pg.locator(".spunta.on").count() == 8
+        # Anticipo: la pillola cambia la scelta e non spegne la categoria
+        pg.click(".anticipo .pillola >> text=30 min")
+        pg.wait_for_selector(".anticipo .pillola.on >> text=30 min")
+        assert pg.locator(".riga:has-text('Promemoria degli eventi') .spunta.on").count() == 1, "promemoria ancora accesi"
         utente = pg.evaluate("(() => { const s = JSON.parse(sessionStorage.getItem('finto.firestore')); return new Map(s.store.find(([c]) => c === 'users')[1]).get('uid-test'); })()")
-        assert utente["notifiche"] == {"lista": False}, f"preferenza salvata: {utente.get('notifiche')}"
-        pg.wait_for_timeout(2700)  # il toast di attivazione se ne va
+        assert utente["notifiche"] == {"lista": False, "anticipo": 30}, f"preferenze salvate: {utente.get('notifiche')}"
+        # Promemoria spenti: le pillole spariscono
+        pg.click(".riga:has-text('Promemoria degli eventi') .spunta")
+        pg.wait_for_selector(".anticipo", state="detached")
+        pg.click(".riga:has-text('Promemoria degli eventi') .spunta")
+        pg.wait_for_selector(".anticipo .pillola.on >> text=30 min")
+        # Le descrizioni si leggono intere (vanno a capo)
+        desc = pg.locator(".riga:has-text('Promemoria degli eventi') .testo span").first
+        assert desc.evaluate("e => e.scrollWidth <= e.clientWidth + 1"), "descrizione non troncata"
+        assert pg.locator(".anticipo").evaluate("e => e.scrollWidth <= e.clientWidth + 1"), "le quattro pillole dell'anticipo stanno nella riga"
+        pg.wait_for_timeout(2700)  # i toast se ne vanno
         shot(pg, "16-notifiche")
+        pg.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+        pg.wait_for_timeout(150)
+        shot(pg, "16b-notifiche-fondo")
+        pg.evaluate("window.scrollTo(0, 0)")
         pg.click("button.pillola >> text=Manda una prova")
         pg.wait_for_selector("text=Prova inviata")
         pg.click("button.pillola >> text=Spegni qui")

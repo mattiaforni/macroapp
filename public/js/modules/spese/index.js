@@ -168,7 +168,7 @@ export async function apriSpesa(esistente = null, prefill = {}) {
       el("div.segmenti", { style: "justify-content:center;margin-top:18px;position:relative" },
         dataBtn, dataInput, esistente?.recurringId ? el("span.pillola", {}, icon("ripeti"), "Ricorrente") : (esistente ? null : ripetiSel)),
       esistente ? el("div.foglio__piede", {},
-        el("button.btn.btn--pericolo", { onclick: () => { remove(COLL, esistente.id); sheet.close(); toast("Spesa eliminata"); } }, icon("cestino"), "Elimina"),
+        el("button.btn.btn--pericolo", { onclick: () => { remove(COLL, esistente.id, { copia: esistente }); sheet.close(); toast("Spesa eliminata"); } }, icon("cestino"), "Elimina"),
       ) : null,
     ],
     onConfirm: () => {
@@ -181,7 +181,13 @@ export async function apriSpesa(esistente = null, prefill = {}) {
         description, amount, split: m.split, paidBy: m.paidBy === "me" ? me : altro.uid,
         date: aMezzogiorno(quando), category: categoria(description),
       };
-      if (esistente) { update(COLL, esistente.id, dati); return; }
+      if (esistente) {
+        // I campi di prima vanno con la modifica: la notifica all'altra persona dice cosa è cambiato.
+        const prima = { description: esistente.description || "", amount: esistente.amount, split: esistente.split, paidBy: esistente.paidBy,
+          date: isoGiorno(toDate(esistente.date) || new Date()) };
+        update(COLL, esistente.id, dati, { prima });
+        return;
+      }
       let recurringId = null;
       if (ripeti) {
         recurringId = create(REC, { ...dati, every: ripeti, nextDate: avanza(dati.date, ripeti), active: true }, VIS.SHARED).id;

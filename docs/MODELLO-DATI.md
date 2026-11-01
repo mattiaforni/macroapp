@@ -10,13 +10,14 @@ Campi comuni a tutte le collezioni di contenuto, compilati da `core/db.js`:
 | `createdAt`, `updatedAt` | timestamp | server |
 
 ## `users/{uid}`
-`displayName, email, photoURL, householdId, createdAt, google?: { collegato, scaduto, email, dal, permessi: { contatti, calendario, drive } }, dispositivi?: { <id>: { token, nome, aggiornato } }, notifiche?: { spese, task, lista, banca }, modelli?: { note, progetti }, calendari?: [{ id, nome, colore, modificabile }]`
+`displayName, email, photoURL, householdId, createdAt, google?: { collegato, scaduto, email, dal, permessi: { contatti, calendario, drive } }, dispositivi?: { <id>: { token, nome, aggiornato } }, notifiche?: { spese, task, lista, calendario, promemoria, riepilogo, diario, banca, anticipo, silenzio }, modelli?: { note, progetti }, calendari?: [{ id, nome, colore, modificabile }]`
 `google` lo scrive la funzione `google`: dice all'app se l'account Google è collegato, con quale account e quali
 delle tre spunte (contatti, calendario, Drive) sono state date. Il vecchio campo `contattiGoogle` (collegamento ai
 soli contatti, prima del 27/10) vale come `google` con il solo permesso dei contatti finché non si ricollega.
 `dispositivi`: i telefoni con le notifiche attive (id casuale tenuto nel telefono, token di Cloud Messaging);
 la funzione `avvisa` toglie quelli il cui token non vale più. `notifiche`: categorie per la persona, su tutti
-i suoi telefoni; `false` = spenta, assente = accesa. `modelli`: modello dell'AI per le note semplici e per quelle
+i suoi telefoni; `false` = spenta, assente = accesa. In più (1/11) `anticipo`: minuti di anticipo dei promemoria degli
+eventi (15, 30, 60, 120; assente = 60) e `silenzio`: `false` = suonano anche di notte (assente = senza suono 22:30–7:30). `modelli`: modello dell'AI per le note semplici e per quelle
 dei progetti con istruzioni (`haiku`, `sonnet`, `opus`; assente = Sonnet e Opus), letto da `analyzeEntry`.
 `calendari`: gli altri calendari di Google Calendar che la persona vede accanto a quello della casa (il personale, la
 band, l'associazione…: dal 1/11), nell'ordine in cui li ha scelti; `colore` = uno dei colori dei progetti (`COLORI` in
@@ -95,7 +96,7 @@ esportati come testo, file di testo così come sono; PDF e altri formati solo pe
 `people` è la copia in chiaro dei nomi: serve a chi non vede la voce in rubrica (voce privata dell'altro membro) e ai task vecchi, che avevano solo il testo.
 
 ## `journal_entries`
-`text, titolo?, titoloAMano?, persone?: [{ nome, voceId?, googleId? }], personeAMano?, projectId?, riepilogo?, temi?: [string], riepilogoAt?, analyzed, analyzedAt, analysisError, modello?, sintesiEsito?` — sempre `private`, solo il
+`text, titolo?, titoloAMano?, persone?: [{ nome, voceId?, googleId? }], personeAMano?, projectId?, riepilogo?, temi?: [string], riepilogoAt?, analyzed, analyzedAt, analysisError, modello?, sintesiEsito?, avvisaAFine?` — sempre `private`, solo il
 proprietario (anche nelle regole), anche quando il progetto è condiviso. `riepilogo` lo scrive l'agente
 (`analyzeEntry`) per le note di un progetto con `istruzioni`, tenendo conto delle 8 note precedenti dello
 stesso progetto; l'utente lo corregge dal foglio della nota. Con il riepilogo arrivano i `temi` (nomi delle sezioni
@@ -105,7 +106,10 @@ l'agente scrive `titolo` (una riga) e `persone`: le persone nominate, ciascuna c
 crea voci in rubrica. Titolo e persone cambiati a mano nel foglio della nota segnano `titoloAMano` / `personeAMano`
 e l'agente non li tocca più (un titolo svuotato torna all'AI). `createdAt` si può cambiare dal foglio della nota (lezioni inserite dopo). Indici: `ownerUid+createdAt` e
 `ownerUid+projectId+createdAt` (Diario filtrato e note precedenti per l'agente). `modello`: chi ha fatto l'ultima
-analisi (lo scrive l'app con la risposta di `analyzeEntry`).
+analisi (lo scrivono il server a fine analisi e l'app con la risposta di `analyzeEntry`; dal 1/11 anche `analyzed`,
+`analyzedAt`, `analysisError` li scrive il server, così valgono anche se l'app è stata chiusa durante l'analisi).
+`avvisaAFine`: l'app è passata in secondo piano mentre aspettava l'analisi (`true`) o è tornata (`false`); a fine
+analisi, se è `true`, il server manda una notifica a chi ha scritto la nota e toglie il campo.
 
 ## `notes`
 `text`, e per le bozze `type: "draft", channel, to, subject` — bozze salvate dalle azioni proposte (e gli appunti
@@ -126,6 +130,13 @@ Scritta solo dalla function `bank` e da `syncBank`. Il client legge solo la prop
 `scartati`: le ultime 12 uscite lette e non proposte (saldo della carta di credito, giroconti), col motivo, mostrate nella pagina Banca; una proposta della banca ancora in attesa per un movimento poi scartato passa a `status: "discarded"`.
 Le proposte create dalla banca hanno id `eb_<entry_reference>`, `source: "bank"`, `visibility: "private"` e in `payload` anche `account` (nome del conto), `merchantCategory` (MCC) e `bankTxId`.
 
+## `avvisi_stato/{householdId}`
+`ultimoGiro, cercatoFino, annunciati: { <hash>: ms }, ricordati: { <hash>: ms }, riepilogo: "AAAA-MM-GG"` — solo server
+(funzione `giroAvvisi`, ogni 5 minuti): fin dove si sono cercati gli eventi nuovi del calendario della casa (avanza solo
+quando la lettura riesce), quali eventi sono già stati
+annunciati e quali promemoria già mandati (chiave = hash di persona, evento e inizio; si dimenticano dopo due giorni),
+in che giorno è partito l'ultimo riepilogo del mattino.
+
 ## Regole in sintesi (`firestore.rules`)
 
 - lettura: proprietario, oppure membro della casa se `shared`
@@ -135,3 +146,4 @@ Le proposte create dalla banca hanno id `eb_<entry_reference>`, `source: "bank"`
 - `journal_entries`: solo proprietario, `visibility` forzata a `private`
 - `households`: un non membro può solo aggiungersi, fino a 2 membri
 - `prodotti`: lettura per chi è autenticato, scrittura solo dal server
+- `avvisi_stato`, `google_tokens`, `off_account`: solo il server

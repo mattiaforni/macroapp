@@ -5,7 +5,8 @@
 // Funzioni: analyzeEntry (agente del diario), bank (collegamento e lettura della banca), google (account Google:
 // Contatti, Calendario, Drive),
 // avvisa (notifiche push sulle cose condivise), trascrivi (nota vocale → testo, con Gemini), prodotto (scheda di un
-// prodotto da Open Food Facts), syncBank (lettura quotidiana).
+// prodotto da Open Food Facts), syncBank (lettura quotidiana), giroAvvisi (ogni 5 minuti: calendario, promemoria,
+// riepilogo del mattino).
 // All'avvio del container si caricano solo le dichiarazioni delle funzioni.
 // firebase-admin, l'agente e il client bancario vengono importati alla prima richiesta (import dinamico):
 // avvio più rapido e nessun lavoro a livello di modulo che possa bloccare il container.
@@ -62,6 +63,14 @@ export const analyzeEntry = onCall(
     // Tempi delle fasi nel registro (si leggono col flusso «Diagnosi»).
     const t0 = Date.now();
     const passo = (s) => console.log(`analyzeEntry ${entryId}: ${s} dopo ${Date.now() - t0} ms`);
+    // A fine analisi: la nota segnata come letta dal server e, se l'app nel frattempo è andata in secondo piano,
+    // una notifica a chi l'ha scritta (src/avvisi.js → fineAnalisi). Un errore qui non cambia la risposta.
+    const fine = async (esito) => {
+      try {
+        const { fineAnalisi } = await import("./src/avvisi.js");
+        if (await fineAnalisi(await getDb(), req.auth.uid, entryId, esito)) passo("avvisata a fine analisi");
+      } catch (e) { console.warn("analyzeEntry: fine analisi", e.code || String(e.message).slice(0, 120)); }
+    };
     try {
       passo("inizio");
       const db = await getDb();
@@ -78,16 +87,19 @@ export const analyzeEntry = onCall(
         keys: { anthropic: ANTHROPIC_API_KEY.value().trim(), gemini: GEMINI_API_KEY.value().trim() },
         clientGoogle: clientGoogle(), // per leggere i documenti di Drive del progetto e i contatti nominati
       });
+      await fine({ azioni, riepilogo, sintesiEsito, modello });
       return { proposals: azioni, riepilogo, titolo, persone, sintesi, sintesiEsito, modello };
     } catch (err) {
       if (err instanceof HttpsError) throw err;
       console.error("analyzeEntry", err);
       // 401: chiave assente o fittizia. Il telefono mostra «AI non ancora collegata».
       if (/\b401\b|authentication|invalid x-api-key/i.test(err.message)) {
+        await fine({ errore: "Chiave dell'AI non configurata" });
         throw new HttpsError("failed-precondition", "Chiave dell'AI non configurata");
       }
       // Gli altri errori arrivano al telefono in chiaro: i log delle funzioni non li legge nessuno.
       const [codice, testo] = spiegaErrore(err.message);
+      await fine({ errore: testo });
       throw new HttpsError(codice, testo);
     }
   },
@@ -490,8 +502,22 @@ export const syncBank = onSchedule(
       appId: ENABLE_BANKING_APP_ID.value(),
       privateKey: ENABLE_BANKING_PRIVATE_KEY.value(),
     });
-    // Notifiche: spese nuove da confermare, o consenso chiuso dalla banca.
+    // Notifiche: spese nuove da confermare, o consenso chiuso dalla banca (a chi non riceve il riepilogo delle 7:30).
     const { avvisaBanca } = await import("./src/avvisi.js");
     await avvisaBanca(db, esiti);
+  },
+);
+
+/**
+ * Avvisi a orario, ogni 5 minuti: eventi nuovi nel calendario della casa, promemoria degli eventi, riepilogo
+ * del mattino alle 7:30. Legge Google Calendar con il permesso di ciascuno (GOOGLE_OAUTH_CLIENT per rinnovarlo).
+ * Vedi src/avvisi-calendario.js.
+ */
+export const giroAvvisi = onSchedule(
+  { schedule: "every 5 minutes", timeZone: "Europe/Rome", secrets: [GOOGLE_OAUTH_CLIENT], timeoutSeconds: 120, memory: "256MiB", retryCount: 0 },
+  async () => {
+    const db = await getDb();
+    const { giroAvvisi: giro } = await import("./src/avvisi-calendario.js");
+    await giro(db, clientGoogle());
   },
 );

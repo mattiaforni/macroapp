@@ -23,7 +23,8 @@ export const VIS = { SHARED: "shared", PRIVATE: "private" };
 // Notifiche: scritture condivise che l'altra persona può voler sapere. Qui si fa solo una prima
 // scelta; cosa dire, a chi e se dirlo lo decide la funzione `avvisa` rileggendo il documento.
 const AVVISI_NUOVI = new Set(["expenses", "tasks", "shopping_items"]);
-function eventoModifica(coll, data) {
+function eventoModifica(coll, data, prima) {
+  if (coll === "expenses" && prima) return "modificata"; // dal foglio della spesa: il server dice cosa è cambiato
   if (coll === "tasks" && data.done === true) return "fatto";
   if (coll === "shopping_items" && data.done === false && data.addedAt) return "aggiunto"; // rimessa in lista, non «Annulla»
   return null;
@@ -61,15 +62,29 @@ export async function createWithId(coll, id, data, visibility = VIS.SHARED) {
   return true;
 }
 
-export function update(coll, id, data) {
-  const evento = eventoModifica(coll, data);
+/**
+ * Aggiorna un documento. `prima` (facoltativo, per le spese): i campi com'erano, per la notifica all'altra
+ * persona («42,10 € (era 40,00 €)»); senza, una modifica di una spesa non si annuncia.
+ */
+export function update(coll, id, data, { prima = null } = {}) {
+  const evento = eventoModifica(coll, data, prima);
   return updateDoc(doc(db, coll, id), { ...data, updatedAt: serverTimestamp() })
-    .then(() => { if (evento) segnala(coll, id, evento); })
+    .then(() => { if (evento) segnala(coll, id, evento, prima ? { prima } : {}); })
     .catch((e) => console.error(`update(${coll})`, e));
 }
 
-export function remove(coll, id) {
-  return deleteDoc(doc(db, coll, id)).catch((e) => console.error(`remove(${coll})`, e));
+/**
+ * Elimina un documento. `copia` (facoltativo, per le spese condivise): il documento come era, perché la notifica
+ * all'altra persona possa dire cosa è stato eliminato (dopo, il server non lo trova più).
+ */
+export function remove(coll, id, { copia = null } = {}) {
+  return deleteDoc(doc(db, coll, id))
+    .then(() => {
+      if (coll === "expenses" && copia?.visibility === VIS.SHARED) {
+        segnala(coll, id, "eliminata", { copia: { description: copia.description || "", amount: Number(copia.amount) || 0, type: copia.type || "", visibility: copia.visibility } });
+      }
+    })
+    .catch((e) => console.error(`remove(${coll})`, e));
 }
 
 function visibleCondition() {

@@ -31,9 +31,10 @@ self.addEventListener("fetch", (e) => {
   );
 });
 
-// Notifiche push (Firebase Cloud Messaging). Il server manda solo dati { titolo, testo, url, tag }
+// Notifiche push (Firebase Cloud Messaging). Il server manda solo dati { titolo, testo, url, tag, silenzioso }
 // (functions/src/avvisi.js): la notifica la disegna questo service worker. Stesso tag = la nuova
 // sostituisce la vecchia senza suonare di nuovo (la lista si aggiorna in una notifica sola).
+// `silenzioso` = di notte (22:30–7:30, deciso dal server con le preferenze della persona): niente suono né vibrazione.
 self.addEventListener("push", (e) => {
   let p = {};
   try { p = e.data ? e.data.json() : {}; } catch (err) { p = {}; }
@@ -42,6 +43,7 @@ self.addEventListener("push", (e) => {
   e.waitUntil(self.registration.showNotification(titolo, {
     body: d.testo || d.body || "",
     tag: d.tag || undefined,
+    silent: d.silenzioso === "1",
     icon: "/icons/icon-192.png",
     lang: "it",
     data: { url: d.url || "/" },

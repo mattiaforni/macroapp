@@ -22,7 +22,8 @@
 // al posto di aprire il Calendario dal menu.
 //
 // journal_entries { text, titolo, titoloAMano, persone: [{ nome, voceId?, googleId? }], personeAMano, projectId,
-//   riepilogo, temi, riepilogoAt, analyzed, analyzedAt, analysisError, modello, sintesiEsito }
+//   riepilogo, temi, riepilogoAt, analyzed, analyzedAt, analysisError, modello, sintesiEsito,
+//   avvisaAFine (l'app è uscita durante l'analisi: notifica alla fine, poi il server lo toglie) }
 // `modello`: chi ha letto la nota l'ultima volta (haiku, sonnet, opus: scelta in menu → Modelli AI).
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-functions.js";
 import { functions } from "../../core/firebase.js";
@@ -184,8 +185,19 @@ export function apriNota({ esistente = null, testo = "", progetti = [], projectI
  * `attesa`: la scrittura da aspettare prima (la nota appena creata o modificata).
  */
 export async function analizzaNota(entryId, attesa) {
+  // Se l'app passa in secondo piano mentre aspetta (Opus può metterci minuti), la nota lo segna
+  // (`avvisaAFine`) e a fine analisi il server manda una notifica; tornando nell'app il segno si toglie.
+  let fuori = false;
+  const suVisibilita = () => {
+    const nascosta = document.visibilityState === "hidden";
+    if (nascosta === fuori) return;
+    fuori = nascosta;
+    update(COLL, entryId, { avvisaAFine: nascosta });
+  };
+  document.addEventListener("visibilitychange", suVisibilita);
   try {
     if (attesa) await attesa;
+    suVisibilita(); // già uscita mentre la nota si salvava
     const res = await analyzeEntry({ entryId });
     const n = res.data?.proposals ?? 0;
     scrivi(CHIAVE_AI, "on");
@@ -200,6 +212,8 @@ export async function analizzaNota(entryId, attesa) {
     update(COLL, entryId, { analysisError: err.message || err.code || "errore" });
     toast(chiave ? "AI non ancora collegata: la nota è salvata" : `${err.message || "Analisi non riuscita"}. La nota è salvata.`, { ms: 7000 });
     return null;
+  } finally {
+    document.removeEventListener("visibilitychange", suVisibilita);
   }
 }
 

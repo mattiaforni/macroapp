@@ -1,7 +1,10 @@
-// Notifiche: attivazione su questo telefono (in basso a destra), categorie che valgono per la
-// persona su tutti i suoi telefoni, telefoni attivi, prova. Logica in core/notifiche.js.
+// Notifiche: attivazione su questo telefono (in basso a destra), categorie in due gruppi (dall'altra persona,
+// per te) che valgono per la persona su tutti i suoi telefoni, anticipo dei promemoria, silenzio di notte,
+// telefoni attivi, prova. Logica in core/notifiche.js; chi riceve cosa lo decide il server (functions/src/avvisi.js).
 import { el, icon, toast } from "../../core/ui.js";
-import { CATEGORIE, statoQui, leggiProfilo, attiva, disattiva, scegliCategoria, prova, idQuestoTelefono } from "../../core/notifiche.js";
+import {
+  GRUPPI, ANTICIPI, ANTICIPO, SILENZIO, statoQui, leggiProfilo, attiva, disattiva, scegliCategoria, prova, idQuestoTelefono,
+} from "../../core/notifiche.js";
 
 export const id = "notifiche";
 export const title = "Notifiche";
@@ -42,6 +45,25 @@ export function mount(container) {
   // Il permesso va chiesto dentro il tocco: attiva() lo fa per prima cosa.
   function suAttiva() { esegui(attiva, "Notifiche attive su questo telefono"); }
 
+  /** Riga con la spunta come interruttore; `sotto` = altro dentro la riga, sotto la descrizione. */
+  function interruttore(k, nome, desc, ic, accesa, sotto = null) {
+    return el("div.riga.riga--a-capo", { onclick: () => esegui(() => scegliCategoria(k, !accesa)) },
+      el("div.pallino", {}, icon(ic)),
+      el("div.testo", {}, el("b", {}, nome), el("span", {}, desc), sotto),
+      el("button.spunta", { type: "button", class: accesa ? "on" : "", "aria-pressed": accesa ? "true" : "false", "aria-label": `${nome}: ${accesa ? "attive" : "spente"}` }, icon("spunta")),
+    );
+  }
+
+  /** Quanto prima arrivano i promemoria: pillole dentro la riga (il tocco non spegne la categoria). */
+  function anticipo(prefs) {
+    const scelto = ANTICIPI.some(([m]) => m === prefs.anticipo) ? prefs.anticipo : ANTICIPO;
+    return el("div.segmenti.anticipo", { role: "group", "aria-label": "Quanto prima", onclick: (e) => e.stopPropagation() },
+      ...ANTICIPI.map(([m, etichetta]) => el("button.pillola", {
+        type: "button", class: m === scelto ? "on" : "", "aria-pressed": m === scelto ? "true" : "false", disabled: occupato,
+        onclick: () => { if (m !== scelto) esegui(() => scegliCategoria("anticipo", m), `Promemoria ${etichetta === "1 ora" ? "un'ora" : etichetta.replace(" min", " minuti")} prima`); },
+      }, etichetta)));
+  }
+
   function render() {
     if (!profilo) { attivaFab.hidden = true; corpo.replaceChildren(); return; }
     const stato = statoQui(profilo);
@@ -63,23 +85,24 @@ export function mount(container) {
           el("button.pillola", { type: "button", disabled: occupato, onclick: () => esegui(disattiva, "Notifiche spente su questo telefono") }, icon("chiudi"), "Spegni qui"),
         ) : null,
       ),
-      el("div.blocco", {},
-        el("h3", {}, "Cosa ti arriva"),
-        el("p", {}, "Quando l'altra persona fa qualcosa di condiviso; mai per quello che fai tu. Le scelte valgono su tutti i tuoi telefoni."),
-        el("div", {}, ...CATEGORIE.map(([k, nome, desc, ic]) => {
+      ...GRUPPI.map((g) => el("div.blocco", {},
+        el("h3", {}, g.titolo),
+        el("p", {}, g.spiega),
+        el("div", {}, ...g.categorie.map(([k, nome, desc, ic]) => {
           const accesa = prefs[k] !== false;
-          return el("div.riga", { onclick: () => esegui(() => scegliCategoria(k, !accesa)) },
-            el("div.pallino", {}, icon(ic)),
-            el("div.testo", {}, el("b", {}, nome), el("span", {}, desc)),
-            el("button.spunta", { type: "button", class: accesa ? "on" : "", "aria-pressed": accesa ? "true" : "false", "aria-label": `${nome}: ${accesa ? "attive" : "spente"}` }, icon("spunta")),
-          );
+          return interruttore(k, nome, desc, ic, accesa, k === "promemoria" && accesa ? anticipo(prefs) : null);
         })),
+      )),
+      el("div.blocco", {},
+        el("h3", {}, "Di notte"),
+        el("div", {}, interruttore("silenzio", "Senza suono di notte", `Dalle ${SILENZIO.replace("–", " alle ")} arrivano senza suono né vibrazione`, "luna", prefs.silenzio !== false)),
+        el("p.meta", { style: "margin-top:10px" }, "Le scelte di questa pagina valgono su tutti i tuoi telefoni."),
       ),
       telefoni.length ? el("div.blocco", {},
         el("h3", {}, "Telefoni con le notifiche"),
         el("div", {}, ...telefoni.map(([id, x]) => el("div.riga", { style: "cursor:default" },
           el("div.pallino", {}, icon("telefono")),
-          el("div.testo", {}, el("b", {}, x.nome || "Telefono"), el("span", {}, id === mio ? "questo telefono" : " ")),
+          el("div.testo", {}, el("b", {}, x.nome || "Telefono"), el("span", {}, id === mio ? "questo telefono" : " ")),
         ))),
       ) : null,
     ].filter(Boolean));

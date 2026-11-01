@@ -18,7 +18,7 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
   conclusione del consenso, scollega, lettura a richiesta; `src/banking/enable.js`), `google` (account
   Google: collegamento una tantum con le spunte Contatti, Calendario e Drive, permessi di un'ora, `src/google/account.js`), `avvisa` (notifiche push,
   `src/avvisi.js`), `prodotto` (scheda di un prodotto da Open Food Facts con l'indice, cache in `prodotti/{ean}`;
-  `src/prodotti/`, i cosmetici da Open Beauty Facts con `cosmetici.js`; con `scansione: true` anche la cronologia `scansioni`), `contribuisci` (1/11: «Completa» su Open Food Facts / Open Beauty Facts: `leggi` le foto con Claude, `invia` i soli campi mancanti e le foto con l'account OFF dell'utente in `off_account/{uid}`, solo server; `src/prodotti/contributo.js`), `syncBank` (lettura quotidiana alle 7:15, poi le notifiche della banca). firebase-admin, agente e banca si importano dentro i gestori, non all'avvio.
+  `src/prodotti/`, i cosmetici da Open Beauty Facts con `cosmetici.js`; con `scansione: true` anche la cronologia `scansioni`), `contribuisci` (1/11: «Completa» su Open Food Facts / Open Beauty Facts: `leggi` le foto con Claude, `invia` i soli campi mancanti e le foto con l'account OFF dell'utente in `off_account/{uid}`, solo server; `src/prodotti/contributo.js`), `syncBank` (lettura quotidiana alle 7:15, poi le notifiche della banca a chi non riceve il riepilogo), `giroAvvisi` (ogni 5 minuti: eventi nuovi nel calendario della casa, promemoria degli eventi, riepilogo del mattino alle 7:30; `src/avvisi-calendario.js`). firebase-admin, agente e banca si importano dentro i gestori, non all'avvio.
 - **Pubblicazione**: push su `main` → `.github/workflows/deploy.yml` pubblica hosting,
   regole, indici e functions (secret `FIREBASE_SERVICE_ACCOUNT`). Si può rilanciare a mano.
 - **Segreti** in Secret Manager (ANTHROPIC_API_KEY, GEMINI_API_KEY, ENABLE_BANKING_*):
@@ -41,7 +41,7 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 | `core/ui.js` | `el()`, icone disegnate a mano (`D`), date, importi, pillole, `sceltaColore` (cerchietti dei colori dei progetti, `COLORI`: undici dal 29/10, variabili `--c-<nome>*` in base.css, chiaro e notte); `attesa(fonti, render)`: prima comparsa di una pagina quando sono arrivate tutte le sue fonti (max 400 ms), e «vuoto» solo per una fonte arrivata; `puntoToccato(e, sorgente, da)`: dove cade un tocco su un testo mostrato, nella sua sorgente (anche dopo `testoRicco`) |
 | `core/db.js` | `create` (non aspetta il server, ritorna `{id, saved}`), `update`, `watchVisible`, `readVisible`, `leggiDove` (lettura una tantum con soli vincoli, per la cache `prodotti`); dopo le scritture condivise di spese, task e lista chiama `segnala` (notifiche). Ascolti condivisi: la stessa query è un solo `onSnapshot`, che resta aperto 10 minuti dopo l'uscita dalla pagina; i dati già noti arrivano subito (microtask), quindi una pagina rimontata o un filtro già usato si disegnano pieni al primo fotogramma. `chiudiAscolti` all'uscita dall'account |
 | `core/modelli.js` | modelli dell'AI per l'analisi (`users.modelli` = { note, progetti }, chiavi haiku/sonnet/opus, predefiniti Sonnet e Opus), `nomeModello` |
-| `core/notifiche.js` | notifiche push: `attiva`/`disattiva` su questo telefono (token in `users.dispositivi`), categorie (`users.notifiche`), `prova`, `segnala` → funzione `avvisa`; il disegno e il tocco della notifica stanno in `sw.js` |
+| `core/notifiche.js` | notifiche push: `attiva`/`disattiva` su questo telefono (token in `users.dispositivi`), `GRUPPI` di categorie («Dall'altra persona», «Per te»; `users.notifiche`, anche `anticipo` dei promemoria e `silenzio` di notte), `prova`, `segnala(coll, id, evento, { prima | copia })` → funzione `avvisa`; il disegno e il tocco della notifica stanno in `sw.js` (`silent` di notte) |
 | `core/household.js` | casa, nomi dei membri (`memberNames`), `nomeDi`, `updateHousehold` (es. categorie del manuale) |
 | `core/rubrica.js` | voci del manuale in memoria, aggiornate in tempo reale: `trovaPersona`, `risolviPersone` (crea quelle che mancano, collegate a Google se il nome è univoco), `nomiTask`, `sincronizzaDaGoogle` (all'avvio) |
 | `core/google.js` | account Google: `statoGoogle` (`users.google`: collegato, email, `permessi` {contatti, calendario, drive}), collegamento una tantum (ritorno su `/google-contatti`, poi pagina Google), permesso di un'ora dal server in localStorage, `chiamaGoogle(url, { method, query, body })` con rinnovo su 401, `messaggioGoogle` |
@@ -64,7 +64,7 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 | `modules/task/index.js` | task per progetti; `apriProgetto` (nome, visibilità, istruzioni per il diario, scritte o dettate con «Registra» sotto il campo, documenti di Drive, colore); dal progetto il pulsante Diario |
 | `modules/scansioni/index.js` | prodotti scansionati (dall'orologio della Lista): righe come il Diario, una per prodotto, dalla più recente (`scansioni` + schede in cache lette dalla casa prima della cronologia); tocco → scheda con Preso / Da comprare; in basso a destra Scansiona |
 | `modules/modelli/index.js` | pagina Modelli AI (menu → Account): un modello per le note semplici e uno per le note dei progetti con istruzioni, salvati al tocco |
-| `modules/notifiche/index.js` | pagina Notifiche (menu → Account): stato di questo telefono, «Attiva» in basso a destra, categorie, telefoni attivi, prova |
+| `modules/notifiche/index.js` | pagina Notifiche (menu → Account): stato di questo telefono, «Attiva» in basso a destra, categorie in due gruppi con l'anticipo dei promemoria (pillole dentro la riga), «Senza suono di notte», telefoni attivi, prova |
 | `modules/google/index.js` | pagina Google (menu → Collegamenti): stato del collegamento, righe Contatti / Calendario (foglio «Calendari», `apriSceltaCalendari` dal modulo calendario) / Drive, «Collega» in basso a destra, Ricollega e Scollega; conclude il ritorno dalla pagina di Google |
 | `modules/calendario/index.js` | pagina Calendario (menu → Casa, o «Calendario» sopra i prossimi giorni del Diario): in testata «Calendari» → `apriSceltaCalendari` (foglio: il calendario della casa su una riga, «Tocca per cambiarlo»; «Da vedere anche» con gli altri dell'account, colore a scelta sotto quelli scelti; si salva con Salva); pillole Tutti / un calendario (`macroapp.calendario.filtro`) quando sono più d'uno; agenda dei prossimi 60 giorni con una fascia per mese e `rigaEvento` (giorno in serif come le lezioni, numero solo sulla prima riga del giorno; nome del calendario davanti all'orario nel suo colore, tranne per la casa; `quandoEvento`, `inOrdine`), + per un evento nuovo (`apriEvento`: Invio sul titolo salva; calendario tra quelli modificabili se sono più d'uno, giorno, tutto il giorno o con orario, luogo, note), foglio dell'evento con Modifica, Elimina e il link a Google; un evento di un calendario in sola lettura o un invito apre un foglio di sola lettura (`apriLettura`) con «Apri in Google»; senza Google o senza calendari scelti invita a sceglierli |
 | `modules/banca/index.js` | stato del collegamento (`bank_connections/{uid}` in tempo reale), scelta della banca, conclusione al ritorno da `/banca?code=…` (messo da parte in `app.js`), «Leggi ora», rinnovo, scollega |
@@ -133,7 +133,7 @@ npm install --prefix prove        # una volta: font per le schermate
 python3 prove/costruisci.py       # copia public/ con Firebase finto in memoria
 python3 prove/prova.py            # flusso completo in Chromium, schermate in prove/_schermate
 node functions/strumenti/prova-banca.mjs   # quali movimenti bancari diventano proposte (servono le dipendenze di functions)
-node functions/strumenti/prova-avvisi.mjs  # cosa dicono le notifiche e a chi
+node functions/strumenti/prova-avvisi.mjs  # cosa dicono le notifiche e a chi (anche giro del calendario con Google finto e riepilogo)
 node functions/strumenti/prova-prodotti.mjs # indice dei prodotti su schede OFF costruite a mano
 python3 prove/additivi.py                   # rigenera la tabella degli additivi dalla tassonomia OFF
 ```
@@ -352,6 +352,19 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
       Notifiche). Da verificare dal telefono: attivazione (menu → Notifiche → Attiva → «Manda una prova») su
       entrambi i telefoni; se `getToken` fallisce, controllare che la chiave API web non escluda le API
       «Firebase Installations» e «FCM Registration».
+- [x] **Notifiche, seconda tornata** (1/11, richiesta di Mattia: eventi, promemoria, «pensiamo a quali altre», scelte 1–5 tra
+      quelle proposte). Dall'altra persona: spese modificate (cosa è cambiato, «45,00 € (era 40,00 €)») ed eliminate; eventi
+      nuovi nel calendario della casa, anche aggiunti da Google Calendar (≤ 5 minuti). Per te: promemoria degli eventi con
+      orario dei calendari che vedi, 15/30/60/120 minuti prima (predefinito 1 ora), saltati quando Google Calendar ti avvisa
+      già; riepilogo del mattino alle 7:30 (eventi di oggi, task in scadenza o in ritardo, banca: prende il posto della
+      notifica delle 7:15); fine analisi del diario se nel frattempo hai lasciato l'app (`avvisaAFine` sulla nota); consenso
+      della banca in scadenza; «Google scollegato». Di notte (22:30–7:30) senza suono, si spegne dalla pagina. Funzione
+      programmata `giroAvvisi` ogni 5 minuti (docs/ARCHITETTURA.md, Notifiche). Pagina Notifiche in due gruppi.
+      **Da verificare dal telefono**: che Chrome rispetti `silent` di notte; il primo riepilogo vero (7:30); un evento
+      aggiunto dall'altra persona da Google Calendar; che i promemoria saltino davvero gli eventi per cui Google avvisa.
+      **Da controllare (Mattia)**: se la schermata di consenso OAuth è «In produzione» (Google Cloud → Google Auth Platform →
+      Pubblico); in test il permesso scade ogni 7 giorni e con lui promemoria e riepilogo (arriva «Google scollegato»). La
+      pagina Google dice da quando è collegato: oltre 7 giorni = in produzione.
 - [x] **Niente lampi di «vuoto»** (26/10, dal video di Mattia): cambiando filtro nel Diario compariva per
       ~100 ms «Nessuna nota in questo progetto» / «Il diario è vuoto», e lo stesso in Task e Spese all'apertura.
       Ora ascolti condivisi in db.js, `attesa` nelle pagine con più fonti, anteprima del filtro dalle ultime note.
@@ -438,5 +451,4 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
 Bassa priorità (Mattia, 23/10: la revisione delle spese è meno rilevante), previste in
 `docs/ARCHITETTURA.md`: regole di spesa apprese (`expense_rules`: c'è la regola Firestore, nessuno
 le scrive né le applica in `syncBank`), bonifici tra i due membri riconosciuti come pareggi, divisione
-a percentuale. Notifiche ancora non previste: spese modificate o eliminate dall'altra persona, consenso
-della banca vicino alla scadenza.
+a percentuale.

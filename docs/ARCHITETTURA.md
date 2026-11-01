@@ -37,6 +37,8 @@ Scelte: nessun framework né bundler (coerente con i progetti precedenti, deploy
   `collega` → scambia il codice, conserva il refresh token in `google_tokens/{uid}`; `token` → permesso di un'ora
   per la People API, che l'app usa direttamente; `scollega` → revoca e cancella.
 - `avvisa` (callable): notifiche push (Firebase Cloud Messaging), vedi «Notifiche» sotto.
+- `giroAvvisi` (schedulata, ogni 5 minuti): eventi nuovi nel calendario della casa, promemoria degli eventi, riepilogo
+  del mattino; vedi «Notifiche» sotto.
 - `prodotto` (callable, `{ ean, aggiorna?, scansione? }`): scheda di un prodotto dal codice a barre, vedi «Prodotti» sotto. Con `scansione` la mette nella cronologia della casa (`scansioni`, `src/prodotti/scansioni.js`).
 - `syncBank` (schedulata, 07:15 Europe/Rome): per ogni `bank_connections` attiva scarica i movimenti contabilizzati degli ultimi 7 giorni e crea una proposta di spesa **personale** per ogni uscita (la spesa confermata nasce condivisa). Deduplica con id deterministico della proposta (`eb_<entry_reference>`).
 - Segreti in Secret Manager, mai nel repository.
@@ -233,7 +235,7 @@ il segreto GOOGLE_OAUTH_CLIENT.
 - **Note vocali** del diario (27/10): il telefono registra (components/registratore.js), la function `trascrivi` manda l'audio
   a Gemini con il vocabolario del progetto e della rubrica (src/trascrizione.js) e restituisce il testo, che entra nel campo
   della nota; poi tutto come una nota scritta. Claude non accetta audio. L'audio non viene salvato.
-- **Notifiche push** (FCM): lista condivisa, consensi bancari in scadenza.
+- **Notifiche push** (FCM): fatte (vedi «Notifiche»).
 - **Web Share Target**: già dichiarato nel manifest; il contenuto condiviso diventa una proposta di appunto.
 
 ## Ordine di sviluppo
@@ -250,16 +252,43 @@ Notifiche push con Firebase Cloud Messaging, senza chiave VAPID propria (quella 
 - **Telefoni**: dalla pagina Notifiche (menu → Account) un telefono chiede il permesso, prende il token con
   `getToken` sul service worker dell'app (`sw.js`) e lo scrive in `users/{uid}.dispositivi.<id>`. All'avvio il
   token si riconferma (`aggiornaAllAvvio`). Su iPhone funziona solo dall'app aggiunta alla schermata Home.
-- **Quando**: `core/db.js` segnala alla funzione `avvisa` le scritture condivise che possono interessare l'altra
-  persona: creazione di spese, task e voci della lista; task segnato fatto; voce rimessa in lista. La lista
-  aspetta 1,5 s e manda una chiamata sola per più voci di seguito. Il server rilegge il documento e decide:
-  solo documenti `shared` della casa di chi chiama, niente spese ricorrenti, mai a chi ha fatto la cosa.
+- **Dall'altra persona, subito** (`avvisa`): `core/db.js` segnala le scritture condivise che possono interessare
+  l'altra persona: creazione di spese, task e voci della lista; task segnato fatto; voce rimessa in lista; spesa
+  modificata dal suo foglio (con i campi di prima: la notifica dice cosa è cambiato, «45,00 € (era 40,00 €)», e
+  niente se non è cambiato nulla) o eliminata (con una copia ridotta, perché il server non la trova più; si annuncia
+  solo se il documento non esiste davvero più). La lista aspetta 1,5 s e manda una chiamata sola per più voci di
+  seguito. Il server rilegge il documento e decide: solo documenti `shared` della casa di chi chiama, niente spese
+  ricorrenti nuove (le genera il primo telefono che si apre), mai a chi ha fatto la cosa.
   Si è scelta la chiamata dall'app invece dei trigger di Firestore per non introdurre Eventarc (e i permessi
   IAM che il deploy dovrebbe concedere): il prezzo è che una scrittura fatta senza rete avvisa solo se l'app
   è ancora aperta quando la scrittura arriva al server.
-- **Cosa**: messaggio di soli dati `{ titolo, testo, url, tag }`, disegnato da `sw.js`; il tocco apre la pagina
+- **A orario** (`giroAvvisi`, ogni 5 minuti, `src/avvisi-calendario.js`). Gli eventi stanno solo su Google Calendar,
+  quindi il server li legge con il permesso Google di ciascuno (`tokenServer`, lo stesso con cui l'agente legge Drive):
+  - *Eventi nuovi nel calendario della casa*, a chi non li ha creati: eventi con `created` dopo l'ultimo giro
+    (`updatedMin`), creatore riconosciuto da `creator.email` = `users.google.email`. Anche quelli aggiunti da Google
+    Calendar, con al più 5 minuti di ritardo. Modifiche ed eliminazioni no: Google non dice chi le ha fatte.
+  - *Promemoria* degli eventi con orario dei calendari che la persona vede (la casa + `users.calendari`), `anticipo`
+    minuti prima (predefinito 60), con la lettura del suo account. Si salta un evento per cui Google Calendar avvisa già
+    quella persona (promemoria «popup» dell'evento, o i predefiniti del calendario nella sua `calendarList`): due avvisi
+    per la stessa cosa sarebbero rumore. Eventi rifiutati e di un giorno intero no (questi stanno nel riepilogo).
+  - *Riepilogo del mattino* alle 7:30 (primo giro dopo, al più fino alle 10:30; una transazione su `avvisi_stato` lo
+    manda una volta): eventi di oggi, task con scadenza oggi o passata (condivisi e propri), banca (spese da confermare,
+    collegamento interrotto, consenso entro 14 giorni). Niente se non c'è niente. Chi lo spegne riceve la banca come
+    prima (`syncBank`) e il consenso in scadenza a parte, a 14, 7, 3, 1 e 0 giorni.
+  - *Google scollegato*: se il permesso è stato ritirato (`invalid_grant`; in modalità di test della schermata di consenso
+    OAuth succede dopo 7 giorni), una notifica una volta, a prescindere dalle categorie.
+- **Fine analisi del diario** (`analyzeEntry` → `fineAnalisi`): il server segna la nota come letta (anche con l'app chiusa) e,
+  se l'app ha scritto `avvisaAFine: true` passando in secondo piano mentre aspettava, avvisa chi l'ha scritta (proposte da
+  confermare, riepilogo pronto, o l'errore). Si è scelto il segno nella nota invece di mandare sempre e lasciar decidere
+  `sw.js`: un push che non mostra nulla Chrome lo tollera solo con l'app in primo piano, Safari su iPhone no (ritira l'iscrizione).
+- **Cosa**: messaggio di soli dati `{ titolo, testo, url, tag, silenzioso }`, disegnato da `sw.js`; il tocco apre la pagina
   (`url`). Stesso `tag` = la notifica si sostituisce: la lista ha un tag solo e riassume le cose aggiunte dalla
-  stessa persona nell'ultima mezz'ora ancora da comprare.
-- **Banca**: dopo `syncBank`, a chi possiede il collegamento: spese nuove da confermare, o consenso chiuso.
-- **Preferenze**: `users/{uid}.notifiche.<spese|task|lista|banca>`, per persona. Prova senza rete:
+  stessa persona nell'ultima mezz'ora ancora da comprare; una spesa modificata sostituisce la notifica della stessa spesa.
+  Un promemoria scade (TTL) all'inizio dell'evento: se il telefono era spento, non arriva dopo.
+- **Di notte** (22:30–7:30, ora di Roma, `SILENZIO` in avvisi.js): il server aggiunge `silenzioso` e `sw.js` mostra la notifica con
+  `silent` (niente suono né vibrazione), salvo `users.notifiche.silenzio === false`.
+- **Preferenze**: `users/{uid}.notifiche.<spese|task|lista|calendario|promemoria|riepilogo|diario|banca>`, `anticipo`, `silenzio`,
+  per persona (pagina Notifiche: «Dall'altra persona» e «Per te»). Prova senza rete (anche Google Calendar finto):
   `node functions/strumenti/prova-avvisi.mjs`.
+- **Costi**: due lavori di Cloud Scheduler in tutto (`syncBank`, `giroAvvisi`: nel gratuito, tre per account di fatturazione);
+  ogni giro legge il documento della casa, i due profili e lo stato (~1.200 letture al giorno), qualche chiamata a Calendar.
