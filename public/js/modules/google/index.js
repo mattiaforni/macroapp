@@ -1,12 +1,14 @@
 // Google: il collegamento dell'account (una volta sola) e cosa ne fa l'app: Contatti (cerca tra i
-// contatti mentre scrivi un nome), Calendario (il calendario «Casa», condiviso tra i due), Drive
+// contatti mentre scrivi un nome), Calendario (il calendario «Casa», condiviso tra i due, e gli altri tuoi
+// calendari da vedere accanto: foglio «Calendari» in modules/calendario), Drive
 // (documenti collegati ai progetti e al manuale, letti dall'agente). Il permesso si dà sulla pagina
 // di Google; al ritorno (/google-contatti?code=…, messo da parte in core/google.js) si conclude qui.
 import { el, icon, toast, vuoto, toDate, giornoRelativo } from "../../core/ui.js";
 import {
   statoGoogle, collegaGoogle, scollegaGoogle, collegamentoInCorso, messaggioGoogle, suGoogle,
 } from "../../core/google.js";
-import { calendarioCasa, elencoCalendari, scegliCalendario } from "../../core/calendario.js";
+import { calendarioCasa, altriCalendari } from "../../core/calendario.js";
+import { apriSceltaCalendari } from "../calendario/index.js";
 import { openSheet } from "../../components/sheet.js";
 import { vaiA, richiesto } from "../../core/router.js";
 
@@ -17,41 +19,6 @@ const navIcon = "collegamento";
 export { navIcon as icon };
 
 const minuscola = (s) => s.charAt(0).toLowerCase() + s.slice(1);
-
-/** Foglio con i calendari dell'account: toccarne uno lo rende il calendario della casa. */
-export async function apriSceltaCalendario(dopo) {
-  const elenco = el("div", {}, el("p.meta", { style: "padding:16px 0" }, "Leggo i calendari…"));
-  const attuale = await calendarioCasa().catch(() => null);
-  const sheet = openSheet({
-    title: "Calendario della casa",
-    body: [
-      el("p.muted.small", { style: "margin-top:8px" }, "Gli eventi della casa stanno in uno dei tuoi calendari di Google. Perché l'altra persona li veda, condividi quel calendario con il suo account da Google Calendar (impostazioni del calendario → Condividi con persone specifiche, con il permesso di modificare)."),
-      elenco,
-    ],
-  });
-  async function scegli(c) {
-    try {
-      await scegliCalendario(c);
-      sheet.close();
-      toast(c ? `Calendario della casa: ${c.nome}` : "Nessun calendario della casa");
-      dopo?.();
-    } catch (err) { toast(`Non salvato: ${err.code || err.message}`); }
-  }
-  try {
-    const calendari = await elencoCalendari();
-    const riga = (c, sotto, scelto) => el("div.riga", { onclick: () => scegli(c) },
-      el("div.pallino", { class: scelto ? "pallino--accento" : "" }, icon(scelto ? "spunta" : "calendario")),
-      el("div.testo", {}, el("b", {}, c ? c.nome : "Nessuno"), sotto ? el("span", {}, sotto) : null));
-    elenco.replaceChildren(
-      ...calendari.map((c) => riga(c, [c.primario ? "Il tuo calendario principale" : "", c.scrivibile ? "" : "Solo lettura: potrai vedere gli eventi, non scriverli"].filter(Boolean).join(" · "), attuale?.id === c.id)),
-      attuale ? riga(null, "Toglie il calendario della casa", false) : null,
-    );
-    if (!calendari.length) elenco.replaceChildren(vuoto("Nessun calendario", "Google non ha restituito calendari per questo account."));
-  } catch (err) {
-    const m = messaggioGoogle(err, "il calendario");
-    elenco.replaceChildren(vuoto(m.titolo, m.testo));
-  }
-}
 
 function apriScollega(dopo) {
   openSheet({
@@ -96,7 +63,7 @@ export function mount(container) {
         el("div.blocco", {},
           el("h3", {}, "Cosa fa l'app"),
           el("p", {}, el("b", {}, "Contatti"), ": mentre scrivi un nome in un task o in rubrica compaiono i tuoi contatti; in rubrica entra solo chi colleghi, con telefono, mail e indirizzo aggiornati da Google. Solo lettura."),
-          el("p", {}, el("b", {}, "Calendario"), ": un tuo calendario diventa quello della casa, condiviso con l'altra persona; l'app lo legge, ci scrive gli eventi che aggiungi e quelli che l'agente ricava dalle note, dopo la tua conferma."),
+          el("p", {}, el("b", {}, "Calendario"), ": un tuo calendario diventa quello della casa, condiviso con l'altra persona; l'app lo legge, ci scrive gli eventi che aggiungi e quelli che l'agente ricava dalle note, dopo la tua conferma. Accanto puoi vedere anche gli altri tuoi calendari."),
           el("p", {}, el("b", {}, "Drive"), ": puoi collegare documenti del tuo Drive a un progetto o a una voce del manuale; l'agente li legge come contesto quando analizza una nota del progetto. Solo lettura."),
           el("p.meta", {}, "Si passa dalla pagina di Google e si torna qui. Se compare l'avviso «app non verificata», si prosegue con «Avanzate». Le tre spunte sono separate: puoi dare solo quelle che vuoi."),
         ),
@@ -110,7 +77,9 @@ export function mount(container) {
       el("div.pallino", { class: manca(parte) ? "" : "pallino--accento" }, icon(icona)),
       el("div.testo", {}, el("b", {}, nome), el("span", { class: manca(parte) ? "tardi" : "" }, manca(parte) ? "Spunta non data: ricollega e lasciala" : sotto)),
       onclick ? icon("freccia", "freccia-riga") : null);
-    const calendario = !casaLetta ? " " : casa ? `Calendario della casa: ${casa.nome}` : "Scegli il calendario della casa";
+    const altri = altriCalendari().length;
+    const calendario = !casaLetta ? " "
+      : `${casa ? `Calendario della casa: ${casa.nome}` : "Scegli il calendario della casa"}${altri ? ` · ${altri === 1 ? "un altro tuo" : `altri ${altri} tuoi`}` : ""}`;
 
     mostra(
       el("div.blocco", {},
@@ -118,11 +87,11 @@ export function mount(container) {
         el("p", {}, dal ? `Collegato ${/^\d/.test(giornoRelativo(dal)) ? "il " : ""}${minuscola(giornoRelativo(dal))}. ` : "", "L'app chiede a Google permessi di un'ora quando servono; il permesso duraturo resta sul server."),
         el("div", {},
           rigaPermesso("contatto", "Contatti", "contatti", "Cerchi tra i contatti scrivendo un nome", manca("contatti") ? null : () => vaiA("manuale", "contatti")),
-          rigaPermesso("calendario", "Calendario", "calendario", calendario, manca("calendario") ? null : () => apriSceltaCalendario(leggiCasa)),
+          rigaPermesso("calendario", "Calendario", "calendario", calendario, manca("calendario") ? null : () => apriSceltaCalendari(leggiCasa)),
           rigaPermesso("cartella", "Drive", "drive", "Documenti collegabili ai progetti e al manuale", null),
         ),
       ),
-      casa || manca("calendario") ? null : el("p.meta", {}, "Senza un calendario della casa la pagina Calendario resta vuota: tocca Calendario qui sopra per sceglierlo."),
+      casa || manca("calendario") || altri ? null : el("p.meta", {}, "Senza un calendario della casa la pagina Calendario resta vuota: tocca Calendario qui sopra per sceglierlo."),
       el("div.blocco", {},
         el("h3", {}, "Collegamento"),
         el("p", {}, "Ricollegare riapre la pagina di Google: serve se una spunta manca o se il permesso è stato ritirato. Scollegare toglie ogni permesso all'app."),
@@ -159,7 +128,7 @@ export function mount(container) {
   leggiCasa();
   const inCorso = collegamentoInCorso();
   if (inCorso) concludi(inCorso);
-  if (richiesto("google", "calendario") && statoGoogle().permessi.calendario) setTimeout(() => apriSceltaCalendario(leggiCasa), 0);
+  if (richiesto("google", "calendario") && statoGoogle().permessi.calendario) setTimeout(() => apriSceltaCalendari(leggiCasa), 0);
 
   return () => { stop(); collegaFab.remove(); };
 }

@@ -190,14 +190,25 @@ il segreto GOOGLE_OAUTH_CLIENT.
   entrano solo le persone che colleghi, con `googleId`; all'avvio e all'apertura della scheda i loro recapiti si
   aggiornano da Google. Un nome proposto dall'AI si collega da solo se corrisponde a un solo contatto.
 - **Calendario** (`core/calendario.js`, pagina `modules/calendario`): Google resta il contenitore, l'app non copia
-  gli eventi. Uno dei due sceglie dalla pagina Google quale dei suoi calendari è quello della casa
-  (`households.calendario`) e lo condivide con l'altro da Google Calendar; ciascuno lo legge e ci scrive con il proprio
-  permesso. La pagina Calendario è un'agenda dei prossimi 60 giorni (ricorrenze espanse con `singleEvents`), con il +
-  per un evento nuovo (giorno, tutto il giorno o con orario, luogo, note), scritto subito su Google; un evento si
-  modifica e si elimina dal suo foglio. In cima al Diario, «Prossimi giorni» mostra gli eventi di oggi e dei due
-  giorni dopo dalla stessa lettura. L'ultima lettura resta anche nel localStorage del telefono, solo come anteprima
-  all'apertura (scollegando Google si cancella). L'agente propone eventi dalle note (`event`), che si scrivono solo
-  con la spunta. Letture e scritture passano dal telefono; il server non tocca il calendario.
+  gli eventi. Uno dei due sceglie quale dei suoi calendari è quello della casa (`households.calendario`) e lo condivide
+  con l'altro da Google Calendar; ciascuno lo legge e ci scrive con il proprio permesso. Accanto, ognuno può vedere
+  altri suoi calendari (`users.calendari`, dal 1/11: il personale, la band, l'associazione), ciascuno con un colore.
+  Chi vede e chi modifica cosa lo decide Google, l'app non ha permessi suoi: un calendario dell'uno compare all'altra
+  solo se lui glielo condivide su Google Calendar, e lei lo sceglie a sua volta. Nell'app si scrive nel calendario
+  della casa e nel calendario principale dell'account (`modificabile`); gli altri, gestiti anche da altre persone, si
+  leggono e si aprono in Google, anche dove Google permetterebbe di scrivere (così non si tocca per sbaglio il
+  calendario della band). Un invito (evento il cui `organizer.self` manca) si legge soltanto. La scelta sta nel foglio
+  «Calendari» (testata della pagina Calendario, o pagina Google → Calendario). La pagina Calendario è un'agenda dei
+  prossimi 60 giorni di tutti i calendari, letti insieme (ricorrenze espanse con `singleEvents`; uno che non risponde
+  non ferma gli altri e la pagina dice quale), con pillole per vederne uno solo; un evento che non è della casa porta
+  il nome del suo calendario nel suo colore. Lo stesso evento in due calendari (un concerto della band a cui si è
+  invitati, che compare anche nel personale) si mostra una volta, dal calendario a cui appartiene. Il + apre un evento
+  nuovo (calendario, giorno, tutto il giorno o con orario, luogo, note), scritto subito su Google; un evento
+  modificabile si modifica, si sposta tra la casa e il personale (`move` di Google) e si elimina dal suo foglio. In cima
+  al Diario, «Prossimi giorni» mostra gli eventi di oggi e dei due giorni dopo da tutti i calendari, dalla stessa
+  lettura. L'ultima lettura resta anche nel localStorage del telefono, solo come anteprima all'apertura (scollegando
+  Google si cancella). L'agente propone eventi dalle note (`event`), che si scrivono solo con la spunta e vanno nel
+  calendario della casa. Letture e scritture passano dal telefono; il server non tocca il calendario.
 - **Drive** (`core/drive.js`, `components/documenti.js`): dal foglio di un progetto o di una voce del manuale si cercano
   file per nome in tutto il Drive dell'utente (anche nei Drive condivisi) e si collegano (`documenti`). Per un progetto
   con istruzioni, il server legge il testo dei documenti collegati con il permesso dell'utente (`tokenServer` in

@@ -16,9 +16,10 @@
 // un'azione. La sintesi del progetto (lo stato, ciò che è emerso finora) arriva invece come proposta
 // sotto la nota e, confermata, si legge nella pagina del progetto, dove le note si sfogliano anche per tema.
 //
-// In cima, «Prossimi giorni»: gli eventi del calendario della casa di oggi e dei due giorni dopo (non quelli
-// già finiti), con le righe della pagina Calendario; compare solo se ce ne sono e se Google è collegato con il
-// calendario. Scelta di Mattia del 27/10 (schermata B), al posto di aprire il Calendario dal menu.
+// In cima, «Prossimi giorni»: gli eventi di oggi e dei due giorni dopo (non quelli già finiti) da tutti i calendari
+// che vedi (quello della casa e gli altri tuoi: 1/11, scelta di Mattia), con le righe della pagina Calendario;
+// compare solo se ce ne sono e se Google è collegato con il calendario. Scelta di Mattia del 27/10 (schermata B),
+// al posto di aprire il Calendario dal menu.
 //
 // journal_entries { text, titolo, titoloAMano, persone: [{ nome, voceId?, googleId? }], personeAMano, projectId,
 //   riepilogo, temi, riepilogoAt, analyzed, analyzedAt, analysisError, modello, sintesiEsito }
@@ -36,7 +37,7 @@ import { apriSpesa } from "../spese/index.js";
 import { apriVoceManuale } from "../manuale/index.js";
 import { nomeModello } from "../../core/modelli.js";
 import { statoGoogle, suGoogle } from "../../core/google.js";
-import { calendarioCasa, leggiEventi, eventiNoti, suEventi } from "../../core/calendario.js";
+import { calendariVisti, leggiEventi, eventiNoti, suEventi, suCalendari } from "../../core/calendario.js";
 import { rigaEvento, inOrdine } from "../calendario/index.js";
 import { pulsanteRegistra } from "../../components/registratore.js";
 import { sceltaPersone } from "../../components/persone.js";
@@ -416,7 +417,7 @@ export function mount(container) {
   const elenco = el("div");
   const piu = fab("Nuova nota", () => nuova());
 
-  // ── Prossimi giorni, dal calendario della casa ──
+  // ── Prossimi giorni, da tutti i calendari che vedi ──
   // Si disegna con l'ultima lettura nota (anche salvata sul telefono), poi con quella fresca da Google; non
   // prima delle note, perché la pagina non compaia a pezzi.
   const prossimi = el("div.prossimi", { hidden: true });
@@ -444,7 +445,7 @@ export function mount(container) {
     ); // replaceChildren, a differenza di el(), scriverebbe «null»
   }
   async function caricaProssimi() {
-    if (!statoGoogle().permessi.calendario || !(await calendarioCasa().catch(() => null))) { eventi = null; disegnaProssimi(); return; }
+    if (!statoGoogle().permessi.calendario || !(await calendariVisti()).length) { eventi = null; disegnaProssimi(); return; }
     // Se Google non risponde resta l'ultima lettura; perché, lo dice la pagina Calendario.
     try { eventi = await leggiEventi(); } catch (e) { /* niente */ }
     disegnaProssimi();
@@ -552,6 +553,7 @@ export function mount(container) {
   const stop2 = watchPending((docs) => { proposte = docs; render(); });
   const stop3 = suEventi((lista) => { eventi = lista; disegnaProssimi(); });
   const stop4 = suGoogle(() => caricaProssimi());
+  const stop5 = suCalendari(() => caricaProssimi());
   caricaProssimi();
-  return () => { stopNote(); stop1(); stop2(); stop3(); stop4(); dati.ferma(); piu.remove(); };
+  return () => { stopNote(); stop1(); stop2(); stop3(); stop4(); stop5(); dati.ferma(); piu.remove(); };
 }

@@ -645,6 +645,17 @@ html[data-colore] .pagina-progetto .btn--piatto svg { color: var(--c-testo); }
 .evento__titolo { font-size: 16px; font-weight: 500; line-height: 1.3; overflow-wrap: anywhere; }
 .evento__quando { font-size: 13.5px; color: var(--inchiostro-2); margin-top: 2px; line-height: 1.4; }
 /* In cima al Diario: le righe un po' più strette, l'ultima senza filetto (sotto c'è la riga dell'AI). */
+/* Un evento che non è della casa porta il nome del suo calendario, nel suo colore (data-colore sulla riga) */
+.evento__quando .progetto { margin-right: 7px; }
+.evento[data-colore] .progetto { color: var(--c-testo); }
+/* Foglio «Calendari»: un calendario scelto ha il pallino nel suo colore e, sotto il nome, i colori tra cui scegliere */
+.pallino--colore { background: var(--c-pieno); color: var(--c-su); border-color: transparent; }
+.colori--piccoli { gap: 6px; padding-top: 9px; flex-wrap: nowrap; }
+.colori--piccoli .colore { width: 20px; height: 20px; position: relative; }
+.colori--piccoli .colore::after { content: ""; position: absolute; inset: -4px; } /* zona del tocco più larga del pallino */
+.colori--piccoli .colore svg { width: 11px; height: 11px; }
+.pillola .colore--pallino { width: 10px; height: 10px; margin: 0; }
+
 .prossimi { margin-bottom: 6px; }
 .prossimi .fascia { margin-top: 10px; }
 .prossimi .evento { padding: 9px 0; }

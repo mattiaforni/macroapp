@@ -10,7 +10,7 @@ Campi comuni a tutte le collezioni di contenuto, compilati da `core/db.js`:
 | `createdAt`, `updatedAt` | timestamp | server |
 
 ## `users/{uid}`
-`displayName, email, photoURL, householdId, createdAt, google?: { collegato, scaduto, email, dal, permessi: { contatti, calendario, drive } }, dispositivi?: { <id>: { token, nome, aggiornato } }, notifiche?: { spese, task, lista, banca }, modelli?: { note, progetti }`
+`displayName, email, photoURL, householdId, createdAt, google?: { collegato, scaduto, email, dal, permessi: { contatti, calendario, drive } }, dispositivi?: { <id>: { token, nome, aggiornato } }, notifiche?: { spese, task, lista, banca }, modelli?: { note, progetti }, calendari?: [{ id, nome, colore, modificabile }]`
 `google` lo scrive la funzione `google`: dice all'app se l'account Google è collegato, con quale account e quali
 delle tre spunte (contatti, calendario, Drive) sono state date. Il vecchio campo `contattiGoogle` (collegamento ai
 soli contatti, prima del 27/10) vale come `google` con il solo permesso dei contatti finché non si ricollega.
@@ -18,6 +18,10 @@ soli contatti, prima del 27/10) vale come `google` con il solo permesso dei cont
 la funzione `avvisa` toglie quelli il cui token non vale più. `notifiche`: categorie per la persona, su tutti
 i suoi telefoni; `false` = spenta, assente = accesa. `modelli`: modello dell'AI per le note semplici e per quelle
 dei progetti con istruzioni (`haiku`, `sonnet`, `opus`; assente = Sonnet e Opus), letto da `analyzeEntry`.
+`calendari`: gli altri calendari di Google Calendar che la persona vede accanto a quello della casa (il personale, la
+band, l'associazione…: dal 1/11), nell'ordine in cui li ha scelti; `colore` = uno dei colori dei progetti (`COLORI` in
+ui.js), `modificabile` = è il calendario principale del suo account, l'unico in cui l'app scrive oltre a quello della
+casa. Li vede solo lei; gli eventi restano su Google.
 
 ## `google_tokens/{uid}`
 `ownerUid, refreshToken, accessToken, scade, email, scope, permessi, collegatoIl, state?, stateAt?` — solo Cloud Functions

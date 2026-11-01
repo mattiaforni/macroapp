@@ -555,34 +555,64 @@ with sync_playwright() as p:
                 {"resourceName": "people/c4", "names": [{"displayName": "Anna Rossetti"}], "nicknames": [{"value": "Ani"}]},
             ]}))
         pg.route("https://people.googleapis.com/**", people)
-        # Google Calendar finto: due calendari, eventi in memoria (GET/POST/PATCH/DELETE).
-        cal = {"eventi": {}, "n": 0}
+        # Google Calendar finto: quattro calendari (il personale, la casa, la band in sola lettura, l'associazione),
+        # eventi in memoria per calendario (GET/POST/PATCH/DELETE, move). Nella band le prove di domani e un concerto
+        # a cui Mattia è invitato, che compare anche nel suo personale (stesso iCalUID); nel personale anche un invito.
+        import datetime as _dt
+        domani = (_dt.date.today() + _dt.timedelta(days=1)).isoformat()
+        CAL_MIO, CAL_CASA, CAL_BAND, CAL_ASS = "mattia@example.com", "casa@group.calendar.google.com", "band@group.calendar.google.com", "ass@group.calendar.google.com"
+        concerto = {"summary": "Concerto al circolo", "iCalUID": "concerto@band", "start": {"dateTime": f"{domani}T22:00:00Z"}, "end": {"dateTime": f"{domani}T23:30:00Z"}, "status": "confirmed"}
+        cal = {"eventi": {
+            CAL_MIO: {
+                "inv1": {"id": "inv1", "summary": "Cena da Giulia", "iCalUID": "inv1@g", "start": {"dateTime": f"{domani}T19:00:00Z"}, "end": {"dateTime": f"{domani}T21:00:00Z"}, "organizer": {"email": "giulia@example.com"}, "htmlLink": "https://calendar.google.com/event?eid=inv1", "status": "confirmed"},
+                "conc": {**concerto, "id": "conc", "organizer": {"email": CAL_BAND}, "htmlLink": "https://calendar.google.com/event?eid=conc"},
+            },
+            CAL_CASA: {},
+            CAL_BAND: {
+                "prove": {"id": "prove", "summary": "Prove con la band", "iCalUID": "prove@band", "location": "Sala prove", "start": {"dateTime": f"{domani}T18:00:00Z"}, "end": {"dateTime": f"{domani}T20:00:00Z"}, "organizer": {"email": CAL_BAND, "self": True}, "htmlLink": "https://calendar.google.com/event?eid=prove", "status": "confirmed"},
+                "conc": {**concerto, "id": "conc", "organizer": {"email": CAL_BAND, "self": True}, "htmlLink": "https://calendar.google.com/event?eid=conc"},
+            },
+            CAL_ASS: {},
+        }, "n": 0, "letti": []}
+        from urllib.parse import unquote, urlparse, parse_qs
         def calendar(r):
             req = r.request
             assert req.headers.get("authorization") == "Bearer token-finto", req.headers
             url = req.url
             if "/users/me/calendarList" in url:
                 r.fulfill(status=200, content_type="application/json", body=json.dumps({"items": [
-                    {"id": "mattia@example.com", "summary": "Mattia", "primary": True, "accessRole": "owner"},
-                    {"id": "casa@group.calendar.google.com", "summary": "Casa", "accessRole": "owner", "backgroundColor": "#f6bf26"},
+                    {"id": CAL_MIO, "summary": CAL_MIO, "primary": True, "accessRole": "owner"},
+                    {"id": CAL_CASA, "summary": "Casa", "accessRole": "owner", "backgroundColor": "#f6bf26"},
+                    {"id": CAL_BAND, "summary": "Band", "accessRole": "reader"},
+                    {"id": CAL_ASS, "summary": "Associazione", "accessRole": "writer"},
                 ]}))
                 return
-            assert "/calendars/casa%40group.calendar.google.com/events" in url, url
+            parti = urlparse(url).path.split("/calendars/", 1)[1].split("/")
+            cid = unquote(parti[0])
+            assert parti[1] == "events", url
+            eventi = cal["eventi"][cid]
+            eid = unquote(parti[2]) if len(parti) > 2 else None
             if req.method == "GET":
-                r.fulfill(status=200, content_type="application/json", body=json.dumps({"items": list(cal["eventi"].values())}))
+                cal["letti"].append(cid)
+                r.fulfill(status=200, content_type="application/json", body=json.dumps({"items": list(eventi.values())}))
+            elif req.method == "POST" and len(parti) > 3 and parti[3] == "move":
+                verso = parse_qs(urlparse(url).query)["destination"][0]
+                e = eventi.pop(eid)
+                cal["eventi"][verso][eid] = e
+                r.fulfill(status=200, content_type="application/json", body=json.dumps(e))
             elif req.method == "POST":
+                assert cid in (CAL_MIO, CAL_CASA), f"l'app scrive solo nella casa e nel personale, non in {cid}"
                 cal["n"] += 1
-                e = {**json.loads(req.post_data), "id": f"ev{cal['n']}", "htmlLink": f"https://calendar.google.com/event?eid=ev{cal['n']}", "creator": {"email": "mattia@example.com", "self": True}, "status": "confirmed"}
-                cal["eventi"][e["id"]] = e
+                e = {**json.loads(req.post_data), "id": f"ev{cal['n']}", "iCalUID": f"ev{cal['n']}@google.com", "htmlLink": f"https://calendar.google.com/event?eid=ev{cal['n']}", "creator": {"email": "mattia@example.com", "self": True}, "organizer": {"email": cid, "self": True}, "status": "confirmed"}
+                eventi[e["id"]] = e
                 r.fulfill(status=200, content_type="application/json", body=json.dumps(e))
             elif req.method == "PATCH":
-                eid = url.rsplit("/", 1)[1]
-                e = cal["eventi"][eid]
+                e = eventi[eid]
                 for k, v in json.loads(req.post_data).items():
                     e[k] = {kk: vv for kk, vv in v.items() if vv is not None} if isinstance(v, dict) else v
                 r.fulfill(status=200, content_type="application/json", body=json.dumps(e))
             elif req.method == "DELETE":
-                del cal["eventi"][url.rsplit("/", 1)[1]]
+                del eventi[eid]
                 r.fulfill(status=204, body="")
         pg.route("https://www.googleapis.com/calendar/**", calendar)
         # Google Drive finto: tre file, ricerca per nome.
@@ -1095,21 +1125,70 @@ with sync_playwright() as p:
             assert piena, f"{sezione}: pagina vuota al primo fotogramma"
             pg.wait_for_timeout(100)
 
-        # ── Calendario della casa: scelta dalla pagina Google, agenda, evento nuovo, modifica, proposta ──
+        # ── Calendari: la casa e gli altri tuoi (1/11), agenda, evento nuovo, modifica, proposta ──
         step[0] = "calendario"
         menu(pg, "Calendario")
-        pg.wait_for_selector("text=Nessun calendario della casa")
-        pg.click("button.btn >> text=Scegli il calendario")
-        pg.wait_for_selector("#foglio .riga >> text=Casa")
-        assert "principale" in pg.locator("#foglio .riga", has_text="Mattia").inner_text()
-        pg.click("#foglio .riga >> text=Casa")
+        pg.wait_for_selector("#view .vuoto b >> text=Nessun calendario")
+        pg.click("button.btn >> text=Scegli i calendari")
+        pg.wait_for_selector("#foglio h2 >> text=Calendari")
+        pg.wait_for_selector('#foglio .riga b:text-is("Casa")')
+        assert "principale" in pg.locator("#foglio .riga", has=pg.locator('b:text-is("Personale")')).first.inner_text(), "il principale si chiama Personale"
+        pg.click('#foglio .riga b:text-is("Casa")')
+        # La casa scelta resta su una riga; sotto, gli altri calendari da vedere (la casa non c'è più)
+        pg.wait_for_selector("#foglio .riga >> text=Tocca per cambiarlo")
+        assert pg.locator('#foglio .riga b:text-is("Casa")').count() == 1
+        pg.click('#foglio .riga b:text-is("Personale")')
+        pg.click('#foglio .riga b:text-is("Band")')
+        personale = pg.locator("#foglio .riga", has=pg.locator('b:text-is("Personale")'))
+        band = pg.locator("#foglio .riga", has=pg.locator('b:text-is("Band")'))
+        assert "Lo modifichi anche dall'app" in personale.inner_text(), personale.inner_text()
+        assert "si legge soltanto" in band.inner_text(), band.inner_text()
+        assert personale.locator(".pallino--colore").get_attribute("data-colore") == "blu", "primo colore proposto"
+        assert band.locator(".pallino--colore").get_attribute("data-colore") == "viola", "il secondo è un altro colore"
+        band.locator(".colore[data-colore=verde]").click()
+        assert band.locator(".pallino--colore").get_attribute("data-colore") == "verde"
+        assert pg.locator("#foglio .riga", has=pg.locator('b:text-is("Associazione")')).locator(".colori").count() == 0, "non scelto: niente colori"
+        pg.wait_for_timeout(150)
+        shot(pg, "19a-calendari")
+        conferma(pg)
         pg.wait_for_selector("text=Calendario della casa: Casa")
-        menu(pg, "Calendario")
-        pg.wait_for_selector("text=Nessun evento nei prossimi 60 giorni")
+        scelti = pg.evaluate("(() => { const s = JSON.parse(sessionStorage.getItem('finto.firestore')); return [...new Map(s.store.find(([c]) => c === 'users')[1]).values()].find((u) => u.calendari).calendari; })()")
+        assert [(c["nome"], c["colore"], c["modificabile"]) for c in scelti] == [("Personale", "blu", True), ("Band", "verde", False)], scelti
+        # Agenda con tutti i calendari: pillole per vederne uno solo; la band col suo nome nel suo colore
+        pg.wait_for_selector(".evento >> text=Prove con la band")
+        assert [t.strip() for t in pg.locator(".filtri-calendari .pillola").all_inner_texts()] == ["Tutti", "Casa", "Personale", "Band"], pg.locator(".filtri-calendari").inner_text()
+        prove_band = pg.locator(".evento", has_text="Prove con la band")
+        assert prove_band.get_attribute("data-colore") == "verde"
+        assert prove_band.locator(".progetto").inner_text().lower() == "band"
+        concerto_riga = pg.locator(".evento", has_text="Concerto al circolo")
+        assert concerto_riga.count() == 1, "lo stesso evento in due calendari compare una volta"
+        assert concerto_riga.locator(".progetto").inner_text().lower() == "band", "dal calendario a cui appartiene, non dall'invito"
+        assert set(cal["letti"]) == {CAL_CASA, CAL_MIO, CAL_BAND}, cal["letti"]
+        pg.wait_for_timeout(150)
+        shot(pg, "19a2-calendario-tutti")
+        # Un evento della band si legge soltanto: niente Salva, il link a Google
+        prove_band.click()
+        pg.wait_for_selector("#foglio h2 >> text=Prove con la band")
+        assert pg.locator("#foglio .btn--conferma").count() == 0, "sola lettura: niente Salva"
+        assert "sola lettura" in pg.locator("#foglio").inner_text()
+        assert pg.locator("#foglio a >> text=Apri in Google").count() == 1
+        pg.click("#foglio button[aria-label='Indietro']")
+        pg.wait_for_timeout(200)
+        # Un invito nel personale: si legge soltanto, perché l'evento è di qualcun altro
+        pg.click(".evento >> text=Cena da Giulia")
+        pg.wait_for_selector("#foglio >> text=È un invito")
+        pg.click("#foglio button[aria-label='Indietro']")
+        pg.wait_for_timeout(200)
+        # Con il filtro sulla casa: solo i suoi eventi, senza il nome del calendario
+        pg.click(".filtri-calendari .pillola >> text=Casa")
+        pg.wait_for_selector("text=Nessun evento nei prossimi 60 giorni in Casa")
         assert pg.locator("#view .vuoto").count() == 0, "calendario vuoto: una riga, non la pagina vuota"
         pg.click("button.fab")
         pg.wait_for_selector("#foglio h2 >> text=Nuovo evento")
         pg.fill("#foglio input[placeholder='Cosa']", "Lezione di tennis")
+        # Dove scrivere: la casa (il filtro) o il personale; gli altri calendari non ci sono
+        assert [t.strip() for t in pg.locator("#foglio .campo", has_text="Calendario").locator(".pillola").all_inner_texts()] == ["Casa", "Personale"]
+        assert "on" in pg.locator("#foglio .pillola >> text=Casa").get_attribute("class")
         pg.click("#foglio button.pillola >> text=Con orario")
         pg.locator("#foglio input[type=time]").first.evaluate("i => { i.value = '18:00'; i.dispatchEvent(new Event('change')); }")
         pg.fill("#foglio input[placeholder='Dove (facoltativo)']", "Circolo")
@@ -1124,7 +1203,8 @@ with sync_playwright() as p:
         assert riga.locator(".evento__giorno small").inner_text().lower() == "oggi"
         assert riga.locator(".evento__quando").inner_text() == "18:00 – 19:00 · Circolo", riga.inner_text()
         assert pg.locator("#view .fascia").count() == 1, "una fascia, quella del mese"
-        assert cal["eventi"]["ev1"]["start"]["timeZone"] == "Europe/Rome", cal["eventi"]["ev1"]
+        assert cal["eventi"][CAL_CASA]["ev1"]["start"]["timeZone"] == "Europe/Rome", cal["eventi"][CAL_CASA]
+        assert riga.locator(".progetto").count() == 0, "con il filtro sulla casa niente nome del calendario"
         # Modifica: tutto il giorno, titolo nuovo
         riga.click()
         pg.wait_for_selector("#foglio h2 >> text=Evento")
@@ -1133,17 +1213,19 @@ with sync_playwright() as p:
         conferma(pg)
         pg.wait_for_selector(".evento >> text=Torneo")
         assert pg.locator(".evento", has_text="Torneo").locator(".evento__quando").inner_text() == "Tutto il giorno · Circolo"
-        assert "date" in cal["eventi"]["ev1"]["start"] and "dateTime" not in cal["eventi"]["ev1"]["start"], cal["eventi"]["ev1"]
+        assert "date" in cal["eventi"][CAL_CASA]["ev1"]["start"] and "dateTime" not in cal["eventi"][CAL_CASA]["ev1"]["start"], cal["eventi"][CAL_CASA]["ev1"]
         # La proposta dell'agente ora passa: l'evento compare tra tre giorni
         step[0] = "prossimi giorni nel diario"
         pg.click(".schede a[href='#/diario']")
         pg.locator(".azione", has_text="Cena con i Rossi").locator("button[aria-label='Conferma']").click()
         pg.wait_for_selector("text=Evento nel calendario della casa")
-        assert cal["eventi"]["ev2"]["summary"] == "Cena con i Rossi" and cal["eventi"]["ev2"]["location"] == "Da noi", cal["eventi"]
+        assert cal["eventi"][CAL_CASA]["ev2"]["summary"] == "Cena con i Rossi" and cal["eventi"][CAL_CASA]["ev2"]["location"] == "Da noi", cal["eventi"]
         # In cima al Diario: oggi e i due giorni dopo. Il torneo di oggi c'è, la cena tra tre giorni no.
         pg.wait_for_selector(".prossimi .fascia >> text=Prossimi giorni")
         assert pg.locator(".prossimi .evento", has_text="Torneo").count() == 1
         assert pg.locator(".prossimi .evento", has_text="Cena con i Rossi").count() == 0, "oltre i due giorni non compare"
+        # Anche gli altri calendari (scelta di Mattia, 1/11), con il nome del calendario
+        assert pg.locator(".prossimi .evento", has_text="Prove con la band").locator(".progetto").inner_text().lower() == "band"
         assert pg.locator("#view > *").first.evaluate("n => n.classList.contains('prossimi')"), "la striscia sta in cima"
         assert "null" not in pg.locator(".prossimi").inner_text(), pg.locator(".prossimi").inner_text()
         pg.evaluate("window.scrollTo(0, 0)")
@@ -1167,11 +1249,33 @@ with sync_playwright() as p:
         pg.click("#foglio button >> text=Elimina")
         pg.wait_for_selector("text=Evento eliminato")
         pg.wait_for_timeout(300)
-        assert pg.locator(".evento", has_text="Torneo").count() == 0 and "ev1" not in cal["eventi"]
+        assert pg.locator(".evento", has_text="Torneo").count() == 0 and "ev1" not in cal["eventi"][CAL_CASA]
+        # Un evento nel personale, poi spostato nella casa
+        pg.click(".filtri-calendari .pillola >> text=Tutti")
+        pg.click("button.fab")
+        pg.wait_for_selector("#foglio h2 >> text=Nuovo evento")
+        pg.fill("#foglio input[placeholder='Cosa']", "Dentista")
+        pg.click("#foglio .pillola >> text=Personale")
+        conferma(pg)
+        pg.wait_for_selector("text=Evento in Personale")
+        dentista = pg.locator(".evento", has_text="Dentista")
+        assert dentista.locator(".progetto").inner_text().lower() == "personale" and dentista.get_attribute("data-colore") == "blu"
+        nuovo = next(k for k, e in cal["eventi"][CAL_MIO].items() if e["summary"] == "Dentista")
+        dentista.click()
+        pg.wait_for_selector("#foglio h2 >> text=Evento")
+        pg.click("#foglio .pillola >> text=Casa")
+        conferma(pg)
+        pg.wait_for_selector("text=Evento spostato in Casa")
+        assert nuovo in cal["eventi"][CAL_CASA] and nuovo not in cal["eventi"][CAL_MIO], cal["eventi"]
+        pg.wait_for_timeout(300)
+        assert pg.locator(".evento", has_text="Dentista").locator(".progetto").count() == 0, "ora è della casa"
+        pg.click(".evento >> text=Dentista")
+        pg.click("#foglio button >> text=Elimina")
+        pg.wait_for_selector("text=Evento eliminato")
         pg.click(".schede a[href='#/diario']")
         pg.wait_for_selector(".stato-ai")
         pg.wait_for_timeout(300)
-        assert pg.locator(".prossimi").is_hidden(), "senza eventi vicini la striscia non c'è"
+        assert pg.locator(".prossimi .evento", has_text="Torneo").count() == 0, "l'evento eliminato non resta nella striscia"
 
         # ── Scollegare Google ──
         step[0] = "scollega"
