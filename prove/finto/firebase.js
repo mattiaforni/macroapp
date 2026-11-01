@@ -148,8 +148,12 @@ async function contribuisciFinto(data = {}) {
     componenti: { nutrizione: { valore: 80, peso: 50, stato: "noto" }, additivi: { valore: 100, peso: 25, stato: "noto" }, nova: { valore: 75, peso: 15, stato: "noto" }, bio: { valore: 0, peso: 10, stato: "noto" } },
   };
   sessionStorage.setItem("finto.off.aggiunte", JSON.stringify({ ...aggiunte(), [data.ean]: scheda }));
+  // OFF lento (1/11, come quella volta): la rilettura dopo l'invio dà ancora la scheda di prima; «Rileggi» quella nuova.
+  if (sessionStorage.getItem("finto.off.lento")) {
+    return { data: { scheda: { trovato: false, fonte: "off", ean: data.ean, letto: Date.now(), inAggiornamento: true }, campi: Object.keys(c), avvisi: [], aggiornata: false } };
+  }
   coll("prodotti").set(data.ean, { ...scheda, ean: data.ean, letto: new Date(), lettoDa: UID });
-  return { data: { scheda: { ...scheda, ean: data.ean, letto: Date.now() }, campi: Object.keys(c), avvisi: [] } };
+  return { data: { scheda: { ...scheda, ean: data.ean, letto: Date.now() }, campi: Object.keys(c), avvisi: [], aggiornata: true } };
 }
 
 async function prodottoFinto(data = {}) {

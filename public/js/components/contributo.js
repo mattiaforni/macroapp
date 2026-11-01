@@ -210,9 +210,12 @@ function riepilogo(ean, foto, r, mostra, { rifiutato = false } = {}) {
     if (nutr) {
       input.nutrizione = {};
       corpo.push(el("div.prodotto__sezione", {}, el("h3", {}, "Valori"), el("span", {}, nutr.per === "100ml" ? "per 100 ml" : "per 100 g")),
+        // Come la tabella dell'etichetta (1/11, Mattia: «i di cui sono sfalsati» nella griglia a due colonne): una riga per
+        // valore, nome a sinistra, cifra e unità allineate a destra, «di cui» rientrati sotto la loro voce.
         el("div.contributo__valori", {}, ...NUTRIENTI.map(([k, etichetta]) => {
-          input.nutrizione[k] = el("input", { value: numeroScritto(nutr[k]), inputmode: "decimal", placeholder: "—", "aria-label": etichetta });
-          return campo(etichetta, input.nutrizione[k]);
+          input.nutrizione[k] = el("input", { value: numeroScritto(nutr[k]), inputmode: "decimal", placeholder: "—", enterkeyhint: "next", "aria-label": etichetta });
+          return el(`label.contributo__valore${etichetta.startsWith("di cui") ? ".contributo__valore--dicui" : ""}`, {},
+            el("span", {}, etichetta.replace(/ \(kcal\)$/, "")), input.nutrizione[k], el("small", {}, k === "kcal" ? "kcal" : "g"));
         })));
     } else {
       corpo.push(el("p.meta", {}, "Valori nutrizionali non letti: si aggiungono solo i dati sopra."));

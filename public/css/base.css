@@ -714,7 +714,17 @@ button.tessera__indice:active, .tessera .altro:active { background: rgba(255,255
 .foto-miniature figure { margin: 0; width: 64px; }
 .foto-miniature img { width: 64px; height: 84px; object-fit: cover; border-radius: 8px; border: 1px solid var(--linea); display: block; }
 .foto-miniature figcaption { font-size: 11px; color: var(--inchiostro-3); margin-top: 3px; text-align: center; }
-.contributo__valori { display: grid; grid-template-columns: 1fr 1fr; column-gap: 16px; }
+/* Valori letti: righe come la tabella dell'etichetta, con i filetti; la cifra si corregge al tocco (linea d'accento). */
+.contributo__valori { margin-bottom: 18px; }
+.contributo__valore { display: flex; align-items: baseline; gap: 8px; border-bottom: 1px solid var(--linea); }
+.contributo__valore > span { flex: 1; min-width: 0; font-size: 15px; padding: 11px 0; }
+.contributo__valore--dicui > span { padding-left: 16px; font-size: 14px; color: var(--inchiostro-2); }
+.contributo__valore input {
+  width: 72px; flex: none; text-align: right; font-size: 16px; font-variant-numeric: tabular-nums;
+  border: none; border-bottom: 2px solid transparent; border-radius: 0; padding: 9px 0 7px; background: transparent; outline: none; color: inherit;
+}
+.contributo__valore input:focus { border-bottom-color: var(--accento); }
+.contributo__valore small { width: 28px; flex: none; font-size: 12.5px; color: var(--inchiostro-2); }
 .contributo__account { margin-top: 18px; }
 .contributo__chi, .contributo__presenti, .contributo__pubblico { margin-top: 14px; }
 .riga--dato { cursor: default; }

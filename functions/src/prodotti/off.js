@@ -35,10 +35,13 @@ export function normalizzaEan(s) {
 }
 
 /** Chiama OFF e ritorna il JSON grezzo, o null se il prodotto non c'è. */
-export async function leggiOff(ean, { fetchFn = fetch } = {}) {
+export async function leggiOff(ean, { fetchFn = fetch, fresco = false } = {}) {
   // product_type=all: un cosmetico (Open Beauty Facts) o un mangime arrivano con un rinvio al server giusto.
-  const url = `https://world.openfoodfacts.org/api/v2/product/${ean}?product_type=all&lc=it&fields=${CAMPI}`;
-  const r = await fetchFn(url, { headers: { "User-Agent": USER_AGENT, Accept: "application/json" }, redirect: "follow" });
+  // `fresco`: dopo una scrittura o con «Rileggi». Il 1/11, riletta subito dopo un contributo, OFF ha restituito la
+  // scheda di prima (stessa URL letta un minuto prima: una cache davanti all'API); un parametro in più e no-cache la saltano.
+  const url = `https://world.openfoodfacts.org/api/v2/product/${ean}?product_type=all&lc=it&fields=${CAMPI}${fresco ? `&_=${Date.now()}` : ""}`;
+  const headers = { "User-Agent": USER_AGENT, Accept: "application/json", ...(fresco ? { "Cache-Control": "no-cache", Pragma: "no-cache" } : {}) };
+  const r = await fetchFn(url, { headers, redirect: "follow" });
   if (r.status === 404) return null;
   if (r.status === 429) throw new OffError("Open Food Facts ha ricevuto troppe richieste: riprova tra un minuto", 429);
   if (!r.ok) throw new OffError(`Open Food Facts non risponde (${r.status})`, r.status);

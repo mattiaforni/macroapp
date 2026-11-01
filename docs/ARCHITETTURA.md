@@ -153,12 +153,20 @@ prodotto.js, flusso in `components/contributo.js`, function `contribuisci`, logi
    quella che non c'è. ImageCapture (scatto con la messa a fuoco) dove c'è, altrimenti il fotogramma; lato lungo 2000 px, JPEG.
 2. `contribuisci leggi`: Claude (Sonnet) legge le foto con istruzioni strette (solo ciò che si legge, valori solo per 100 g o
    100 ml, nota se c'è un dubbio); in parallelo il server rilegge il prodotto su OFF e dice quali campi mancano (`mancanti`).
-3. «Da aggiungere»: solo i campi mancanti, già compilati e correggibili; la prima volta nome utente e password di OFF.
+3. «Da aggiungere»: solo i campi mancanti, già compilati e correggibili; i valori come la tabella dell'etichetta (una riga
+   per valore, «di cui» rientrati, cifre e unità allineate a destra); la prima volta nome utente e password di OFF.
 4. `contribuisci invia`: `product_jqm2.pl` con i soli campi mancanti (`campiOff`: niente sovrascritture), poi le foto con
    `product_image_upload.pl`; account dell'utente, `app_name`, `app_version`, `app_uuid` (sha256 dell'uid con un sale) e
    `comment`, come OFF chiede alle app che scrivono. Un errore sui campi ferma tutto, una foto rifiutata è un avviso.
    L'account si salva in `off_account/{uid}` (regole: nessun accesso dall'app) solo dopo una scrittura riuscita; se OFF lo
    rifiuta l'app torna al riepilogo a chiederlo. Poi rilettura da OFF e cache `prodotti/{ean}`: la scheda nuova compare subito.
+   1/11, primo contributo vero (Canestrellini): scrittura riuscita, ma la rilettura ha dato la scheda di prima (stessa URL
+   letta un minuto prima: una cache davanti all'API) ed è finita in cache per un mese. Ora le letture dopo una scrittura e
+   «Rileggi» sono «fresche» (`leggiOff(ean, { fresco: true })`: parametro `_` in più e `Cache-Control: no-cache`); la
+   rilettura riprova fino a ~10 s finché `last_modified_t` non è più recente di quello di prima; se no la cache prende
+   `rileggere: { prima, dal }`, la function `prodotto` la rilegge fresca a ogni apertura per un giorno, e la scheda arriva
+   con `inAggiornamento` (avviso «Contributo inviato: Open Food Facts sta ancora aggiornando la scheda · Rileggi», senza
+   «Completa», che rimanderebbe gli stessi dati).
 I cosmetici vanno su Open Beauty Facts (stessi account). Costo: una lettura di Sonnet con tre immagini, ~1–2 centesimi.
 Soglie nostre, dichiarate nel codice: zuccheri, saturi e sale tra «basso» e «alto» del semaforo britannico (FSA 2016,
 come i `nutrient_levels` di OFF) con la fascia media divisa a metà, «senza» dal reg. UE 1924/2006; energia dove il

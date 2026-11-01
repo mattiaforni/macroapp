@@ -304,7 +304,8 @@ export const contribuisci = onCall(
     const uid = req.auth.uid;
     const db = await getDb();
     const refAccount = db.collection("off_account").doc(uid);
-    const leggiProdotto = () => off.leggiOff(ean).catch((err) => {
+    // Lettura fresca anche qui: i campi mancanti si calcolano sulla scheda vera, non su una copia in cache.
+    const leggiProdotto = () => off.leggiOff(ean, { fresco: true }).catch((err) => {
       if (err instanceof off.OffError) throw new HttpsError("unavailable", err.message);
       throw err;
     });
@@ -333,12 +334,23 @@ export const contribuisci = onCall(
         const { avvisi } = await c.inviaAOff({ ean, tipo, foto, campi, account, uuid: c.appUuid(uid) });
         const { FieldValue } = await import("firebase-admin/firestore");
         if (nuovoAccount) await refAccount.set({ ...nuovoAccount, aggiornato: FieldValue.serverTimestamp() });
-        // Rilettura: la scheda col nuovo indice entra nella cache, come una «Rileggi».
-        const nuovo = await off.leggiOff(ean).catch(() => null);
+        // Rilettura fresca finché OFF non dà una scheda modificata dopo l'invio (`last_modified_t` più recente), al più
+        // quattro volte in una decina di secondi. Se resta quella di prima, in cache va con `rileggere`: la prossima
+        // apertura la rilegge da OFF invece di tenerla un mese (il 1/11 la scheda vecchia era finita in cache).
+        const prima = grezzo?.last_modified_t || 0;
+        let nuovo = null;
+        for (const pausa of [0, 1500, 3000, 5000]) {
+          if (pausa) await new Promise((ok) => setTimeout(ok, pausa));
+          nuovo = await off.leggiOff(ean, { fresco: true }).catch(() => null);
+          if (nuovo && (nuovo.last_modified_t || 0) > prima) break;
+        }
+        const aggiornata = !!nuovo && (nuovo.last_modified_t || 0) > prima;
         const scheda = nuovo ? off.normalizza(nuovo) : { trovato: false, fonte: tipo === "beauty" ? "obf" : "off" };
-        await db.collection("prodotti").doc(ean).set({ ...scheda, ean, letto: FieldValue.serverTimestamp(), lettoDa: uid }, { merge: false });
-        console.log("contribuisci invia", ean, tipo, Object.keys(campi).join(","), foto.length, "foto", avvisi.length ? `avvisi: ${avvisi.join("; ")}` : "");
-        return { scheda: { ...scheda, ean, letto: Date.now(), aggiornatoOff: scheda.aggiornatoOff?.getTime?.() || null }, campi: Object.keys(campi), avvisi };
+        await db.collection("prodotti").doc(ean).set({ ...scheda, ean, letto: FieldValue.serverTimestamp(), lettoDa: uid,
+          ...(aggiornata ? {} : { rileggere: { prima, dal: Date.now() } }) }, { merge: false });
+        console.log("contribuisci invia", ean, tipo, Object.keys(campi).join(","), foto.length, "foto", aggiornata ? "riletta" : "OFF non ancora aggiornato", avvisi.length ? `avvisi: ${avvisi.join("; ")}` : "");
+        return { scheda: { ...scheda, ean, letto: Date.now(), aggiornatoOff: scheda.aggiornatoOff?.getTime?.() || null, ...(aggiornata ? {} : { inAggiornamento: true }) },
+          campi: Object.keys(campi), avvisi, aggiornata };
       }
       throw new HttpsError("invalid-argument", "Azione sconosciuta");
     } catch (err) {
@@ -422,7 +434,11 @@ export const prodotto = onCall(
           await registraScansione(db, req.auth.uid, ean, scheda);
         } catch (err) { console.warn("scansione non registrata", ean, String(err.message).slice(0, 160)); }
       };
-      const valida = attuale && !req.data?.aggiorna && eta < (attuale.trovato ? CACHE_TROVATO_MS : CACHE_ASSENTE_MS);
+      // `rileggere`: scheda salvata dopo un contributo quando OFF dava ancora quella di prima → si rilegge fresca.
+      // Il segno vale un giorno: se OFF non cambia mai la scheda (contributo scartato), si torna alla cache normale.
+      const rileggere = attuale?.rileggere && Date.now() - (attuale.rileggere.dal || 0) < 24 * 3600 * 1000 ? attuale.rileggere : null;
+      const fresco = !!req.data?.aggiorna || !!rileggere;
+      const valida = attuale && !fresco && eta < (attuale.trovato ? CACHE_TROVATO_MS : CACHE_ASSENTE_MS);
       // Scheda trovata ma normalizzata da una versione più vecchia (mancano campi, es. i marcatori NOVA): si rilegge
       // da OFF; se OFF non risponde o non la trova più, va bene quella in cache.
       const daRileggere = valida && attuale.trovato && (attuale.versioneScheda || 1) < off.VERSIONE_SCHEDA;
@@ -432,22 +448,26 @@ export const prodotto = onCall(
         const nuovo = ricalcola(attuale);
         if (nuovo) await ref.update(nuovo);
         await segna({ ...attuale, ...(nuovo || {}) });
-        return { ...attuale, ...(nuovo || {}), ean, letto: attuale.letto.toMillis(), aggiornatoOff: attuale.aggiornatoOff?.toMillis?.() || null };
+        const { rileggere: _r, ...resto } = attuale;
+        return { ...resto, ...(nuovo || {}), ean, letto: attuale.letto.toMillis(), aggiornatoOff: attuale.aggiornatoOff?.toMillis?.() || null,
+          ...(rileggere ? { inAggiornamento: true } : {}) };
       };
       if (valida && !daRileggere) return await dallaCache();
       let grezzo;
       try {
-        grezzo = await off.leggiOff(ean);
+        grezzo = await off.leggiOff(ean, { fresco });
       } catch (err) {
-        if (daRileggere && err instanceof off.OffError) return await dallaCache();
+        if ((daRileggere || rileggere) && err instanceof off.OffError) return await dallaCache();
         throw err;
       }
-      if (!grezzo && daRileggere) return await dallaCache();
+      if (!grezzo && (daRileggere || rileggere)) return await dallaCache();
       const scheda = grezzo ? off.normalizza(grezzo) : { trovato: false, fonte: "off" };
+      // Ancora la scheda di prima del contributo: si tiene il segno, la prossima apertura riprova.
+      const ancoraVecchia = !!rileggere && (grezzo?.last_modified_t || 0) <= (rileggere.prima || 0);
       const { FieldValue } = await import("firebase-admin/firestore");
-      await ref.set({ ...scheda, ean, letto: FieldValue.serverTimestamp(), lettoDa: req.auth.uid }, { merge: false });
+      await ref.set({ ...scheda, ean, letto: FieldValue.serverTimestamp(), lettoDa: req.auth.uid, ...(ancoraVecchia ? { rileggere } : {}) }, { merge: false });
       await segna(scheda);
-      return { ...scheda, ean, letto: Date.now(), aggiornatoOff: scheda.aggiornatoOff?.getTime?.() || null };
+      return { ...scheda, ean, letto: Date.now(), aggiornatoOff: scheda.aggiornatoOff?.getTime?.() || null, ...(ancoraVecchia ? { inAggiornamento: true } : {}) };
     } catch (err) {
       if (err instanceof HttpsError) throw err;
       console.error("prodotto", ean, err.status || "", String(err.message).slice(0, 200));

@@ -1,6 +1,7 @@
 // Prova senza rete del contributo a Open Food Facts (src/prodotti/contributo.js): lettura ripulita, campi mancanti,
 // parametri delle scritture verso OFF/OBF con una rete finta.
 //   node functions/strumenti/prova-contributo.mjs
+import { leggiOff } from "../src/prodotti/off.js";
 import { fotoValide, pulisciLettura, mancanti, campiOff, inviaAOff, leggiEtichette, appUuid, APP, ContributoError } from "../src/prodotti/contributo.js";
 
 let errori = 0;
@@ -72,6 +73,14 @@ let chiesto = null;
 const out = await leggiEtichette({ foto: f, key: "k", chiedi: async (arg) => { chiesto = arg; return { tipo: "beauty", nome: "Crema", nutrizione: { per: "nessuno" } }; } });
 verifica(chiesto.user.filter((b) => b.type === "image").length === 2 && chiesto.user[1].source.media_type === "image/jpeg" && chiesto.model === "sonnet", "due immagini col loro tipo, Sonnet");
 verifica(out.tipo === "beauty" && out.nutrizione === null && out.marca === null, "risposta ripulita");
+
+// Rilettura dopo l'invio (1/11): con `fresco` la URL cambia e la cache davanti all'API si salta.
+const richieste = [];
+const fetchOff = async (url, init) => { richieste.push({ url, init }); return { ok: true, status: 200, json: async () => ({ status: 1, product: { code: "1" } }) }; };
+await leggiOff("8001234567890", { fetchFn: fetchOff });
+await leggiOff("8001234567890", { fetchFn: fetchOff, fresco: true });
+verifica(!/[?&]_=/.test(richieste[0].url) && !richieste[0].init.headers["Cache-Control"], "lettura normale: URL stabile, cache ammessa");
+verifica(/[?&]_=\d+/.test(richieste[1].url) && richieste[1].init.headers["Cache-Control"] === "no-cache", "lettura fresca: URL nuova e no-cache");
 
 console.log(errori ? `\n${errori} controlli falliti` : "\nTutto a posto");
 process.exit(errori ? 1 : 0);

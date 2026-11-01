@@ -482,11 +482,17 @@ function mostraScheda(s, opzioni = {}) {
   const corpo = trovato ? corpoScheda(s, { rileggi }) : [
     el("div.prodotto__testa", {}, el("div.prodotto__indice", {}, el("b.display", {}, "?"), el("small", {}, "non trovato")),
       el("div.prodotto__nome", {}, el("b", {}, "Prodotto non trovato"), el("span", {}, `Codice ${s.ean}`))),
-    el("p.meta", {}, "Open Food Facts è una banca dati collaborativa e questo codice non c'è ancora. Puoi metterlo in lista lo stesso, o aggiungerlo con tre foto."),
-  ];
+    s.inAggiornamento ? null : el("p.meta", {}, "Open Food Facts è una banca dati collaborativa e questo codice non c'è ancora. Puoi metterlo in lista lo stesso, o aggiungerlo con tre foto."),
+  ].filter(Boolean);
   // «Completa» (1/11): scheda mancante o senza nome, ingredienti o valori → tre foto e un tocco (components/contributo.js).
-  if (daCompletare(s)) {
-    const dopo = corpo.reduce((k, n, i) => (n?.classList?.contains("prodotto__avviso") || n?.classList?.contains("prodotto__testa") || (!trovato && i === 1) ? i + 1 : k), 1);
+  const dopo = corpo.reduce((k, n, i) => (n?.classList?.contains("prodotto__avviso") || n?.classList?.contains("prodotto__testa") || (!trovato && i === 1) ? i + 1 : k), 1);
+  if (s.inAggiornamento) {
+    // Contributo inviato ma OFF dà ancora la scheda di prima (il server la rilegge alla prossima apertura): niente
+    // «Completa», che proporrebbe di rimandare gli stessi dati.
+    corpo.splice(dopo, 0, el("p.meta.prodotto__avviso.contributo__inviato", {},
+      "Contributo inviato: Open Food Facts sta ancora aggiornando la scheda. ",
+      el("a.prodotto__rileggi", { href: "#", role: "button", onclick: (e) => { e.preventDefault(); rileggi(); } }, "Rileggi")));
+  } else if (daCompletare(s)) {
     corpo.splice(dopo, 0, el("div.riga.contributo__riga", { role: "button", tabindex: "0",
         onclick: () => completaScheda(s, { mostra: (nuova) => mostraScheda(nuova, opzioni) }),
         onkeydown: (e) => { if (e.key === "Enter") e.currentTarget.click(); } },

@@ -354,6 +354,23 @@ with sync_playwright() as p:
         pg.click("#foglio .foglio__secondarie button >> text=Salta")
         pg.wait_for_selector("#foglio .contributo__chi >> text=Invio come mattia")
         assert not pg.locator("#foglio .contributo__account").is_visible(), "account già dato: campi nascosti"
+        # Valori come la tabella dell'etichetta: i «di cui» rientrati sotto la loro voce, cifre allineate a destra.
+        rientri = pg.evaluate("""[...document.querySelectorAll('#foglio .contributo__valore')].map((r) => ({
+          nome: r.querySelector('span').textContent, x: Math.round(r.querySelector('span').getBoundingClientRect().left
+            + parseFloat(getComputedStyle(r.querySelector('span')).paddingLeft)), destra: Math.round(r.querySelector('input').getBoundingClientRect().right) }))""")
+        assert [r["nome"] for r in rientri][:3] == ["Energia", "Grassi", "di cui saturi"], rientri
+        assert len({r["destra"] for r in rientri}) == 1, f"cifre in colonna: {rientri}"
+        assert rientri[2]["x"] > rientri[1]["x"] and rientri[4]["x"] == rientri[2]["x"], f"«di cui» rientrati: {rientri}"
+        shot(pg, "1l-completa-valori")
+        # OFF lento: la rilettura dopo l'invio dà ancora la scheda di prima → avviso con «Rileggi», niente «Completa».
+        pg.evaluate("sessionStorage.setItem('finto.off.lento', '1')")
+        conferma(pg)
+        pg.wait_for_selector("#foglio .contributo__inviato")
+        assert pg.locator("#foglio .contributo__riga").count() == 0, "contributo appena inviato: niente «Completa»"
+        pg.evaluate("sessionStorage.removeItem('finto.off.lento')")
+        pg.click("#foglio .contributo__inviato .prodotto__rileggi")
+        pg.wait_for_selector("#foglio .prodotto__nome b >> text=Gallette di riso")
+        assert pg.locator("#foglio .contributo__inviato").count() == 0, "riletta: scheda nuova senza avviso"
         pg.click("#foglio button[aria-label='Indietro']")
         pg.wait_for_selector("#foglio", state="hidden")
 
