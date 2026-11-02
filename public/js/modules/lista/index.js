@@ -14,7 +14,7 @@
 //                   puntini, troppo piccoli, e dal foglio Modifica)
 //
 // In testata, l'orologio apre la cronologia dei prodotti scansionati (modules/scansioni).
-import { el, icon, iconaDa, toast, fascia, vuoto, toDate, fab } from "../../core/ui.js";
+import { el, icon, iconaDa, toast, fascia, vuoto, toDate, fab, fabDoppio } from "../../core/ui.js";
 import { vaiA } from "../../core/router.js";
 import { create, update, remove, watchVisible, VIS } from "../../core/db.js";
 import { session } from "../../core/auth.js";
@@ -288,7 +288,7 @@ export function mount(container) {
   // Scansiona subito, senza passare da «Mi serve» (29/10, richiesta di Mattia): sopra il +.
   const scansionaFab = el("button.fab.fab--sopra", { type: "button", "aria-label": "Scansiona un prodotto", title: "Scansiona un prodotto",
     onclick: () => scansionaInLista(() => items) }, icon("codice"));
-  document.documentElement.dataset.fabDoppio = "";
+  const lasciaDoppio = fabDoppio();
 
   function compra(it) {
     update(COLL, it.id, { done: true, boughtAt: new Date(), doneBy: session.user.uid, count: (it.count || 0) + 1 });
@@ -339,5 +339,5 @@ export function mount(container) {
     render();
     if (!rilettura) rilettura = setTimeout(() => aggiornaRiassunti(items, (it, r) => update(COLL, it.id, { prodotto: r })), 1200);
   });
-  return () => { stop(); clearTimeout(rilettura); piu.remove(); scansionaFab.remove(); delete document.documentElement.dataset.fabDoppio; };
+  return () => { stop(); clearTimeout(rilettura); piu.remove(); scansionaFab.remove(); lasciaDoppio(); };
 }

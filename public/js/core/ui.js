@@ -122,6 +122,24 @@ export function fab(label, onclick) {
   return el("button.fab.fab--tondo", { type: "button", "aria-label": label, title: label, onclick }, icon("piu"));
 }
 
+/**
+ * Seconda azione sopra il + (`fab--sopra`: Scansiona nella Lista, Evento nel Diario): <html data-fab-doppio> alza
+ * toast e spazio in fondo finché almeno una pagina montata la usa. Si contano, perché scorrendo tra le sezioni
+ * due pagine sono montate insieme e quella che si smonta non deve toglierlo all'altra. Ritorna chi lo lascia.
+ */
+let fabDoppi = 0;
+export function fabDoppio() {
+  fabDoppi++;
+  document.documentElement.dataset.fabDoppio = "";
+  let lasciato = false;
+  return () => {
+    if (lasciato) return;
+    lasciato = true;
+    fabDoppi = Math.max(0, fabDoppi - 1);
+    if (!fabDoppi) delete document.documentElement.dataset.fabDoppio;
+  };
+}
+
 export function fascia(testo, extra) {
   return el("div.fascia", {}, el("span", {}, testo), extra || null);
 }

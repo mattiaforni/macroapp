@@ -19,7 +19,7 @@
 // giornoInizio ("AAAA-MM-GG"), giornoFine, creatore, calId, calNome, colore, casa, modificabile }.
 import { doc, updateDoc } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js";
 import { db } from "./firebase.js";
-import { chiamaGoogle, permessoGoogle, suSvuota } from "./google.js";
+import { chiamaGoogle, permessoGoogle, suSvuota, statoGoogle } from "./google.js";
 import { getHousehold, updateHousehold } from "./household.js";
 import { session } from "./auth.js";
 import { isoGiorno } from "./ui.js";
@@ -103,6 +103,15 @@ export async function calendariVisti({ fresh = false } = {}) {
 
 /** L'ultimo elenco di calendariVisti, senza aspettare (per i fogli che si aprono subito). */
 export const calendariNoti = () => ultimiVisti;
+
+/**
+ * Dall'app si può scrivere un evento: Google collegato con il permesso del calendario e, tra i calendari noti, uno
+ * modificabile (la casa o il personale). Decide il tondo dell'evento nel Diario e «Evento» nel foglio della nota.
+ */
+export function scriviEventi() {
+  const g = statoGoogle();
+  return !!(g.collegato && g.permessi?.calendario && ultimiVisti.some((c) => c.modificabile));
+}
 
 // ───────────── Eventi ─────────────
 

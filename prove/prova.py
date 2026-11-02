@@ -1123,7 +1123,11 @@ with sync_playwright() as p:
         # ── Pillole dei progetti tornando al Diario filtrato (2/11, dal video di Mattia): un progetto senza
         # istruzioni ma con note (là LAMA) spariva riaprendo il Diario con il filtro su un altro progetto ──
         step[0] = "pillole del diario filtrato"
+        assert pg.locator("#view button.fab--sopra").is_hidden(), "senza un calendario in cui scrivere, niente tondo dell'evento"
+        assert not pg.evaluate("document.documentElement.hasAttribute('data-fab-doppio')"), "un solo tondo: niente spazio in più"
         pg.click("button.fab")
+        pg.wait_for_selector("#foglio >> text=Oppure trasformala subito in")
+        assert pg.locator("#foglio button.pillola >> text=Evento").count() == 0, "senza calendari niente «Evento» tra le trasformazioni"
         pg.fill("#foglio textarea", "Direttivo del circolo: rivedere il regolamento della sala")
         pg.click("#foglio button.pillola >> text=Circolo")
         conferma(pg)
@@ -1318,6 +1322,54 @@ with sync_playwright() as p:
         pg.wait_for_timeout(300)
         assert pg.locator(".prossimi .evento", has_text="Torneo").count() == 0, "l'evento eliminato non resta nella striscia"
 
+        # ── Evento dal Diario (2/11, scelte B e C di Mattia tra tre schermate): il tondo col calendario sopra il +,
+        # come «Scansiona» nella Lista, e «Evento» tra le trasformazioni del foglio della nota ──
+        step[0] = "evento dal diario"
+        doppio = lambda: pg.evaluate("document.documentElement.hasAttribute('data-fab-doppio')")
+        tondo = pg.locator("#view button.fab--sopra[aria-label='Nuovo evento']")
+        tondo.wait_for(state="visible", timeout=3000)
+        assert doppio(), "con il doppio tondo toast e spazio in fondo salgono"
+        pg.evaluate("window.scrollTo(0, 0)")
+        pg.wait_for_timeout(200)
+        shot(pg, "19e-diario-tondo-evento")
+        tondo.click()
+        pg.wait_for_selector("#foglio h2 >> text=Nuovo evento")
+        pg.wait_for_timeout(150)
+        assert pg.evaluate("document.activeElement.placeholder") == "Cosa", "si scrive subito il titolo"
+        pg.fill("#foglio input[placeholder='Cosa']", "Idraulico")
+        pg.keyboard.press("Enter")
+        pg.wait_for_selector("text=Evento nel calendario della casa")
+        assert any(e["summary"] == "Idraulico" for e in cal["eventi"][CAL_CASA].values()), cal["eventi"][CAL_CASA]
+        pg.wait_for_selector(".prossimi .evento >> text=Idraulico")
+        # Da una nota: la prima riga è il titolo, il resto le note; la nota non si salva
+        pg.click("button.fab.fab--tondo")
+        pg.wait_for_selector("#foglio h2 >> text=Nuova nota")
+        pg.fill("#foglio textarea", "Aperitivo da Luca\nportare il vino")
+        pg.click("#foglio button.pillola >> text=Evento")
+        pg.wait_for_selector("#foglio h2 >> text=Nuovo evento")
+        assert pg.input_value("#foglio input[placeholder='Cosa']") == "Aperitivo da Luca"
+        assert pg.input_value("#foglio textarea[placeholder='Note (facoltative)']") == "portare il vino"
+        pg.wait_for_timeout(200)
+        shot(pg, "19f-evento-dalla-nota")
+        conferma(pg)
+        pg.wait_for_selector(".prossimi .evento >> text=Aperitivo da Luca")
+        aperitivo = next(e for e in cal["eventi"][CAL_CASA].values() if e["summary"] == "Aperitivo da Luca")
+        assert aperitivo.get("description") == "portare il vino", aperitivo
+        assert pg.locator(".voce-nota", has_text="Aperitivo da Luca").count() == 0, "trasformata: la nota non resta"
+        # Scorrendo tra Diario e Lista, che hanno entrambe il doppio tondo, lo spazio in più resta; altrove no
+        pg.wait_for_selector("#foglio", state="hidden")
+        scorri(-120)
+        pg.wait_for_selector(".schede a[aria-current='page'][href='#/lista']")
+        assert doppio(), "la Lista tiene il suo spazio anche se il Diario si è smontato dopo"
+        scorri(120)
+        pg.wait_for_selector(".schede a[aria-current='page'][href='#/diario']")
+        assert doppio() and tondo.is_visible(), "tornando al Diario c'è ancora il tondo"
+        pg.click(".schede a[href='#/spese']")
+        pg.wait_for_selector(".schede a[aria-current='page'][href='#/spese']")
+        assert not doppio(), "nelle Spese un solo tondo"
+        pg.click(".schede a[href='#/diario']")
+        pg.wait_for_selector(".stato-ai")
+
         # ── Scollegare Google ──
         step[0] = "scollega"
         menu(pg, "Google")
@@ -1355,6 +1407,7 @@ with sync_playwright() as p:
         pg.click(".schede a[href='#/diario']")
         pg.wait_for_timeout(300)
         shot(pg, "9-diario-scuro")
+        assert pg.locator("#view button.fab--sopra").is_hidden() and not pg.evaluate("document.documentElement.hasAttribute('data-fab-doppio')"), "Google scollegato: niente tondo dell'evento"
         assert pg.evaluate("passaggi") == ["entra", "torna"], pg.evaluate("passaggi")
         pg.click("button[aria-label='Menu']")
         pg.click(".menu__voce >> text=Casa, tema e account")

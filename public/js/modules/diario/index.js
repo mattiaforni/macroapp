@@ -19,7 +19,9 @@
 // In cima, «Prossimi giorni»: gli eventi di oggi e dei due giorni dopo (non quelli già finiti) da tutti i calendari
 // che vedi (quello della casa e gli altri tuoi: 1/11, scelta di Mattia), con le righe della pagina Calendario;
 // compare solo se ce ne sono e se Google è collegato con il calendario. Scelta di Mattia del 27/10 (schermata B),
-// al posto di aprire il Calendario dal menu.
+// al posto di aprire il Calendario dal menu. Un evento nuovo si scrive dal Diario in due modi (2/11, scelte B e C di
+// Mattia tra tre schermate): il tondo col calendario sopra il +, come «Scansiona» nella Lista, e «Evento» tra le
+// trasformazioni del foglio della nota. Entrambi solo se c'è un calendario in cui scrivere (`scriviEventi`).
 //
 // journal_entries { text, titolo, titoloAMano, persone: [{ nome, voceId?, googleId? }], personeAMano, projectId,
 //   riepilogo, temi, riepilogoAt, analyzed, analyzedAt, analysisError, modello, sintesiEsito,
@@ -27,7 +29,7 @@
 // `modello`: chi ha letto la nota l'ultima volta (haiku, sonnet, opus: scelta in menu → Modelli AI).
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-functions.js";
 import { functions } from "../../core/firebase.js";
-import { el, icon, toast, fascia, vuoto, attesa, toDate, meseLungo, fab, testoRicco, isoGiorno, stessoGiorno, fmtDate, puntoToccato } from "../../core/ui.js";
+import { el, icon, toast, fascia, vuoto, attesa, toDate, meseLungo, fab, fabDoppio, testoRicco, isoGiorno, stessoGiorno, fmtDate, puntoToccato } from "../../core/ui.js";
 import { openSheet, scriviDa } from "../../components/sheet.js";
 import { create, update, remove, watchMine, watchVisible, readVisible, VIS, where } from "../../core/db.js";
 import { watchPending, renderAzione } from "../../components/proposals.js";
@@ -38,8 +40,8 @@ import { apriSpesa } from "../spese/index.js";
 import { apriVoceManuale } from "../manuale/index.js";
 import { nomeModello } from "../../core/modelli.js";
 import { statoGoogle, suGoogle } from "../../core/google.js";
-import { calendariVisti, leggiEventi, eventiNoti, suEventi, suCalendari } from "../../core/calendario.js";
-import { rigaEvento, inOrdine } from "../calendario/index.js";
+import { calendariVisti, leggiEventi, eventiNoti, suEventi, suCalendari, scriviEventi } from "../../core/calendario.js";
+import { rigaEvento, inOrdine, apriEvento } from "../calendario/index.js";
 import { pulsanteRegistra } from "../../components/registratore.js";
 import { sceltaPersone } from "../../components/persone.js";
 import { personaDaId, personaDaGoogle } from "../../core/rubrica.js";
@@ -81,8 +83,9 @@ const chiavePersone = (lista) => JSON.stringify((lista || []).map((p) => [p.nome
 
 /**
  * Foglio della nota: titolo (facoltativo) e testo a tutta larghezza, poi persone, progetto e giorno. La spunta
- * salva; le pillole trasformano subito il testo in task, voce di lista, spesa o voce del manuale, senza passare
- * dall'AI. Invio nel titolo porta al testo; nel testo va a capo: una nota può avere più paragrafi.
+ * salva; le pillole trasformano subito il testo in task, voce di lista, spesa, voce del manuale o evento (se c'è un
+ * calendario in cui scrivere), senza passare dall'AI. Invio nel titolo porta al testo; nel testo va a capo: una
+ * nota può avere più paragrafi.
  * Titolo e persone cambiati qui restano come li hai scritti: l'analisi non li tocca più (titoloAMano,
  * personeAMano). Svuotando il titolo, lo riscrive l'AI alla prossima analisi.
  * `fuoco` = { campo: "titolo" | "testo" | "riepilogo", pos }: arrivando da un tocco sul testo nel foglio di lettura,
@@ -131,6 +134,13 @@ export function apriNota({ esistente = null, testo = "", progetti = [], projectI
       apriSpesa(null, { description: text.replace(m?.[0] || "", "").replace(/\s+/g, " ").trim(), amount: m ? m[1] : "" });
     }
     if (tipo === "manuale") apriVoceManuale(null, { name: text });
+    if (tipo === "evento") {
+      // Il titolo della nota, se c'è, è il titolo dell'evento e il testo va nelle note; se no la prima riga è il
+      // titolo e il resto le note. Il giorno è quello della nota (oggi, se non l'hai cambiato).
+      const t = titolo.value.trim();
+      const [prima, ...resto] = text.split("\n");
+      apriEvento(null, { titolo: t || prima.trim(), note: t ? text : resto.join("\n").trim(), giorno: isoGiorno(quando) });
+    }
   }
 
   const sheet = openSheet({
@@ -151,6 +161,7 @@ export function apriNota({ esistente = null, testo = "", progetti = [], projectI
           el("button.pillola", { type: "button", onclick: () => trasforma("lista") }, icon("lista"), "Lista"),
           el("button.pillola", { type: "button", onclick: () => trasforma("spesa") }, icon("spese"), "Spesa"),
           el("button.pillola", { type: "button", onclick: () => trasforma("manuale") }, icon("negozio"), "Manuale"),
+          scriviEventi() ? el("button.pillola", { type: "button", onclick: () => trasforma("evento") }, icon("calendario"), "Evento") : null,
         ),
       ),
     ],
@@ -431,6 +442,18 @@ export function mount(container) {
   const filtri = el("div.segmenti", { style: "padding-top:8px" });
   const elenco = el("div");
   const piu = fab("Nuova nota", () => nuova());
+  // Evento nuovo senza passare dal Calendario (2/11, scelta B di Mattia): tondo col calendario sopra il +, come
+  // «Scansiona» nella Lista. Solo se c'è un calendario in cui scrivere, come il + della pagina Calendario.
+  const eventoFab = el("button.fab.fab--sopra", { type: "button", "aria-label": "Nuovo evento", title: "Nuovo evento", hidden: true,
+    onclick: () => apriEvento() }, icon("calendario"));
+  let lasciaDoppio = null;
+  let smontato = false; // caricaProssimi può finire dopo lo smontaggio: niente data-fab-doppio rimasto acceso
+  function disegnaEventoFab() {
+    const si = !smontato && scriviEventi();
+    eventoFab.hidden = !si;
+    if (si && !lasciaDoppio) lasciaDoppio = fabDoppio();
+    if (!si && lasciaDoppio) { lasciaDoppio(); lasciaDoppio = null; }
+  }
 
   // ── Prossimi giorni, da tutti i calendari che vedi ──
   // Si disegna con l'ultima lettura nota (anche salvata sul telefono), poi con quella fresca da Google; non
@@ -460,7 +483,10 @@ export function mount(container) {
     ); // replaceChildren, a differenza di el(), scriverebbe «null»
   }
   async function caricaProssimi() {
-    if (!statoGoogle().permessi.calendario || !(await calendariVisti()).length) { eventi = null; disegnaProssimi(); return; }
+    disegnaEventoFab(); // con i calendari già noti, subito
+    const visti = statoGoogle().permessi.calendario ? await calendariVisti() : [];
+    disegnaEventoFab();
+    if (!visti.length) { eventi = null; disegnaProssimi(); return; }
     // Se Google non risponde resta l'ultima lettura; perché, lo dice la pagina Calendario.
     try { eventi = await leggiEventi(); } catch (e) { /* niente */ }
     disegnaProssimi();
@@ -560,6 +586,7 @@ export function mount(container) {
     filtri,
     elenco,
     piu,
+    eventoFab,
   );
 
   // Testo condiviso da un'altra app: apre subito il foglio con il testo dentro.
@@ -579,5 +606,5 @@ export function mount(container) {
   const stop4 = suGoogle(() => caricaProssimi());
   const stop5 = suCalendari(() => caricaProssimi());
   caricaProssimi();
-  return () => { stopNote(); stopTutte(); stop1(); stop2(); stop3(); stop4(); stop5(); dati.ferma(); piu.remove(); };
+  return () => { stopNote(); stopTutte(); stop1(); stop2(); stop3(); stop4(); stop5(); dati.ferma(); smontato = true; piu.remove(); eventoFab.remove(); lasciaDoppio?.(); lasciaDoppio = null; };
 }
