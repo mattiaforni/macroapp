@@ -1120,6 +1120,25 @@ with sync_playwright() as p:
         pg.click(".schede a[href='#/diario']")
         pg.click("button.pillola >> text=Tutte")
 
+        # ── Pillole dei progetti tornando al Diario filtrato (2/11, dal video di Mattia): un progetto senza
+        # istruzioni ma con note (là LAMA) spariva riaprendo il Diario con il filtro su un altro progetto ──
+        step[0] = "pillole del diario filtrato"
+        pg.click("button.fab")
+        pg.fill("#foglio textarea", "Direttivo del circolo: rivedere il regolamento della sala")
+        pg.click("#foglio button.pillola >> text=Circolo")
+        conferma(pg)
+        pg.wait_for_selector("button.pillola >> text=Circolo")
+        pg.click("button.pillola >> text=Tennis")
+        pg.wait_for_selector("button.pillola.on >> text=Tennis")
+        pg.click(".schede a[href='#/spese']")
+        pg.wait_for_selector(".schede a[aria-current='page'][href='#/spese']")
+        pg.click(".schede a[href='#/diario']")
+        pg.wait_for_selector("button.pillola.on >> text=Tennis")
+        assert pg.locator(".segmenti button.pillola", has_text="Circolo").count() == 1, "il progetto con note resta tra le pillole: " + pg.locator(".segmenti").last.inner_text()
+        pg.wait_for_timeout(150)
+        shot(pg, "18b-diario-filtrato-ritorno")
+        pg.click("button.pillola >> text=Tutte")
+
         # ── Niente «vuoto» di passaggio: cambiando filtro o sezione la pagina non dice «vuoto»
         # nemmeno per un fotogramma prima che arrivino i dati (video di Mattia, 26/10) ──
         step[0] = "niente vuoto di passaggio"

@@ -375,8 +375,9 @@ export function mount(container) {
   let filtro = leggi(CHIAVE_FILTRO, "tutte");
   let caricate = false; // le note del filtro scelto sono arrivate: solo allora si può dire «vuoto»
   let tutte = null;     // le ultime note senza filtro: anteprima immediata quando si cambia filtro
-  // La pagina compare quando ci sono note e progetti (pillole, nomi): intera, non a pezzi.
-  const dati = attesa(["note", "progetti"], () => render());
+  // La pagina compare quando ci sono note, ultime note senza filtro (pillole dei progetti con note) e progetti
+  // (pillole, nomi): intera, non a pezzi.
+  const dati = attesa(["note", "tutte", "progetti"], () => render());
 
   const stato = el("div.stato-ai", { style: "margin-top:0" });
   const disegnaStato = () => {
@@ -528,12 +529,21 @@ export function mount(container) {
     stopNote = watchMine(COLL, { extra, max: f !== "tutte" ? 300 : 100 }, (docs) => {
       note = docs;
       caricate = true;
-      if (f === "tutte") tutte = docs;
       for (const n of docs) if (n.projectId) conNote.add(n.projectId);
       dati.arriva("note");
       render();
     });
   }
+  // Le ultime note senza filtro si seguono sempre, anche con un progetto scelto (è lo stesso ascolto di «Tutte»,
+  // condiviso in db.js): danno le pillole dei progetti che hanno note e l'anteprima quando si cambia filtro.
+  // Prima arrivavano solo dalle note viste: riaprendo il Diario già filtrato su Tennis, un progetto senza
+  // istruzioni ma con note (LAMA) spariva dalle pillole (2/11, dal video di Mattia).
+  const stopTutte = watchMine(COLL, { max: 100 }, (docs) => {
+    tutte = docs;
+    for (const n of docs) if (n.projectId) conNote.add(n.projectId);
+    dati.arriva("tutte");
+    render();
+  });
   // Cambiando filtro non si svuota l'elenco: finché arrivano le note del filtro nuovo (di solito
   // subito, se è già stato usato) si vedono quelle già note, filtrate. Mai «Nessuna nota» per un attimo.
   function scegli(v) {
@@ -569,5 +579,5 @@ export function mount(container) {
   const stop4 = suGoogle(() => caricaProssimi());
   const stop5 = suCalendari(() => caricaProssimi());
   caricaProssimi();
-  return () => { stopNote(); stop1(); stop2(); stop3(); stop4(); stop5(); dati.ferma(); piu.remove(); };
+  return () => { stopNote(); stopTutte(); stop1(); stop2(); stop3(); stop4(); stop5(); dati.ferma(); piu.remove(); };
 }
