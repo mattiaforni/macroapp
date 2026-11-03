@@ -6,9 +6,8 @@ import { session, logout } from "../core/auth.js";
 import { getHousehold } from "../core/household.js";
 import { vaiA } from "../core/router.js";
 import { readVisible } from "../core/db.js";
+import { apriPaginaProgetto } from "../core/barra.js";
 import { VERSION } from "../version.js";
-
-const CHIAVE_PAGINA = "macroapp.progetto"; // progetto aperto nella pagina Progetto (modules/progetto)
 
 const GRUPPI = [
   ["Casa", [
@@ -25,6 +24,7 @@ const GRUPPI = [
   ["Account", [
     { icona: "campana", testo: "Notifiche", vai: ["notifiche"] },
     { icona: "scintilla", testo: "Modelli AI", vai: ["modelli"] },
+    { icona: "impostazioni", testo: "Barra in basso", vai: ["barra"], nota: "le sezioni e l'ordine" },
     { icona: "impostazioni", testo: "Casa, tema e account", vai: ["impostazioni"] },
   ]],
 ];
@@ -63,8 +63,8 @@ export function apriMenu() {
   getHousehold().then((h) => { nomeCasa.textContent = h?.name || ""; }).catch(() => {});
 
   const voce = (v) => el("button.menu__voce", {
-    type: "button", disabled: !v.vai,
-    onclick: () => v.vai && chiudi({ poi: () => { v.prima?.(); vaiA(...v.vai); } }),
+    type: "button", disabled: !(v.vai || v.apri),
+    onclick: () => (v.vai || v.apri) && chiudi({ poi: () => (v.apri ? v.apri() : vaiA(...v.vai)) }),
   }, icon(v.icona), el("span", {}, v.testo), v.nota ? el("small", {}, v.nota) : null);
 
   // I progetti con le istruzioni per il diario hanno una pagina loro: compaiono qui, quando arrivano.
@@ -75,7 +75,7 @@ export function apriMenu() {
     progetti.replaceChildren(
       el("div.menu__titolo", {}, "Progetti"),
       ...conPagina.map((p) => {
-        const v = voce({ icona: "cartella", testo: p.name, vai: ["progetto"], prima: () => { try { localStorage.setItem(CHIAVE_PAGINA, p.id); } catch (e) {} } });
+        const v = voce({ icona: "cartella", testo: p.name, apri: () => apriPaginaProgetto(p.id) });
         if (p.colore) v.firstChild.replaceWith(el("span.colore.colore--pallino", { "data-colore": p.colore }));
         return v;
       }),

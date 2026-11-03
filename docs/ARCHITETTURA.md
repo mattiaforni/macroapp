@@ -22,7 +22,7 @@ js/core/router.js           router a hash (#/lista, #/spese, …)
 js/core/ui.js               el(), toast, formattazioni, icone, selettore visibilità
 js/components/onboarding.js primo accesso
 js/components/proposals.js  coda di approvazione (propose/accept/reject/render)
-js/modules/registry.js      elenco moduli e barra di navigazione
+js/modules/registry.js      elenco moduli e barra di navigazione (sezioni scelte per persona: js/core/barra.js)
 js/modules/<id>/index.js    un modulo = { id, title, nav, icon, mount(container) → unmount }
 sw.js                       cache statica, installazione PWA
 ```

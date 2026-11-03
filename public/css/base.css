@@ -174,6 +174,8 @@ html[data-passaggio="torna"]::view-transition-new(root) { animation: compare var
 }
 .schede a svg { width: 21px; height: 21px; }
 .schede a[aria-current="page"] { color: var(--accento); font-weight: 600; }
+/* Un progetto in barra (core/barra.js): aperto, prende il suo colore invece dell'accento. */
+.schede a[data-colore][aria-current="page"] { color: var(--c-testo); }
 
 /* ───────────── Bottoni ───────────── */
 
@@ -295,6 +297,7 @@ a.pillola { text-decoration: none; }
 }
 .pallino svg { width: 19px; height: 19px; }
 .pallino--accento { background: var(--accento-tinta); color: var(--accento); border-color: transparent; }
+.pallino--colore { background: var(--c-tinta); color: var(--c-testo); border-color: transparent; }
 
 .spunta {
   width: 34px; height: 34px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center;

@@ -9,7 +9,8 @@ import { avviaRubrica, fermaRubrica, sincronizzaDaGoogle } from "./core/rubrica.
 import { chiudiAscolti } from "./core/db.js";
 import { ritornoDaGoogle } from "./core/google.js";
 import { aggiornaAllAvvio as aggiornaNotifiche } from "./core/notifiche.js";
-import { modules, navModules, DEFAULT_ROUTE } from "./modules/registry.js";
+import { modules } from "./modules/registry.js";
+import { sezioni, sezione, sezioneAttiva, scelte, suBarra, progettiDisponibili } from "./core/barra.js";
 import { renderOnboarding } from "./components/onboarding.js";
 import { closeSheet } from "./components/sheet.js";
 import { apriMenu, chiudiMenu } from "./components/menu.js";
@@ -42,9 +43,21 @@ function renderLogin() {
   );
 }
 
+// Barra in basso: le sezioni scelte dalla persona (core/barra.js), nell'ordine scelto; la prima è la
+// pagina d'apertura. Un progetto in barra porta il suo colore.
+const idsBarra = []; // id delle sezioni, aggiornato sul posto: lo legge anche lo scorrimento col dito
+const primaSezione = () => idsBarra[0] || "diario";
+const routeNote = new Set(modules.map((m) => m.id));
+function aggiornaBarra() {
+  idsBarra.splice(0, idsBarra.length, ...scelte());
+  // Le route dei progetti in barra: `progetto-<id>` monta la pagina Progetto su quel progetto.
+  for (const id of idsBarra) if (!routeNote.has(id)) { const s = sezione(id); if (s) { addRoute(id, s.mount); routeNote.add(id); } }
+}
+
 function renderNav(active) {
-  nav.replaceChildren(...navModules.map((m) =>
-    el("a", { href: `#/${m.id}`, "aria-current": m.id === active ? "page" : null }, icon(m.icon || m.id), m.title),
+  const attiva = sezioneAttiva(active);
+  nav.replaceChildren(...sezioni().map((s) =>
+    el("a", { href: `#/${s.id}`, "aria-current": s.id === attiva ? "page" : null, "data-colore": s.colore }, icon(s.icon), s.title),
   ));
 }
 
@@ -67,20 +80,24 @@ function startApp() {
   if (!routerStarted) {
     for (const m of modules) addRoute(m.id, m.mount);
     routerStarted = true;
-    const sezioni = new Set(navModules.map((m) => m.id));
+    aggiornaBarra();
+    // Quando la scelta cambia (pagina «Barra in basso») o arrivano i nomi dei progetti, la barra si ridisegna.
+    suBarra(() => { aggiornaBarra(); if (session.user && session.householdId) renderNav(currentRoute() || primaSezione()); });
+    progettiDisponibili().catch((e) => console.warn("barra", e));
+    const inBarra = (id) => idsBarra.includes(sezioneAttiva(id));
     // Tra le sezioni della barra si passa anche scorrendo la pagina a sinistra o a destra (segue il dito).
-    attivaScorrimento(view, navModules.map((m) => m.id), () => currentRoute() || DEFAULT_ROUTE, (id) => modules.find((m) => m.id === id));
+    attivaScorrimento(view, idsBarra, () => sezioneAttiva(currentRoute() || primaSezione()), (id) => sezione(id));
     startRouter({
       container: view,
-      fallback: DEFAULT_ROUTE,
+      fallback: primaSezione,
       // Come in Leghe: tra le sezioni della barra cambio secco; da una pagina del menu a una sezione
       // della barra si torna con una dissolvenza breve; verso una pagina del menu si entra sfumando
       // (menu e pulsanti nelle pagine passano da vaiA, che entra sempre).
-      transizione: (da, a) => (sezioni.has(a) ? (sezioni.has(da) ? null : "torna") : "entra"),
+      transizione: (da, a) => (inBarra(a) ? (inBarra(da) ? null : "torna") : "entra"),
       onChange: (id) => {
         closeSheet({ fromHistory: true, subito: true });
         chiudiMenu();
-        const mod = modules.find((m) => m.id === id);
+        const mod = sezione(id)?.modulo || modules.find((m) => m.id === id);
         // Un modulo può dare un titolo che dipende da cosa mostra (la pagina Progetto: il nome del progetto).
         title.textContent = mod?.titoloCorrente?.() || mod?.title || "Debiti e Doveri";
         renderNav(id);
@@ -90,7 +107,7 @@ function startApp() {
     });
   } else {
     // Rimonta la vista corrente dopo un cambio di sessione (es. casa appena creata).
-    navigate(currentRoute() || DEFAULT_ROUTE);
+    navigate(currentRoute() || primaSezione());
     window.dispatchEvent(new HashChangeEvent("hashchange"));
   }
   // Lavori di fondo, non bloccanti.

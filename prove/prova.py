@@ -1726,6 +1726,51 @@ with sync_playwright() as p:
         assert pg.evaluate("document.activeElement.classList.contains('nota__titolo-campo')"), "toccando il titolo si scrive il titolo"
         pg.click("#foglio button[aria-label='Indietro']")
         pg.wait_for_timeout(400)
+        # ── Barra in basso personalizzabile (3/11): sezioni e ordine per persona, progetti compresi ──
+        step[0] = "barra in basso"
+        menu(pg, "Barra in basso")
+        pg.wait_for_selector("h3 >> text=Nella barra")
+        pg.wait_for_selector("h3 >> text=Progetti")
+        scelte = pg.locator(".blocco").nth(0)
+        assert scelte.locator(".riga").count() == 4, "la barra di sempre"
+        assert scelte.locator(".riga").nth(0).locator("span >> text=L'app si apre qui").count() == 1
+        pg.click(".blocco:has(h3:text('Progetti')) .riga >> text=Tennis")
+        pg.wait_for_selector(".schede a:nth-child(5) >> text=Tennis")
+        tennis = pg.locator(".schede a", has_text="Tennis").get_attribute("href")
+        assert tennis.startswith("#/progetto-"), f"route del progetto: {tennis}"
+        pg.click(".blocco:has(h3:text('Pagine')) .riga >> text=Calendario")
+        pg.wait_for_selector("text=Al massimo 5 sezioni")
+        assert pg.locator(".schede a").count() == 5
+        scelte.locator(".riga:has-text('Diario') .spunta").click()
+        pg.wait_for_selector(".schede a:nth-child(1) >> text=Lista")
+        assert pg.locator(".schede a", has_text="Diario").count() == 0, "il Diario non c'è più"
+        pg.click(".blocco:has(h3:text('Pagine')) .riga >> text=Calendario")
+        pg.wait_for_selector(".schede a:nth-child(5) >> text=Calendario")
+        for _ in range(4): scelte.locator(".riga:has-text('Calendario') button[aria-label$='sposta su']").click()
+        pg.wait_for_selector(".schede a:nth-child(1) >> text=Calendario")
+        assert scelte.locator(".riga").nth(0).locator("span >> text=L'app si apre qui").count() == 1, "la prima è la pagina d'apertura"
+        assert scelte.locator(".riga").nth(0).locator("button[aria-label$='sposta su']").is_disabled()
+        pg.wait_for_timeout(2700)  # il toast se ne va
+        pg.evaluate("window.scrollTo(0, 0)")
+        shot(pg, "25-barra")
+        utente = pg.evaluate("(() => { const s = JSON.parse(sessionStorage.getItem('finto.firestore')); return new Map(s.store.find(([c]) => c === 'users')[1]).get('uid-test'); })()")
+        assert utente.get("barra") == ["calendario", "lista", "spese", "task", tennis[2:]], f"scelta salvata: {utente.get('barra')}"
+        # Il progetto dalla barra: la sua pagina, col suo colore, e la barra lo segna
+        pg.click(f".schede a[href='{tennis}']")
+        pg.wait_for_selector("#page-title >> text=Tennis")
+        pg.wait_for_selector(f".schede a[aria-current='page'][href='{tennis}']")
+        assert pg.locator("html[data-colore='giallo']").count() == 1
+        # Dal menu si arriva alla stessa sezione (non alla pagina Progetto generica)
+        pg.click(".schede a[href='#/lista']")
+        pg.wait_for_selector(".schede a[aria-current='page'][href='#/lista']")
+        menu(pg, "Tennis")
+        pg.wait_for_selector(f".schede a[aria-current='page'][href='{tennis}']")
+        # Senza hash l'app si apre sulla prima sezione scelta
+        pg.goto("http://127.0.0.1:8766/")
+        pg.wait_for_selector(".schede a[aria-current='page'][href='#/calendario']", timeout=8000)
+        pg.wait_for_selector("#page-title >> text=Calendario")
+        assert pg.locator(".schede a").count() == 5, "la barra scelta anche dopo la riapertura"
+        shot(pg, "25b-barra-apertura")
         print("FLUSSO COMPLETO")
     except Exception as e:
         shot(pg, "errore")

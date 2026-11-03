@@ -35,8 +35,9 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 
 | file | cosa fa |
 |---|---|
-| `app.js` | guscio: accesso, barra in basso, pulsante del menu, router, service worker, ricorrenti all'avvio; in testata a destra le `azioni()` del modulo aperto (oggi solo l'orologio della Lista) |
-| `core/router.js` | router a hash; `vaiA(id, apri)` + `richiesto(id, apri)`; `sostituisci(id, smonta, figli)` adotta una pagina già montata (scorrimento): il menu chiede a una pagina di aprire un suo foglio. Passaggi tra le pagine con View Transitions (`<html data-passaggio>` = `entra` / `torna`): vaiA entra sempre, il resto lo decide `transizione(da, a)` in app.js |
+| `app.js` | guscio: accesso, barra in basso (le sezioni scelte dalla persona, `core/barra.js`; `idsBarra` aggiornato sul posto, route dei progetti `progetto-<id>` registrate quando compaiono, apertura sulla prima sezione), pulsante del menu, router, service worker, ricorrenti all'avvio; in testata a destra le `azioni()` del modulo aperto (oggi solo l'orologio della Lista) |
+| `core/barra.js` | barra in basso personalizzabile (3/11): `users.barra` = id delle sezioni (pagine di `PAGINE` o `progetto-<id>`), al più `MASSIMO` (5), per persona; `scelte()`, `sezione(id)` → { id, title, icon, colore, modulo, mount } (un progetto monta la pagina Progetto dopo aver scritto `macroapp.progetto`), `sezioneAttiva(route)` (la pagina Progetto aperta dal menu conta come la sua sezione se è in barra), `progettiDisponibili`, `salvaBarra`, `suBarra`; nomi e colori dei progetti in barra copiati in localStorage per disegnarla subito; `apriPaginaProgetto(pid)` (menu, Diario, Task): la sezione se è in barra, se no la pagina Progetto |
+| `core/router.js` | router a hash (`fallback` può essere una funzione: la prima sezione della barra); `vaiA(id, apri)` + `richiesto(id, apri)`; `sostituisci(id, smonta, figli)` adotta una pagina già montata (scorrimento): il menu chiede a una pagina di aprire un suo foglio. Passaggi tra le pagine con View Transitions (`<html data-passaggio>` = `entra` / `torna`): vaiA entra sempre, il resto lo decide `transizione(da, a)` in app.js |
 | `core/scorrimento.js` | scorrimento tra le sezioni della barra come in Leghe (30/10, dal video di Mattia): la pagina segue il dito e quella accanto (montata davvero, in un pannello fisso `.scorro` a lato, senza il suo +) entra con lei; al rilascio si assesta (`--t-scorro`, oltre un quinto dello schermo o con un colpo deciso: velocità sugli ultimi 100 ms), poi la pagina nuova passa nella vista così com'è (`sostituisci` nel router: niente rimontaggio; il 30/10 rimontare dava scatti). Solo sulle sezioni, con foglio e menu chiusi, non dai bordi (gesto «indietro» del telefono) né da pillole che scorrono in orizzontale; con «riduci movimento» cambio secco. Attivato in app.js |
 | `core/ui.js` | `el()`, icone disegnate a mano (`D`), date, importi, pillole, `sceltaColore` (cerchietti dei colori dei progetti, `COLORI`: undici dal 29/10, variabili `--c-<nome>*` in base.css, chiaro e notte); `fabDoppio()` (seconda azione sopra il +: `<html data-fab-doppio>` contato, perché scorrendo Diario e Lista sono montate insieme; ritorna chi lo lascia); `attesa(fonti, render)`: prima comparsa di una pagina quando sono arrivate tutte le sue fonti (max 400 ms), e «vuoto» solo per una fonte arrivata; `puntoToccato(e, sorgente, da)`: dove cade un tocco su un testo mostrato, nella sua sorgente (anche dopo `testoRicco`) |
 | `core/db.js` | `create` (non aspetta il server, ritorna `{id, saved}`), `update`, `watchVisible`, `readVisible`, `leggiDove` (lettura una tantum con soli vincoli, per la cache `prodotti`); dopo le scritture condivise di spese, task e lista chiama `segnala` (notifiche). Ascolti condivisi: la stessa query è un solo `onSnapshot`, che resta aperto 10 minuti dopo l'uscita dalla pagina; i dati già noti arrivano subito (microtask), quindi una pagina rimontata o un filtro già usato si disegnano pieni al primo fotogramma. `chiudiAscolti` all'uscita dall'account |
@@ -63,6 +64,7 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 | `modules/lista/index.js` | tessere a 4 colonne (il pallino della fascia apre la scheda del prodotto, `apriProdottoDi`, e i tre puntini il foglio Modifica: entrambi in un angolo di 34 px; nel foglio Modifica il prodotto sta in cima); in testata l'orologio → `scansioni`; quelle da comprare divise per reparto (`REPARTI` = ordine del giro, `REGOLE_REPARTO` dal nome, `reparto` scelto a mano nel foglio Modifica); recenti e «Mi serve» per frequenza, senza reparti. Tondo «Scansiona» sopra il + (`fab--sopra`, 29/10; `fabDoppio()` alza toast e spazio in fondo) e «Scansiona» in Mi serve e in Modifica → `inserisciProdotto` (voce = tipo di prodotto, marca nel dettaglio, `ean` + `prodotto`; pallino della fascia sulla tessera) |
 | `modules/task/index.js` | task per progetti; `apriProgetto` (nome, visibilità, istruzioni per il diario, scritte o dettate con «Registra» sotto il campo, documenti di Drive, colore); dal progetto il pulsante Diario |
 | `modules/scansioni/index.js` | prodotti scansionati (dall'orologio della Lista): righe come il Diario, una per prodotto, dalla più recente (`scansioni` + schede in cache lette dalla casa prima della cronologia); tocco → scheda con Preso / Da comprare; in basso a destra Scansiona |
+| `modules/barra/index.js` | pagina Barra in basso (menu → Account): le sezioni scelte con frecce su/giù e spunta accesa per toglierle (mai sotto una), poi Pagine e Progetti da aggiungere (spunta spenta, tocco = in fondo); si salva al tocco |
 | `modules/modelli/index.js` | pagina Modelli AI (menu → Account): un modello per le note semplici e uno per le note dei progetti con istruzioni, salvati al tocco |
 | `modules/notifiche/index.js` | pagina Notifiche (menu → Account): stato di questo telefono, «Attiva» in basso a destra, categorie in due gruppi con l'anticipo dei promemoria (pillole dentro la riga), «Senza suono di notte», telefoni attivi, prova |
 | `modules/google/index.js` | pagina Google (menu → Collegamenti): stato del collegamento, righe Contatti / Calendario (foglio «Calendari», `apriSceltaCalendari` dal modulo calendario) / Drive, «Collega» in basso a destra, Ricollega e Scollega; conclude il ritorno dalla pagina di Google |
@@ -98,9 +100,10 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
    («Modifica», «Modifica la sintesi», «Modifica progetto») apre invece il foglio senza tastiera.
    **L'azione principale sta sempre in basso a destra** (zona del pollice destro): il + nelle pagine,
    «Salva» nella barra dei fogli. In alto solo orientamento (indietro, titolo, menu).
-3. Navigazione: in basso le sezioni di tutti i giorni (Diario, Lista, Spese, Task), tra cui si passa anche
+3. Navigazione: in basso le sezioni di tutti i giorni (di base Diario, Lista, Spese, Task; dal 3/11 ognuno
+   sceglie le sue e l'ordine, anche un progetto, da menu → Barra in basso: `core/barra.js`), tra cui si passa anche
    scorrendo la pagina a sinistra o a destra (30/10, richiesta di Mattia); tutto il resto nel
-   menu a sinistra. L'app si apre sul Diario. Riferimento di Mattia per struttura ed ergonomia (non per
+   menu a sinistra. L'app si apre sulla prima sezione della barra. Riferimento di Mattia per struttura ed ergonomia (non per
    l'aspetto): l'app Leghe Fantacalcio.
 4. Nuova collezione: blocco in `firestore.rules` + indici in `firestore.indexes.json`
    (servono per `householdId+visibility+ordine` e `ownerUid+ordine`). Gli ordinamenti fini
@@ -139,7 +142,15 @@ python3 prove/additivi.py                   # rigenera la tabella degli additivi
 ```
 Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggiorna `prove/finto/firebase.js`.
 
-## Stato (2 novembre 2026) e prossimi passi
+## Stato (3 novembre 2026) e prossimi passi
+
+- [x] **Barra in basso per persona** (3/11, richiesta di Mattia: la compagna vuole il Calendario al posto del Diario,
+      lui il Diario e il progetto Tennis; scelte: pagina nel menu a sinistra, progetti come sezioni, apertura sulla prima
+      sezione). `users.barra`, al più 5 sezioni tra Diario, Lista, Spese, Task, Calendario, Manuale, In attesa e i progetti
+      non archiviati; un progetto in barra ha la route `progetto-<id>` e il suo colore quando è aperto. Le prove coprono
+      scelta, ordine, limite, apertura sulla prima sezione e il menu che porta alla sezione.
+      **Da verificare dal telefono**: il nome del progetto in barra alla prima apertura (viene da localStorage: la prima
+      volta su un telefono nuovo dice «Progetto» finché i progetti non arrivano) e lo scorrimento col dito verso un progetto.
 
 - [x] Pubblicazione automatica, accesso Google (anche da app installata), service worker
 - [x] Lista (stile Bring), Spese (stile Splitwise, ricorrenti, pareggio), Diario con agente, Task per

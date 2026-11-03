@@ -16,6 +16,7 @@ import { sceltaDocumenti } from "../../components/documenti.js";
 import { pulsanteRegistra } from "../../components/registratore.js";
 import { nomiTask, suRubrica, personaDaId, modiDiContatto, canaleDa } from "../../core/rubrica.js";
 import { vaiA } from "../../core/router.js";
+import { apriPaginaProgetto } from "../../core/barra.js";
 
 export const id = "task";
 export const title = "Task";
@@ -27,7 +28,6 @@ const TASKS = "tasks";
 const PROJ = "projects";
 const CHIAVE_PROGETTO = "macroapp.task.progetto";
 const CHIAVE_DIARIO = "macroapp.diario.progetto"; // filtro del Diario (lo legge modules/diario)
-const CHIAVE_PAGINA = "macroapp.progetto"; // progetto aperto nella pagina Progetto (modules/progetto)
 const norm = (s) => String(s || "").trim().toLowerCase();
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const GIORNI = ["domenica", "lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato"];
@@ -269,7 +269,7 @@ export function mount(container) {
         el("button.btn.btn--piatto", { onclick: () => apriProgetto(p) }, icon("matita"), "Modifica progetto"),
         // Le note del diario di questo progetto: si aprono nel Diario, già filtrato.
         el("button.btn.btn--piatto", { onclick: () => { try { localStorage.setItem(CHIAVE_DIARIO, p.id); } catch (e) {} vaiA("diario"); } }, icon("diario"), "Diario"),
-        p.istruzioni ? el("button.btn.btn--piatto", { onclick: () => { try { localStorage.setItem(CHIAVE_PAGINA, p.id); } catch (e) {} vaiA("progetto"); } }, icon("cartella"), "Progetto") : null,
+        p.istruzioni ? el("button.btn.btn--piatto", { onclick: () => apriPaginaProgetto(p.id) }, icon("cartella"), "Progetto") : null,
         p.visibility === VIS.SHARED ? el("span.etichetta.etichetta--accento", { style: "align-self:center" }, "condiviso") : null));
     }
 

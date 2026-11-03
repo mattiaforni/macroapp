@@ -36,6 +36,7 @@ import { watchPending, renderAzione } from "../../components/proposals.js";
 import { aggiungiVoci } from "../lista/index.js";
 import { apriTask, apriProgetto } from "../task/index.js";
 import { vaiA } from "../../core/router.js";
+import { apriPaginaProgetto } from "../../core/barra.js";
 import { apriSpesa } from "../spese/index.js";
 import { apriVoceManuale } from "../manuale/index.js";
 import { nomeModello } from "../../core/modelli.js";
@@ -57,7 +58,6 @@ const COLL = "journal_entries";
 const CHIAVE_AUTO = "macroapp.diario.auto";
 const CHIAVE_AI = "macroapp.diario.ai"; // "on" | "off": esito dell'ultima analisi
 const CHIAVE_FILTRO = "macroapp.diario.progetto"; // "tutte" o id del progetto (lo scrive anche la pagina Task)
-const CHIAVE_PAGINA = "macroapp.progetto"; // progetto aperto nella pagina Progetto (modules/progetto)
 const GIORNI_PROSSIMI = 2; // «Prossimi giorni»: oggi e i due giorni dopo
 const MAX_PROSSIMI = 4;    // righe al massimo; per le altre c'è il Calendario
 const GIORNI = ["dom", "lun", "mar", "mer", "gio", "ven", "sab"];
@@ -533,7 +533,7 @@ export function mount(container) {
     if (prog) {
       nodi.push(el("div.segmenti", { style: "padding-top:4px;align-items:center" },
         prog.istruzioni
-          ? el("button.btn.btn--piatto", { onclick: () => { scrivi(CHIAVE_PAGINA, prog.id); vaiA("progetto"); } }, icon("cartella"), "Pagina del progetto")
+          ? el("button.btn.btn--piatto", { onclick: () => apriPaginaProgetto(prog.id) }, icon("cartella"), "Pagina del progetto")
           : el("button.btn.btn--piatto", { onclick: () => apriProgetto(prog) }, icon("matita"), "Modifica progetto"),
         el("span.meta", {}, prog.istruzioni ? "Con riepilogo e sintesi" : "Senza istruzioni, senza riepilogo")));
     }

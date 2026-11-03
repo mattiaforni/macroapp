@@ -272,6 +272,7 @@ const D = {
   cestino: '<path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/>',
   freccia: '<path d="m9 5 7 7-7 7"/>',
   giu: '<path d="m6 9 6 6 6-6"/>',
+  su: '<path d="m6 15 6-6 6 6"/>',
   calendario: '<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
   orologio: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
   aggiorna: '<path d="M19.5 12A7.5 7.5 0 1 1 17 6.4"/><path d="M17.5 3v3.8h-3.8"/>',

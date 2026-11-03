@@ -10,7 +10,7 @@ Campi comuni a tutte le collezioni di contenuto, compilati da `core/db.js`:
 | `createdAt`, `updatedAt` | timestamp | server |
 
 ## `users/{uid}`
-`displayName, email, photoURL, householdId, createdAt, google?: { collegato, scaduto, email, dal, permessi: { contatti, calendario, drive } }, dispositivi?: { <id>: { token, nome, aggiornato } }, notifiche?: { spese, task, lista, calendario, promemoria, riepilogo, diario, banca, anticipo, silenzio }, modelli?: { note, progetti }, calendari?: [{ id, nome, colore, modificabile }]`
+`displayName, email, photoURL, householdId, createdAt, google?: { collegato, scaduto, email, dal, permessi: { contatti, calendario, drive } }, dispositivi?: { <id>: { token, nome, aggiornato } }, notifiche?: { spese, task, lista, calendario, promemoria, riepilogo, diario, banca, anticipo, silenzio }, modelli?: { note, progetti }, calendari?: [{ id, nome, colore, modificabile }], barra?: [id]`
 `google` lo scrive la funzione `google`: dice all'app se l'account Google è collegato, con quale account e quali
 delle tre spunte (contatti, calendario, Drive) sono state date. Il vecchio campo `contattiGoogle` (collegamento ai
 soli contatti, prima del 27/10) vale come `google` con il solo permesso dei contatti finché non si ricollega.
@@ -19,7 +19,9 @@ la funzione `avvisa` toglie quelli il cui token non vale più. `notifiche`: cate
 i suoi telefoni; `false` = spenta, assente = accesa. In più (1/11) `anticipo`: minuti di anticipo dei promemoria degli
 eventi (15, 30, 60, 120; assente = 60) e `silenzio`: `false` = suonano anche di notte (assente = senza suono 22:30–7:30). `modelli`: modello dell'AI per le note semplici e per quelle
 dei progetti con istruzioni (`haiku`, `sonnet`, `opus`; assente = Sonnet e Opus), letto da `analyzeEntry`.
-`calendari`: gli altri calendari di Google Calendar che la persona vede accanto a quello della casa (il personale, la
+`barra` (3/11): le sezioni della barra in basso scelte dalla persona, in ordine, al più 5: id di una pagina
+(`diario`, `lista`, `spese`, `task`, `calendario`, `manuale`, `proposte`) o `progetto-<id del progetto>`; assente =
+Diario, Lista, Spese, Task. La prima è la pagina su cui si apre l'app. `calendari`: gli altri calendari di Google Calendar che la persona vede accanto a quello della casa (il personale, la
 band, l'associazione…: dal 1/11), nell'ordine in cui li ha scelti; `colore` = uno dei colori dei progetti (`COLORI` in
 ui.js), `modificabile` = è il calendario principale del suo account, l'unico in cui l'app scrive oltre a quello della
 casa. Li vede solo lei; gli eventi restano su Google.

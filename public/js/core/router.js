@@ -23,8 +23,10 @@ let forzato = null; // passaggio chiesto da vaiA per la prossima pagina
 let adottata = null; // route già montata da sostituisci(): il prossimo hashchange su di lei non rimonta
 let contenitore = null, cambio = null;
 
+/** `fallback` è la pagina senza hash (una funzione, se può cambiare: la prima sezione della barra). */
 export function startRouter({ container, fallback, onChange, transizione }) {
   contenitore = container; cambio = onChange;
+  const predefinita = () => (typeof fallback === "function" ? fallback() : fallback);
   async function monta(id, mount) {
     if (current?.unmount) { try { current.unmount(); } catch (e) { console.error(e); } }
     container.replaceChildren();
@@ -34,10 +36,10 @@ export function startRouter({ container, fallback, onChange, transizione }) {
     onChange?.(id);
   }
   function render() {
-    const id = currentRoute() || fallback;
+    const id = currentRoute() || predefinita();
     if (adottata === id) { adottata = null; return; }
     adottata = null;
-    const mount = routes.get(id) || routes.get(fallback);
+    const mount = routes.get(id) || routes.get(predefinita());
     const tipo = !current ? null : forzato || (current.id !== id ? transizione?.(current.id, id) : null);
     forzato = null;
     if (!tipo || !document.startViewTransition || riduci?.matches) return monta(id, mount);

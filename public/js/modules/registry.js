@@ -1,7 +1,8 @@
 // Registro dei moduli. Per aggiungerne uno: creare modules/<id>/index.js che esporta
 // { id, title, nav, icon, mount(container, ctx) } e aggiungerlo qui.
-// Nella barra in basso le sezioni di tutti i giorni (nav: true), in quest'ordine; le altre
-// si aprono dal menu a sinistra (components/menu.js). L'app si apre sul Diario.
+// Nella barra in basso le sezioni di tutti i giorni (nav: true), in quest'ordine, salvo scelta
+// della persona (core/barra.js, pagina «Barra in basso»); le altre si aprono dal menu a sinistra
+// (components/menu.js). L'app si apre sulla prima sezione della barra.
 import * as lista from "./lista/index.js";
 import * as spese from "./spese/index.js";
 import * as diario from "./diario/index.js";
@@ -16,7 +17,8 @@ import * as impostazioni from "./impostazioni/index.js";
 import * as calendario from "./calendario/index.js";
 import * as google from "./google/index.js";
 import * as scansioni from "./scansioni/index.js";
+import * as barra from "./barra/index.js";
 
-export const modules = [diario, lista, spese, task, progetto, manuale, proposte, banca, notifiche, modelli, impostazioni, calendario, google, scansioni];
+export const modules = [diario, lista, spese, task, progetto, manuale, proposte, banca, notifiche, modelli, impostazioni, calendario, google, scansioni, barra];
 export const navModules = modules.filter((m) => m.nav);
-export const DEFAULT_ROUTE = "diario";
+export const DEFAULT_ROUTE = "diario"; // se non c'è nessuna scelta (core/barra.js)
