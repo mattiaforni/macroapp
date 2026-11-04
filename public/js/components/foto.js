@@ -133,7 +133,9 @@ export function strisciaFoto(n) {
 
 /**
  * Scelta delle foto nel foglio della nota: quelle già salvate e quelle appena aggiunte, con la × per toglierle,
- * e «Aggiungi foto» (dal telefono: galleria o fotocamera, anche più d'una). Ritorna { node, valore() } con
+ * «Scatta» (la fotocamera del telefono, direttamente: `capture`) e «Galleria» (più foto insieme). Due campi
+ * distinti perché su Android un campo con `multiple` apre il selettore delle foto, senza la fotocamera (4/11,
+ * Mattia: «fammi anche scattare la foto, non solo caricare»). Ritorna { node, valore() } con
  * valore() = { nuove: [{ url, mini, w, h }], tolte: [id] }.
  */
 export function sceltaFoto({ esistente = null } = {}) {
@@ -141,8 +143,10 @@ export function sceltaFoto({ esistente = null } = {}) {
   const nuove = [];
   const tolte = new Set();
   const file = el("input", { type: "file", accept: "image/*", multiple: true, hidden: true, "aria-label": "Scegli le foto" });
+  const fotocamera = el("input", { type: "file", accept: "image/*", capture: "environment", hidden: true, "aria-label": "Scatta una foto" });
   const striscia = el("div.foto-striscia.foto-striscia--scelta");
-  const aggiungi = el("button.pillola", { type: "button", onclick: () => file.click() }, icon("fotocamera"), "Aggiungi foto");
+  const scatta = el("button.pillola", { type: "button", onclick: () => fotocamera.click() }, icon("fotocamera"), "Scatta");
+  const galleria = el("button.pillola", { type: "button", onclick: () => file.click() }, icon("immagine"), "Galleria");
   const stato = el("span.meta", { hidden: true });
 
   function riquadro(f, togli) {
@@ -164,9 +168,9 @@ export function sceltaFoto({ esistente = null } = {}) {
       disegna();
     });
   }
-  file.addEventListener("change", async () => {
-    const scelti = [...(file.files || [])];
-    file.value = "";
+  const aggiungi = async (campo) => {
+    const scelti = [...(campo.files || [])];
+    campo.value = "";
     if (!scelti.length) return;
     stato.hidden = false; stato.textContent = scelti.length === 1 ? "Preparo la foto…" : "Preparo le foto…";
     for (const f of scelti) {
@@ -174,8 +178,10 @@ export function sceltaFoto({ esistente = null } = {}) {
     }
     stato.hidden = true;
     disegna();
-  });
+  };
+  file.addEventListener("change", () => aggiungi(file));
+  fotocamera.addEventListener("change", () => aggiungi(fotocamera));
   disegna();
-  const node = el("div", {}, striscia, el("div.segmenti", { style: "padding-top:4px;align-items:center" }, aggiungi, stato), file);
+  const node = el("div", {}, striscia, el("div.segmenti", { style: "padding-top:4px;align-items:center" }, scatta, galleria, stato), file, fotocamera);
   return { node, valore: () => ({ nuove: [...nuove], tolte: [...tolte] }) };
 }

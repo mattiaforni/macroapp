@@ -899,7 +899,12 @@ with sync_playwright() as p:
         assert pg.locator("#foglio .foto-striscia").count() == 0, "senza foto niente striscia"
         conferma(pg)  # Modifica
         pg.wait_for_selector("#foglio h2 >> text=Nota")
-        pg.set_input_files("#foglio input[type=file]", [os.path.join(HERE, "finto", "foto.jpg"), os.path.join(HERE, "finto", "foto-alta.jpg")])
+        # «Scatta» apre la fotocamera (campo con capture, una foto), «Galleria» il selettore (più foto)
+        assert pg.get_attribute("#foglio input[aria-label='Scatta una foto']", "capture") == "environment"
+        assert pg.get_attribute("#foglio input[aria-label='Scegli le foto']", "capture") is None
+        pg.set_input_files("#foglio input[aria-label='Scegli le foto']", [os.path.join(HERE, "finto", "foto.jpg")])
+        pg.wait_for_selector("#foglio .foto-striscia--scelta .foto-striscia__foto img")
+        pg.set_input_files("#foglio input[aria-label='Scatta una foto']", [os.path.join(HERE, "finto", "foto-alta.jpg")])
         pg.wait_for_selector("#foglio .foto-striscia--scelta .foto-striscia__foto img >> nth=1")
         assert pg.locator("#foglio .foto-striscia__foto").count() == 2
         pg.wait_for_timeout(150)

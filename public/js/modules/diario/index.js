@@ -23,8 +23,8 @@
 // Mattia tra tre schermate): il tondo col calendario sopra il +, come «Scansiona» nella Lista, e «Evento» tra le
 // trasformazioni del foglio della nota. Entrambi solo se c'è un calendario in cui scrivere (`scriviEventi`).
 //
-// Una nota può avere foto (4/11, richiesta di Mattia): dal foglio della nota «Aggiungi foto» (galleria o fotocamera
-// del telefono); nell'elenco la fotocamera col numero accanto all'ora, nel foglio di lettura la striscia delle
+// Una nota può avere foto (4/11, richiesta di Mattia): dal foglio della nota «Scatta» (fotocamera del telefono) o
+// «Galleria»; nell'elenco la fotocamera col numero accanto all'ora, nel foglio di lettura la striscia delle
 // miniature sotto le persone, e il tocco apre la foto intera. Le immagini stanno in `journal_photos` (components/foto.js).
 //
 // journal_entries { text, titolo, titoloAMano, persone: [{ nome, voceId?, googleId? }], personeAMano, projectId,
