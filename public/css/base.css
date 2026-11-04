@@ -608,6 +608,27 @@ html[data-colore] .pagina-progetto .btn--piatto svg { color: var(--c-testo); }
 .voce-nota > .lezione { border-bottom: none; }
 .voce-nota__azioni { margin: -4px 0 12px 54px; }
 .lezione__ora { font-size: 12px; color: var(--inchiostro-3); font-variant-numeric: tabular-nums; }
+/* Foto della nota (components/foto.js): nell'elenco la fotocamera col numero; nei fogli la striscia delle miniature,
+   alte 96 px (ALTEZZA in foto.js) e larghe secondo le proporzioni, riquadri vuoti finché le immagini non arrivano. */
+.lezione__foto { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; color: var(--inchiostro-3); }
+.lezione__foto svg { width: 14px; height: 14px; }
+.foto-striscia { display: flex; gap: 8px; margin-top: 12px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+.foto-striscia::-webkit-scrollbar { display: none; }
+.foto-striscia--scelta { margin-top: 4px; margin-bottom: 8px; }
+.foto-striscia__foto {
+  position: relative; flex: none; height: 96px; padding: 0; border: 1px solid var(--linea); border-radius: 8px;
+  background: var(--foglio-2); overflow: hidden; color: inherit;
+}
+.foto-striscia__foto img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.foto-striscia__togli {
+  position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center;
+  justify-content: center; background: var(--inchiostro); color: var(--carta); border: none; padding: 0;
+}
+.foto-striscia__togli svg { width: 13px; height: 13px; }
+/* La foto intera: fondo nero, si chiude toccando. Sopra il foglio. */
+.visore { position: fixed; inset: 0; z-index: 900; background: #000; display: flex; align-items: center; justify-content: center; }
+.visore img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.visore__chiudi { position: absolute; top: calc(env(safe-area-inset-top) + 8px); right: 8px; color: #fff; }
 .persona { display: inline-flex; align-items: center; gap: 3px; font-size: 12.5px; color: var(--inchiostro-2); }
 .persona svg { width: 13px; height: 13px; flex: none; color: var(--inchiostro-3); }
 /* Nel Diario l'etichetta del progetto e i temi di una nota prendono il colore del suo progetto (data-colore sulla riga) */

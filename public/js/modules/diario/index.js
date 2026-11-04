@@ -23,8 +23,12 @@
 // Mattia tra tre schermate): il tondo col calendario sopra il +, come «Scansiona» nella Lista, e «Evento» tra le
 // trasformazioni del foglio della nota. Entrambi solo se c'è un calendario in cui scrivere (`scriviEventi`).
 //
+// Una nota può avere foto (4/11, richiesta di Mattia): dal foglio della nota «Aggiungi foto» (galleria o fotocamera
+// del telefono); nell'elenco la fotocamera col numero accanto all'ora, nel foglio di lettura la striscia delle
+// miniature sotto le persone, e il tocco apre la foto intera. Le immagini stanno in `journal_photos` (components/foto.js).
+//
 // journal_entries { text, titolo, titoloAMano, persone: [{ nome, voceId?, googleId? }], personeAMano, projectId,
-//   riepilogo, temi, riepilogoAt, analyzed, analyzedAt, analysisError, modello, sintesiEsito,
+//   riepilogo, temi, riepilogoAt, analyzed, analyzedAt, analysisError, modello, sintesiEsito, foto: [{ id, w, h }],
 //   avvisaAFine (l'app è uscita durante l'analisi: notifica alla fine, poi il server lo toglie) }
 // `modello`: chi ha letto la nota l'ultima volta (haiku, sonnet, opus: scelta in menu → Modelli AI).
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-functions.js";
@@ -47,6 +51,7 @@ import { pulsanteRegistra } from "../../components/registratore.js";
 import { sceltaPersone } from "../../components/persone.js";
 import { personaDaId, personaDaGoogle } from "../../core/rubrica.js";
 import { linkGoogle } from "../../core/contatti-google.js";
+import { sceltaFoto, strisciaFoto, salvaFoto, eliminaFoto, eliminaFotoDi } from "../../components/foto.js";
 
 export const id = "diario";
 export const title = "Diario";
@@ -89,7 +94,8 @@ const chiavePersone = (lista) => JSON.stringify((lista || []).map((p) => [p.nome
  * Titolo e persone cambiati qui restano come li hai scritti: l'analisi non li tocca più (titoloAMano,
  * personeAMano). Svuotando il titolo, lo riscrive l'AI alla prossima analisi.
  * `fuoco` = { campo: "titolo" | "testo" | "riepilogo", pos }: arrivando da un tocco sul testo nel foglio di lettura,
- * cursore lì e tastiera aperta.
+ * cursore lì e tastiera aperta. `onSalva(dati, foto)`: le foto scelte, { nuove, tolte } (components/foto.js), si
+ * scrivono dopo la nota.
  */
 export function apriNota({ esistente = null, testo = "", progetti = [], projectId = null, fuoco = null, onSalva }) {
   // Una nota già scritta si apre per leggerla dall'inizio: niente tastiera finché non tocchi il testo.
@@ -99,6 +105,7 @@ export function apriNota({ esistente = null, testo = "", progetti = [], projectI
   titolo.value = esistente?.titolo || "";
   titolo.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); area.focus(); } });
   const persone = sceltaPersone({ perNota: esistente?.persone || [] });
+  const foto = sceltaFoto({ esistente });
   const attivi = progetti.filter((p) => !p.archived || p.id === esistente?.projectId).sort((a, b) => a.name.localeCompare(b.name));
   const progetto = sceltaProgetto(attivi, esistente ? esistente.projectId : projectId);
   // Il riepilogo scritto dall'AI si corregge qui; se lo svuoti, torna a vedersi il testo.
@@ -151,6 +158,7 @@ export function apriNota({ esistente = null, testo = "", progetti = [], projectI
       riepilogo ? el("div.etichetta-campo", {}, "Trascrizione") : null,
       el("div.taccuino", { style: "padding-top:0" }, area),
       esistente ? null : el("p.meta", { style: "margin-top:6px" }, "Per la voce tocca «Registra» in basso: parla quanto vuoi, poi «Ferma»."),
+      el("div", { style: "margin-top:16px" }, el("div.etichetta-campo", {}, "Foto"), foto.node),
       el("div.campo", { style: "margin-top:16px" }, el("label", {}, "Persone"), persone.node),
       attivi.length ? el("div", { style: "margin-top:16px" }, el("div.etichetta-campo", {}, "Progetto"), progetto.node) : null,
       el("div", { style: "margin-top:16px" }, el("div.etichetta-campo", {}, "Giorno"), el("div.segmenti", { style: "padding-top:0;position:relative" }, dataBtn, dataInput)),
@@ -184,7 +192,7 @@ export function apriNota({ esistente = null, testo = "", progetti = [], projectI
       if (chiavePersone(scelte) !== chiavePersone(esistente?.persone)) { dati.persone = scelte; dati.personeAMano = true; }
       if (riepilogo) dati.riepilogo = riepilogo.value.trim();
       if (quando.getTime() !== originale.getTime()) dati.createdAt = quando;
-      onSalva(dati);
+      onSalva(dati, foto.valore());
     },
   });
   if (fuoco) scriviDa({ titolo, testo: area, riepilogo }[fuoco.campo] || area, fuoco.pos);
@@ -234,6 +242,14 @@ export async function analizzaNota(entryId, attesa) {
  */
 export function sintesiInvariata(n, inAnalisi = false) {
   return n.sintesiEsito === "invariata" && !inAnalisi ? el("p.meta.nota__esito", {}, "Sintesi del progetto invariata") : null;
+}
+
+/** Scrive sulla nota le foto scelte nel suo foglio: prima toglie, poi aggiunge in coda (anche per la pagina Progetto). */
+export async function applicaFoto(entryId, attuali, { nuove, tolte }, attesa) {
+  if (!nuove.length && !tolte.length) return;
+  if (attesa) await attesa;
+  const resto = await eliminaFoto(entryId, tolte, attuali);
+  await salvaFoto(entryId, nuove, resto);
 }
 
 /** Analisi automatica attiva (scelta sul telefono, pillola in alto nel Diario). */
@@ -288,6 +304,7 @@ export function rigaNota(n, { conGiorno = true, conOra = false, progetto = null,
   const nonAnalizzata = n.analysisError && !n.analyzed && !inAnalisi;
   const piede = [
     conOra ? el("span.lezione__ora", {}, d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }), n.analyzed && n.modello ? ` · ${nomeModello(n.modello)}` : "") : null,
+    n.foto?.length ? el("span.lezione__foto", { title: n.foto.length === 1 ? "Una foto" : `${n.foto.length} foto` }, icon("fotocamera"), n.foto.length > 1 ? String(n.foto.length) : "") : null,
     progetto ? el("span.progetto", {}, progetto.name) : null,
     ...persone.map((p) => el("span.persona", {}, icon("persona"), p.nome)),
     ...(n.temi || []).map((t) => el("span.etichetta", {}, t)),
@@ -338,6 +355,7 @@ export function apriLettura(n, { progetto = null, proposte = [], onModifica, onA
       el("p.meta", { style: "margin-top:12px", "data-colore": progetto?.colore || null }, quando, n.analyzed && n.modello ? ` · letta da ${nomeModello(n.modello)}` : "",
         progetto ? [" · ", el("span.progetto", {}, progetto.name)] : null),
       persone.length ? el("div.lettura__persone", {}, ...persone.map(pillolaPersona)) : null,
+      strisciaFoto(n),
       n.temi?.length ? el("div.lezione__temi", { "data-colore": progetto?.colore || null }, ...n.temi.map((t) => el("span.etichetta", {}, t))) : null,
       n.riepilogo
         ? el("div.sintesi-testo.lezione__riepilogo.scrivibile", { onclick: tocca("riepilogo", n.riepilogo) }, ...testoRicco(n.riepilogo))
@@ -420,8 +438,9 @@ export function mount(container) {
   function nuova(testo = "") {
     apriNota({
       testo, progetti, projectId: filtro !== "tutte" ? filtro : null,
-      onSalva: (dati) => {
+      onSalva: (dati, foto) => {
         const { id: entryId, saved } = create(COLL, { ...dati, analyzed: false }, VIS.PRIVATE);
+        applicaFoto(entryId, [], foto, saved);
         if (auto) analizza(entryId, saved);
       },
     });
@@ -430,8 +449,9 @@ export function mount(container) {
   function modifica(n, fuoco = null) {
     apriNota({
       esistente: n, progetti, fuoco,
-      onSalva: (dati) => {
+      onSalva: (dati, foto) => {
         const salvata = update(COLL, n.id, dati);
+        applicaFoto(n.id, n.foto || [], foto, salvata);
         // Spostata in un progetto con istruzioni e ancora senza riepilogo: lo scrive subito.
         const nuovo = dati.projectId !== (n.projectId || null) ? progettoDi(dati.projectId) : null;
         if (auto && nuovo?.istruzioni && !n.riepilogo) analizza(n.id, salvata);
@@ -498,7 +518,7 @@ export function mount(container) {
       proposte: proposte.filter((p) => p.sourceEntryId === n.id),
       onModifica: (fuoco) => modifica(n, fuoco),
       onAnalizza: () => analizza(n.id),
-      onElimina: () => { remove(COLL, n.id); toast("Nota eliminata"); },
+      onElimina: () => { remove(COLL, n.id); eliminaFotoDi(n); toast("Nota eliminata"); },
     });
   }
 

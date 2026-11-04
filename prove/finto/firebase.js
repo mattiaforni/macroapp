@@ -13,6 +13,7 @@ try {
 } catch (e) { console.warn("stub: dati non ripresi", e); }
 
 function coll(name) { if (!store.has(name)) store.set(name, new Map()); return store.get(name); }
+window.__finto = { coll }; // per le prove: guardare dentro una collezione
 function notify() {
   try { sessionStorage.setItem(PERSIST, JSON.stringify({ seq, store: [...store].map(([c, m]) => [c, [...m]]) })); } catch (e) {}
   for (const l of listeners) l();

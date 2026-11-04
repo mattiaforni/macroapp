@@ -889,6 +889,46 @@ with sync_playwright() as p:
         conferma(pg)
         pg.wait_for_timeout(800)
         assert pg.locator(".lezione__titolo >> text=Idee per il giardino").count() == 1
+
+        # ── Foto nelle note (4/11, richiesta di Mattia): dal foglio della nota «Aggiungi foto»; nell'elenco la
+        # fotocamera col numero, nel foglio di lettura la striscia delle miniature, il tocco apre la foto intera ──
+        step[0] = "foto nelle note"
+        riga = pg.locator(".voce-nota", has=pg.locator(".lezione__titolo", has_text="Idee per il giardino"))
+        riga.locator("button.lezione").click()
+        pg.wait_for_selector("#foglio h2 >> text=Idee per il giardino")
+        assert pg.locator("#foglio .foto-striscia").count() == 0, "senza foto niente striscia"
+        conferma(pg)  # Modifica
+        pg.wait_for_selector("#foglio h2 >> text=Nota")
+        pg.set_input_files("#foglio input[type=file]", [os.path.join(HERE, "finto", "foto.jpg"), os.path.join(HERE, "finto", "foto-alta.jpg")])
+        pg.wait_for_selector("#foglio .foto-striscia--scelta .foto-striscia__foto img >> nth=1")
+        assert pg.locator("#foglio .foto-striscia__foto").count() == 2
+        pg.wait_for_timeout(150)
+        shot(pg, "9e-nota-foto-scelta")
+        conferma(pg)
+        riga.locator(".lezione__foto >> text=2").wait_for(timeout=4000)
+        riga.locator("button.lezione").click()
+        pg.wait_for_selector("#foglio h2 >> text=Idee per il giardino")
+        pg.wait_for_selector("#foglio .foto-striscia__foto img >> nth=1")
+        larghezze = pg.eval_on_selector_all("#foglio .foto-striscia__foto", "ns => ns.map((n) => n.getBoundingClientRect().width)")
+        assert larghezze[0] > larghezze[1], f"miniature con le proporzioni delle foto: {larghezze}"
+        pg.wait_for_timeout(150)
+        shot(pg, "9f-nota-foto-lettura")
+        pg.click("#foglio .foto-striscia__foto >> nth=0")
+        pg.wait_for_selector(".visore img")
+        pg.wait_for_timeout(150)
+        shot(pg, "9g-nota-foto-intera")
+        pg.click(".visore")
+        assert pg.locator(".visore").count() == 0, "il visore si chiude al tocco"
+        assert pg.is_visible("#foglio"), "il foglio di lettura resta"
+        # Togliere una foto dal foglio della nota
+        conferma(pg)
+        pg.wait_for_selector("#foglio .foto-striscia--scelta .foto-striscia__foto img")
+        pg.click("#foglio .foto-striscia__togli >> nth=0")
+        assert pg.locator("#foglio .foto-striscia__foto").count() == 1
+        conferma(pg)
+        pg.wait_for_timeout(400)
+        assert riga.locator(".lezione__foto").count() == 1 and "2" not in riga.locator(".lezione__foto").inner_text(), "resta una foto, senza numero"
+        assert pg.evaluate("[...window.__finto.coll('journal_photos').values()].length") == 1, "la foto tolta non resta in journal_photos"
         menu(pg, "Manuale e rubrica")
         pg.click("button.pillola >> text=Persone")
         pg.wait_for_selector(".riga >> text=Giulia Bianchi")

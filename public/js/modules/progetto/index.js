@@ -15,7 +15,8 @@ import { el, icon, toast, fascia, vuoto, attesa, toDate, meseLungo, fab, testoRi
 import { create, update, remove, watchMine, watchVisible, VIS, where } from "../../core/db.js";
 import { watchPending } from "../../components/proposals.js";
 import { sezioniSintesi, tonoStato, apriSintesi, apriVersioni } from "../../components/sintesi.js";
-import { apriNota, analizzaNota, analisiAutomatica, rigaNota, apriLettura, elencoNote } from "../diario/index.js";
+import { apriNota, analizzaNota, analisiAutomatica, rigaNota, apriLettura, elencoNote, applicaFoto } from "../diario/index.js";
+import { eliminaFotoDi } from "../../components/foto.js";
 import { apriProgetto, rigaTask } from "../task/index.js";
 import { elencoDocumenti } from "../../components/documenti.js";
 import { vaiA } from "../../core/router.js";
@@ -66,8 +67,9 @@ export function mount(container) {
   function nuova() {
     apriNota({
       progetti, projectId: progetto.id,
-      onSalva: (dati) => {
+      onSalva: (dati, foto) => {
         const { id: entryId, saved } = create(NOTE, { ...dati, analyzed: false }, VIS.PRIVATE);
+        applicaFoto(entryId, [], foto, saved);
         if (analisiAutomatica()) analizza(entryId, saved);
         if (vista !== "lezioni") scegli("lezioni");
       },
@@ -75,7 +77,7 @@ export function mount(container) {
   }
 
   function modifica(n, fuoco = null) {
-    apriNota({ esistente: n, progetti, fuoco, onSalva: (dati) => update(NOTE, n.id, dati) });
+    apriNota({ esistente: n, progetti, fuoco, onSalva: (dati, foto) => applicaFoto(n.id, n.foto || [], foto, update(NOTE, n.id, dati)) });
   }
 
   /** Foglio di lettura di una lezione: lo stesso del Diario. */
@@ -84,7 +86,7 @@ export function mount(container) {
       proposte: proposte.filter((p) => p.sourceEntryId === n.id),
       onModifica: (fuoco) => modifica(n, fuoco),
       onAnalizza: () => analizza(n.id),
-      onElimina: () => { remove(NOTE, n.id); toast("Nota eliminata"); },
+      onElimina: () => { remove(NOTE, n.id); eliminaFotoDi(n); toast("Nota eliminata"); },
     });
   }
 

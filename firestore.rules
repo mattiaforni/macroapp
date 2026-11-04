@@ -113,6 +113,13 @@ service cloud.firestore {
         && request.resource.data.visibility == 'private';
     }
 
+    // Foto delle note (una per documento, JPEG in base64): solo del proprietario, come le note.
+    match /journal_photos/{id} {
+      allow read, update, delete: if signedIn() && resource.data.ownerUid == uid();
+      allow create: if signedIn() && request.resource.data.ownerUid == uid()
+        && request.resource.data.visibility == 'private';
+    }
+
     // Regole di classificazione delle spese (es. "ESSELUNGA → condivisa, categoria spesa"): per casa.
     match /expense_rules/{id} {
       allow read: if signedIn() && canRead();
