@@ -281,6 +281,18 @@ a.pillola { text-decoration: none; }
 }
 .riga.fatta .testo b { text-decoration: line-through; color: var(--inchiostro-3); }
 .riga .testo span.tardi { color: var(--frutto); }
+/* Righe dei task (5/11, richiesta di Mattia): il giorno a sinistra come nel Diario e nel Calendario, numero in
+   serif e sotto «oggi», il giorno della settimana o il mese; la colonna resta, vuota, anche senza scadenza e
+   quando il giorno è quello della riga sopra, così i testi stanno allineati. In ritardo il numero è del colore
+   delle cose in ritardo; la spunta si allinea alla prima riga del testo. */
+.riga--task { align-items: flex-start; gap: 14px; padding: 12px 0; }
+.riga__giorno { width: 40px; flex: none; text-align: center; padding-top: 1px; }
+.riga__giorno b { display: block; font-size: 21px; line-height: 1; font-weight: 400; }
+.riga__giorno small { display: block; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--inchiostro-3); margin-top: 3px; }
+.riga__giorno.tardi b { color: var(--frutto); }
+.riga--task .testo { padding-top: 2px; }
+.riga--task .spunta, .riga--task .tondo { margin-top: -1px; }
+.riga--task.fatta .riga__giorno b { color: var(--inchiostro-3); }
 /* Righe con una descrizione da leggere tutta (es. categorie delle notifiche): va a capo invece di troncarsi. */
 .riga--a-capo .testo span { white-space: normal; }
 /* Anticipo dei promemoria: pillole dentro la riga della categoria. */
@@ -558,7 +570,7 @@ select.pillola { appearance: none; -webkit-appearance: none; padding-right: 14px
 html[data-colore] .testata__titolo::after { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--c-pieno); margin: 0 0 14px 8px; vertical-align: baseline; }
 html[data-colore] .pagina-progetto .pillola.on { background: var(--c-pieno); border-color: var(--c-pieno); color: var(--c-su); }
 html[data-colore] .pagina-progetto .fab { background: var(--c-pieno); color: var(--c-su); }
-html[data-colore] .pagina-progetto .lezione__giorno b { color: var(--c-testo); }
+html[data-colore] .pagina-progetto .lezione__giorno b, html[data-colore] .pagina-progetto .riga__giorno:not(.tardi) b { color: var(--c-testo); }
 html[data-colore] .lezione__temi .etichetta, html[data-colore] .pagina-progetto .tema__lezioni .pillola { background: var(--c-tinta); border-color: transparent; color: var(--c-testo); }
 html[data-colore] .pagina-progetto .tema__nome { color: var(--inchiostro); }
 html[data-colore] .pagina-progetto .tema--aperto .tema__nome, html[data-colore] .pagina-progetto .sintesi-testo h4 { color: var(--c-testo); }

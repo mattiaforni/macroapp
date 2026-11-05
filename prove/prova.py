@@ -562,6 +562,41 @@ with sync_playwright() as p:
         pg.wait_for_timeout(200)
         shot(pg, "4-task")
 
+        # ── Giorno a sinistra come nel Diario (5/11): numero in serif, sotto «oggi» / giorno della settimana / mese;
+        #    solo sulla prima riga del giorno; in ritardo del colore delle cose in ritardo; senza scadenza la colonna è vuota ──
+        step[0] = "task con il giorno a sinistra"
+        import datetime as _dt
+        oggi = _dt.date.today()
+        def task_datato(testo, giorno):
+            pg.click("button.fab")
+            pg.fill("#foglio input[placeholder=\"Cosa c'è da fare\"]", testo)
+            pg.locator("#foglio input[type='date']").evaluate("(i, v) => { i.value = v; i.dispatchEvent(new Event('change')); }", giorno.isoformat())
+            conferma(pg)
+            pg.wait_for_selector(f".riga >> text={testo}")
+        task_datato("Chiamare il commercialista", oggi - _dt.timedelta(days=3))
+        task_datato("Pagare il bollo", oggi)
+        task_datato("Comprare il regalo", oggi + _dt.timedelta(days=2))
+        task_datato("Prenotare il ristorante", oggi + _dt.timedelta(days=2))
+        task_datato("Dentista", oggi + _dt.timedelta(days=20))
+        GB = ["lun", "mar", "mer", "gio", "ven", "sab", "dom"]
+        MB = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"]
+        def giorno_di(testo): return pg.locator(".riga", has_text=testo).locator(".riga__giorno")
+        g = giorno_di("Chiamare il commercialista"); tardi = oggi - _dt.timedelta(days=3)
+        assert g.locator("b").inner_text() == str(tardi.day) and g.locator("small").inner_text().lower() == MB[tardi.month - 1] and "tardi" in g.get_attribute("class"), "in ritardo: giorno, mese, colore"
+        g = giorno_di("Pagare il bollo")
+        assert g.locator("b").inner_text() == str(oggi.day) and g.locator("small").inner_text().lower() == "oggi", "oggi"
+        tra2 = oggi + _dt.timedelta(days=2)
+        g = giorno_di("Comprare il regalo")
+        assert g.locator("b").inner_text() == str(tra2.day) and g.locator("small").inner_text().lower() == GB[tra2.weekday()], "entro la settimana: giorno della settimana"
+        assert giorno_di("Prenotare il ristorante").inner_text().strip() == "", "stesso giorno della riga sopra: colonna vuota"
+        tra20 = oggi + _dt.timedelta(days=20)
+        g = giorno_di("Dentista")
+        assert g.locator("b").inner_text() == str(tra20.day) and g.locator("small").inner_text().lower() == MB[tra20.month - 1], "più avanti: mese"
+        assert giorno_di("Chiedere le chiavi").inner_text().strip() == "", "senza scadenza: colonna vuota"
+        assert "era per" not in pg.locator(".riga", has_text="Chiamare il commercialista").inner_text(), "la data non si ripete nel testo"
+        pg.wait_for_timeout(400)
+        shot(pg, "4b-task-giorni")
+
         # ── Manuale: categorie della casa, mappa automatica, persone, Google Contatti ──
         step[0] = "manuale"
         # Google Contatti finto: il numero di Giulia si cambia a metà prova per vedere l'aggiornamento.

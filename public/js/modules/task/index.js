@@ -8,7 +8,7 @@
 //          documenti = file di Google Drive [{ id, nome, mime, link }] che l'agente legge come contesto
 // tasks    { text, done, doneAt, due ("AAAA-MM-GG" o null), projectId, peopleIds[], people, note }
 //          people = nomi delle persone in chiaro, copia di peopleIds per chi non vede la voce in rubrica
-import { el, icon, toast, fascia, vuoto, attesa, sceltaVisibilita, sceltaColore, fmtDate, isoGiorno, toDate, fab } from "../../core/ui.js";
+import { el, icon, toast, fascia, vuoto, attesa, sceltaVisibilita, sceltaColore, fmtDate, meseBreve, isoGiorno, toDate, fab } from "../../core/ui.js";
 import { create, update, remove, watchVisible, readVisible, VIS } from "../../core/db.js";
 import { openSheet, campo } from "../../components/sheet.js";
 import { sceltaPersone } from "../../components/persone.js";
@@ -30,7 +30,6 @@ const CHIAVE_PROGETTO = "macroapp.task.progetto";
 const CHIAVE_DIARIO = "macroapp.diario.progetto"; // filtro del Diario (lo legge modules/diario)
 const norm = (s) => String(s || "").trim().toLowerCase();
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
-const GIORNI = ["domenica", "lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato"];
 
 /** Id del progetto con quel nome; se non esiste lo crea. Usato dalle proposte dell'AI. */
 export async function risolviProgetto(nome, visibility = VIS.PRIVATE) {
@@ -41,20 +40,27 @@ export async function risolviProgetto(nome, visibility = VIS.PRIVATE) {
   return create(PROJ, { name: cap(nome.trim()), archived: false }, visibility).id;
 }
 
-/** Fascia di tempo di un task aperto, e la data da scrivere nella riga (null se la dice già la fascia). */
+/**
+ * Fascia di tempo di un task aperto e cosa scrivere nella colonna del giorno a sinistra (come nel Diario e nel
+ * Calendario, 5/11: numero in serif e sotto «oggi», il giorno della settimana entro una settimana, altrimenti il mese).
+ * La data non si ripete più nel testo della riga: la dicono la colonna e la fascia.
+ */
 const FASCE = ["In ritardo", "Oggi", "Prossimi 7 giorni", "Più avanti", "Senza scadenza"];
+const GIORNI_BREVI = ["dom", "lun", "mar", "mer", "gio", "ven", "sab"];
 function quando(t) {
-  if (!t.due) return { fascia: "Senza scadenza", testo: null };
+  if (!t.due) return { fascia: "Senza scadenza", giorno: null };
   const oggi = isoGiorno(new Date());
   const d = new Date(`${t.due}T12:00:00`);
-  if (t.due < oggi) return { fascia: "In ritardo", testo: `era per il ${fmtDate(d)}`, tardi: true };
-  if (t.due === oggi) return { fascia: "Oggi", testo: null };
+  if (t.due < oggi) return { fascia: "In ritardo", giorno: { d, sotto: meseBreve(d) }, tardi: true };
+  if (t.due === oggi) return { fascia: "Oggi", giorno: { d, sotto: "oggi" } };
   const tra7 = new Date(); tra7.setDate(tra7.getDate() + 7);
-  if (t.due <= isoGiorno(tra7)) {
-    const domani = new Date(); domani.setDate(domani.getDate() + 1);
-    return { fascia: "Prossimi 7 giorni", testo: t.due === isoGiorno(domani) ? "domani" : GIORNI[d.getDay()] };
-  }
-  return { fascia: "Più avanti", testo: fmtDate(d) };
+  if (t.due <= isoGiorno(tra7)) return { fascia: "Prossimi 7 giorni", giorno: { d, sotto: GIORNI_BREVI[d.getDay()] } };
+  return { fascia: "Più avanti", giorno: { d, sotto: meseBreve(d) } };
+}
+
+/** Colonna del giorno di una riga di task; vuota (ma della stessa larghezza) senza data o se il giorno è quello della riga sopra. */
+function colonnaGiorno(g, tardi) {
+  return el("div.riga__giorno", { class: tardi ? "tardi" : "" }, g ? [el("b.display", {}, String(g.d.getDate())), el("small", {}, g.sotto)] : null);
 }
 
 /** Link che apre l'app giusta (telefono, WhatsApp, Telegram, mail) senza aprire il task. */
@@ -206,18 +212,20 @@ export function apriProgetto(esistente = null, onCreato) {
  * Riga di un task: testo, e sotto in piccolo il progetto (se si guardano tutti i progetti),
  * la data quando la fascia non basta, le persone. Esportata: la usa anche la scheda di una persona.
  */
-export function rigaTask(t, { progetti = [], conProgetto = true, apri } = {}) {
-  const q = t.done ? { testo: t.doneAt ? `fatto il ${fmtDate(t.doneAt)}` : null } : quando(t);
+export function rigaTask(t, { progetti = [], conProgetto = true, conGiorno = true, apri } = {}) {
+  const fatto = t.done ? toDate(t.doneAt) : null;
+  const q = t.done ? { giorno: fatto ? { d: fatto, sotto: meseBreve(fatto) } : null } : quando(t);
   const p = conProgetto ? progetti.find((x) => x.id === t.projectId && !x.archived) : null;
-  const resto = [q.testo, nomiTask(t), t.visibility === VIS.SHARED && p?.visibility !== VIS.SHARED ? "condiviso" : null].filter(Boolean);
+  const resto = [nomiTask(t), t.visibility === VIS.SHARED && p?.visibility !== VIS.SHARED ? "condiviso" : null].filter(Boolean);
   const sotto = [];
   if (p) sotto.push(el("small.progetto", {}, p.name));
   if (p && resto.length) sotto.push(" · ");
   if (resto.length) sotto.push(resto.join(" · "));
-  return el("div.riga", { class: t.done ? "fatta" : "", onclick: () => (apri ? apri(t) : apriTask(t, {}, progetti)) },
+  return el("div.riga.riga--task", { class: t.done ? "fatta" : "", onclick: () => (apri ? apri(t) : apriTask(t, {}, progetti)) },
+    colonnaGiorno(conGiorno ? q.giorno : null, q.tardi),
     el("div.testo", {},
       el("b", {}, t.text),
-      sotto.length ? el("span", { class: q.tardi ? "tardi" : "" }, ...sotto) : null,
+      sotto.length ? el("span", {}, ...sotto) : null,
     ),
     scorciatoia(t),
     el("button.spunta", {
@@ -279,9 +287,10 @@ export function mount(container) {
         : vuoto("Niente da fare qui", "Tocca + per aggiungere un task a questo progetto."));
     } else {
       // Un solo elenco per tutti i progetti, diviso per quando vanno fatte le cose.
+      // Il numero del giorno solo sulla prima riga del giorno, come nel Diario (i task sono in ordine di data).
       for (const f of FASCE) {
         const qui = aperti.filter((t) => quando(t).fascia === f);
-        if (qui.length) nodi.push(fascia(f), el("div", {}, ...qui.map((t) => rigaTask(t, opzioni))));
+        if (qui.length) nodi.push(fascia(f), el("div", {}, ...qui.map((t, i) => rigaTask(t, { ...opzioni, conGiorno: !i || t.due !== qui[i - 1].due }))));
       }
     }
 

@@ -159,7 +159,7 @@ export function mount(container) {
     const fatti = tasks.filter((t) => t.done).sort((a, b) => (toDate(b.doneAt)?.getTime() || 0) - (toDate(a.doneAt)?.getTime() || 0));
     const nodi = [];
     if (!aperti.length) { if (dati.ha("task")) nodi.push(vuoto("Niente da fare qui", "I task proposti dalle note finiscono in questo progetto.")); }
-    else nodi.push(el("div", {}, ...aperti.map((t) => rigaTask(t, { progetti, conProgetto: false }))));
+    else nodi.push(el("div", {}, ...aperti.map((t, i) => rigaTask(t, { progetti, conProgetto: false, conGiorno: !i || t.due !== aperti[i - 1].due }))));
     if (fatti.length) nodi.push(fascia("Fatti"), el("div", {}, ...fatti.slice(0, 20).map((t) => rigaTask(t, { progetti, conProgetto: false }))));
     return nodi;
   }
