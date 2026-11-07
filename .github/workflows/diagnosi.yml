@@ -31,6 +31,14 @@ on:
         description: "Rendi la funzione chiamabile dall'app (invocatore pubblico; l'accesso lo controlla Firebase Auth nel codice)"
         type: boolean
         default: false
+      note:
+        description: "Note dei progetti condivisi: conteggi per progetto, autore e visibilità, indici (niente testi né nomi)"
+        type: boolean
+        default: false
+      allinea:
+        description: "Con «note»: porta le note (e le foto) alla visibilità del loro progetto, sul server"
+        type: boolean
+        default: false
 
 jobs:
   diagnosi:
@@ -114,6 +122,18 @@ jobs:
             node strumenti/prova-trascrizione.mjs $A audio/webm) 2>&1 | ann notice "Prova della trascrizione"
           # Senza contesto, per vedere quanto pesa il vocabolario del progetto.
           (cd functions && GEMINI_API_KEY="$K" node strumenti/prova-trascrizione.mjs $A audio/webm) 2>&1 | ann notice "Trascrizione senza contesto"
+
+      # Note dei progetti condivisi (7/11): chi ha scritto cosa e con quale visibilità, e gli indici delle note.
+      - name: Note condivise
+        if: ${{ inputs.note }}
+        env:
+          ALLINEA: ${{ inputs.allinea && '1' || '' }}
+        run: |
+          ann() { echo "::notice title=$1::$(sed -e 's/%/%25/g' -e 's/\r//g' | head -c 12000 | awk '{printf "%s%%0A", $0}')"; }
+          (cd functions && npm ci --silent > /dev/null 2>&1 && ALLINEA="$ALLINEA" node strumenti/diagnosi-note.mjs) 2>&1 | ann "Note condivise"
+          gcloud firestore indexes composite list --project macroapp-b9bd0 --format=json 2>&1 \
+            | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{for(const i of JSON.parse(s)){if(!/journal_entries/.test(i.name))continue;console.log(i.state, i.fields.map(f=>f.fieldPath+(f.order==="DESCENDING"?"↓":"")).join(" + "))}}catch(e){console.log(s.slice(0,2000))}})' \
+            | ann "Indici composti di journal_entries"
 
       - name: Raccolta
         env:
