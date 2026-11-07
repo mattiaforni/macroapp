@@ -127,6 +127,12 @@ mette nelle annotazioni del job la risposta della funzione a una chiamata senza 
 invocatori del servizio Cloud Run e gli ultimi errori; con `-f ripara=true` rende la funzione
 invocabile dall'app. Si leggono con `gh api repos/mattiaforni/macroapp/check-runs/<id del job>/annotations`.
 Anche il deploy, se fallisce, scrive la coda del registro in un'annotazione.
+Con `-f note=true` (7/11) il flusso conta le note per progetto, autore («membro 1/2») e visibilità, mostra le ultime di
+ciascuno e lo stato degli indici di `journal_entries` (niente testi, nomi né uid: le annotazioni sono pubbliche); con anche
+`-f allinea=true` porta sul server le note e le foto alla visibilità del loro progetto (`functions/strumenti/diagnosi-note.mjs`).
+`gh workflow run` qui non va (GraphQL bloccato): `gh api -X POST repos/mattiaforni/macroapp/actions/workflows/diagnosi.yml/dispatches -f ref=main -f 'inputs[note]=true'`.
+Primo uso, 7/11 sera: la nota della compagna nel progetto condiviso, scritta prima dell'aggiornamento, era ancora privata
+(il suo telefono non aveva ancora aperto la versione nuova); allineata dal server con il consenso di Mattia.
 
 Se l'app riceve «internal» da una funzione chiamata con `httpsCallable`, la prima cosa da
 guardare sono gli invocatori: senza `allUsers` il preflight CORS prende 403. Il deploy lo reimposta
