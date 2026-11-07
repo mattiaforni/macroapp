@@ -15,7 +15,7 @@ import {
   calendarioCasa, scegliCalendario, elencoCalendari, altriCalendari, scegliAltri, calendariVisti, calendariNoti, suCalendari,
   leggiEventi, eventiNoti, erroriLettura, suEventi, creaEvento, aggiornaEvento, eliminaEvento, oraDi, finestra, giornoMostrato,
 } from "../../core/calendario.js";
-import { openSheet, campo } from "../../components/sheet.js";
+import { openSheet } from "../../components/sheet.js";
 import { vaiA } from "../../core/router.js";
 
 export const id = "calendario";
@@ -80,17 +80,49 @@ export function inOrdine(eventi, oggi = isoGiorno(new Date())) {
     .sort((x, y) => (x.g < y.g ? -1 : x.g > y.g ? 1 : x.e.tuttoIlGiorno !== y.e.tuttoIlGiorno ? (x.e.tuttoIlGiorno ? -1 : 1) : x.e.inizio - y.e.inizio));
 }
 
-/** Pillola che apre il selettore nativo di data o ora (l'input resta invisibile). */
-function pillolaScelta(tipo, valore, testoDi, onChange) {
-  const input = el("input", { type: tipo, value: valore, style: "position:absolute;opacity:0;pointer-events:none;width:1px;height:1px" });
-  const btn = el("button.pillola", { type: "button", onclick: () => { try { input.showPicker(); } catch (e) { input.style.pointerEvents = "auto"; input.focus(); } } });
-  const disegna = () => btn.replaceChildren(icon(tipo === "date" ? "calendario" : "orologio"), testoDi(input.value));
-  input.addEventListener("change", () => { onChange(input.value); disegna(); });
+/**
+ * Testo che apre il selettore nativo di data o ora (l'input resta invisibile): nel foglio dell'evento le date e le
+ * ore si leggono come in Google Calendar, data a sinistra e ora a destra, senza pillole.
+ */
+function sceltaNativa(tipo, valore, testoDi, onChange, classe = "") {
+  const input = el("input", { type: tipo, value: valore, tabindex: "-1", "aria-hidden": "true", style: "position:absolute;left:0;bottom:0;opacity:0;pointer-events:none;width:1px;height:1px" });
+  const btn = el("button.ev-valore", { type: "button", class: classe, onclick: () => { try { input.showPicker(); } catch (e) { input.style.pointerEvents = "auto"; input.focus(); } } });
+  const disegna = () => { btn.textContent = testoDi(input.value); };
+  input.addEventListener("change", () => { if (input.value) onChange(input.value); disegna(); });
   disegna();
-  return { nodo: el("span", { style: "position:relative;display:inline-flex" }, btn, input), set(v) { input.value = v; disegna(); } };
+  return { nodo: el("span.ev-scelta", {}, btn, input), set(v) { input.value = v; disegna(); }, btn };
 }
 
-const giornoDa = (iso) => fmtDate(new Date(`${iso}T12:00:00`));
+/** «Dom 29 nov 2026», come nel foglio di Google Calendar. */
+const dataLunga = (iso) => cap(new Date(`${iso}T12:00:00`).toLocaleDateString("it-IT", { weekday: "short", day: "numeric", month: "short", year: "numeric" }).replace(/\./g, ""));
+/** Giorno ("AAAA-MM-GG") e ora ("HH:MM") → Date; e ritorno. */
+const istante = (giorno, ora = "00:00") => new Date(`${giorno}T${ora}:00`);
+const spostaGiorno = (giorno, n) => { const d = istante(giorno, "12:00"); d.setDate(d.getDate() + n); return isoGiorno(d); };
+const UN_GIORNO = 864e5;
+/**
+ * L'ora piena dopo quella di adesso (come Google per un evento nuovo): { giorno, ora }. Per oggi, dopo le 23 si passa
+ * a domani a mezzanotte (non un evento già passato); per un altro giorno resta quel giorno.
+ */
+function prossimaOra(giorno) {
+  const d = new Date();
+  const oggi = isoGiorno(d);
+  d.setHours(d.getHours() + 1, 0, 0, 0);
+  return !giorno || giorno === oggi ? { giorno: isoGiorno(d), ora: oraDi(d) } : { giorno, ora: oraDi(d) };
+}
+
+/** Le ripetizioni tra cui scegliere, con i nomi detti a partire dal giorno dell'evento (chiavi di RIPETIZIONI). */
+function ripetizioni(giorno) {
+  const d = istante(giorno, "12:00");
+  const settimana = d.toLocaleDateString("it-IT", { weekday: "long" });
+  return [
+    ["", "Non si ripete"],
+    ["giorno", "Ogni giorno"],
+    ["settimana", `Ogni settimana, ${d.getDay() === 0 ? "la" : "il"} ${settimana}`],
+    ["mese", `Ogni mese, il giorno ${d.getDate()}`],
+    ["anno", `Ogni anno, il ${d.getDate()} ${d.toLocaleDateString("it-IT", { month: "long" })}`],
+    ["feriali", "Ogni giorno feriale (lun–ven)"],
+  ];
+}
 
 /** Foglio di un evento che nell'app si legge soltanto: quando, luogo, note, il calendario e il link a Google. */
 function apriLettura(e) {
@@ -111,9 +143,19 @@ function apriLettura(e) {
 }
 
 /**
- * Foglio dell'evento: titolo (Invio salva), calendario (se c'è più di un calendario modificabile), giorno, tutto il
- * giorno o con orario, luogo, note. Un evento di un calendario che nell'app si legge soltanto apre apriLettura.
- * prefill: { titolo, giorno, ora, luogo, note, calId }. Esportato: lo usa la conferma delle proposte.
+ * Foglio dell'evento, con la struttura di quello di Google Calendar (7/11, richiesta di Mattia con la sua schermata):
+ * - in cima il titolo grande (Invio salva) e, se si può scrivere in più d'un calendario, le pillole dei calendari col
+ *   loro colore;
+ * - poi il quando: «Tutto il giorno» con la spunta a destra, la riga dell'inizio e quella della fine (data a sinistra,
+ *   ora a destra; si toccano e si apre il selettore del telefono), la ripetizione («Non si ripete», le altre si
+ *   aprono sotto);
+ * - poi il luogo e la descrizione (le note), ciascuno con la sua icona.
+ * Come in Google: un evento nuovo è con orario, dall'ora piena dopo adesso, e dura un'ora; spostando l'inizio la fine
+ * lo segue (la durata resta), una fine prima dell'inizio nello stesso giorno passa al giorno dopo. Il fuso è sempre
+ * quello dell'app (Europe/Rome), quindi la riga del fuso non c'è. Una ricorrenza di un evento che si ripete si cambia
+ * solo per quella volta: la riga della ripetizione lo dice e non si apre.
+ * Un evento di un calendario che nell'app si legge soltanto apre apriLettura.
+ * prefill: { titolo, giorno, ora, tuttoIlGiorno, luogo, note, calId }. Esportato: lo usano il Diario e le note.
  */
 export function apriEvento(esistente = null, prefill = {}) {
   if (esistente && esistente.modificabile === false) { apriLettura(esistente); return; }
@@ -123,52 +165,118 @@ export function apriEvento(esistente = null, prefill = {}) {
   const scrivibili = calendariNoti().filter((c) => c.modificabile);
   let calId = (esistente ? e.calId : prefill.calId) || scrivibili.find((c) => c.casa)?.id || scrivibili[0]?.id || "";
   if (!scrivibili.some((c) => c.id === calId)) calId = scrivibili[0]?.id || calId;
-  const sceltaCal = el("div.segmenti", { style: "padding-top:0;flex-wrap:wrap" });
+  const sceltaCal = el("div.segmenti.ev-calendari");
   const disegnaCal = () => sceltaCal.replaceChildren(...scrivibili.map((c) => el("button.pillola", {
     type: "button", class: c.id === calId ? "on" : "", onclick: () => { calId = c.id; disegnaCal(); },
   }, c.casa ? icon("casa") : el("span.colore.colore--pallino", { "data-colore": c.colore || null }), c.nome)));
   disegnaCal();
-  let giorno = e.giornoInizio || prefill.giorno || isoGiorno(new Date());
-  let giornoFine = esistente ? e.giornoFine : giorno;
-  let conOrario = esistente ? !e.tuttoIlGiorno : !!prefill.ora;
-  let ora = esistente && !e.tuttoIlGiorno ? oraDi(e.inizio) : prefill.ora || "09:00";
-  let oraFine = esistente && !e.tuttoIlGiorno ? oraDi(e.fine) : "";
 
-  const titolo = el("input.linea-input", { value: e.titolo && e.titolo !== "(senza titolo)" ? e.titolo : prefill.titolo || "", placeholder: "Cosa", autofocus: !esistente, enterkeyhint: "done", style: "font-size:19px" });
+  // ── Quando ──
+  let tutto = esistente ? !!e.tuttoIlGiorno : !!prefill.tuttoIlGiorno;
+  let giorno, ora, giornoFine, oraFine;
+  if (esistente && !e.tuttoIlGiorno) {
+    giorno = e.giornoInizio; ora = oraDi(e.inizio); giornoFine = e.giornoFine; oraFine = oraDi(e.fine);
+  } else {
+    const p = prossimaOra(esistente ? e.giornoInizio : prefill.giorno);
+    giorno = esistente ? e.giornoInizio : p.giorno;
+    ora = prefill.ora || p.ora;
+    const f = new Date(istante(giorno, ora).getTime() + 3600e3);
+    oraFine = oraDi(f);
+    giornoFine = esistente ? e.giornoFine : tutto ? giorno : isoGiorno(f);
+  }
+  // La durata si tiene quando si sposta l'inizio: in ms con l'orario, in giorni per quelli di tutto il giorno.
+  const durata = () => istante(giornoFine, oraFine) - istante(giorno, ora);
+  const giorniDurata = () => Math.round((istante(giornoFine, "12:00") - istante(giorno, "12:00")) / UN_GIORNO);
+
+  const dataInizio = sceltaNativa("date", giorno, dataLunga, (v) => {
+    const g = giorniDurata(), d = durata();
+    giorno = v;
+    if (tutto) giornoFine = spostaGiorno(giorno, Math.max(0, g));
+    else { const f = new Date(istante(giorno, ora).getTime() + d); giornoFine = isoGiorno(f); oraFine = oraDi(f); }
+    disegnaQuando();
+  });
+  const oraInizio = sceltaNativa("time", ora, (v) => v, (v) => {
+    const d = durata();
+    ora = v;
+    const f = new Date(istante(giorno, ora).getTime() + d);
+    giornoFine = isoGiorno(f); oraFine = oraDi(f);
+    disegnaQuando();
+  }, "ev-valore--ora");
+  const dataFine = sceltaNativa("date", giornoFine, dataLunga, (v) => {
+    const prima = durata();
+    giornoFine = v < giorno ? giorno : v;
+    if (!tutto && durata() <= 0) { const f = new Date(istante(giorno, ora).getTime() + Math.max(prima, 3600e3)); giornoFine = isoGiorno(f); oraFine = oraDi(f); }
+    disegnaQuando();
+  });
+  const oraFineScelta = sceltaNativa("time", oraFine, (v) => v, (v) => {
+    // Come Google: in un evento di meno di un giorno l'ora di fine è la prima dopo l'inizio (22:00 → 01:00 è la notte
+    // dopo, 23:00 → 23:45 lo stesso giorno anche se prima finiva a mezzanotte); in uno di più giorni cambia solo l'ora.
+    const corto = durata() < UN_GIORNO;
+    oraFine = v;
+    if (corto) giornoFine = v > ora ? giorno : spostaGiorno(giorno, 1);
+    else if (durata() <= 0) unOra();
+    disegnaQuando();
+  }, "ev-valore--ora");
+  /** Fine un'ora dopo l'inizio (quando la fine non è più dopo l'inizio). */
+  const unOra = () => { const f = new Date(istante(giorno, ora).getTime() + 3600e3); giornoFine = isoGiorno(f); oraFine = oraDi(f); };
+
+  const spunta = el("span.spunta", { "aria-hidden": "true" }, icon("spunta"));
+  const tuttoBtn = el("button.ev-riga", { type: "button", role: "switch", onclick: () => {
+    tutto = !tutto;
+    // Con l'orario fino a mezzanotte (23:00 – 00:00 del giorno dopo) l'ultimo giorno è quello prima: per tutto il giorno
+    // conta il giorno dell'ultimo minuto.
+    if (tutto) giornoFine = [giorno, isoGiorno(new Date(istante(giornoFine, oraFine).getTime() - 60e3))].sort()[1];
+    if (!tutto && durata() <= 0) unOra();
+    disegnaQuando();
+  } }, icon("orologio"), el("span.ev-riga__testo", {}, "Tutto il giorno"), spunta);
+
+  // Ripetizione: per un evento nuovo o singolo; una ricorrenza si cambia solo per quella volta.
+  let ripeti = "";
+  let ripetiAperta = false;
+  const ripetiTesto = el("span.ev-riga__testo");
+  const ripetiRiga = el("button.ev-riga", { type: "button", "aria-expanded": "false", disabled: !!e.serie,
+    onclick: () => { ripetiAperta = !ripetiAperta; disegnaRipeti(); } }, icon("ripeti"), ripetiTesto);
+  const ripetiScelte = el("div.ev-opzioni", { hidden: true });
+  function disegnaRipeti() {
+    const opzioni = ripetizioni(giorno);
+    ripetiTesto.textContent = e.serie ? "Si ripete: cambi solo questa volta" : opzioni.find(([k]) => k === ripeti)[1];
+    ripetiRiga.setAttribute("aria-expanded", ripetiAperta ? "true" : "false");
+    ripetiScelte.hidden = !ripetiAperta;
+    ripetiScelte.replaceChildren(...opzioni.map(([k, testo]) => el("button.ev-opzione", { type: "button", "aria-pressed": k === ripeti ? "true" : "false",
+      onclick: () => { ripeti = k; ripetiAperta = false; disegnaRipeti(); } }, el("span", {}, testo), k === ripeti ? icon("spunta") : null)));
+  }
+
+  const rigaInizio = el("div.ev-riga.ev-riga--rientro", {}, dataInizio.nodo, oraInizio.nodo);
+  const rigaFine = el("div.ev-riga.ev-riga--rientro", {}, dataFine.nodo, oraFineScelta.nodo);
+  function disegnaQuando() {
+    spunta.classList.toggle("on", tutto);
+    tuttoBtn.setAttribute("aria-checked", tutto ? "true" : "false");
+    dataInizio.set(giorno); dataFine.set(giornoFine); oraInizio.set(ora); oraFineScelta.set(oraFine);
+    oraInizio.nodo.hidden = tutto; oraFineScelta.nodo.hidden = tutto;
+    disegnaRipeti();
+  }
+  disegnaQuando();
+
+  // ── Titolo, luogo, descrizione ──
+  const titolo = el("input.nota__titolo-campo.ev-titolo", { value: e.titolo && e.titolo !== "(senza titolo)" ? e.titolo : prefill.titolo || "", placeholder: "Aggiungi titolo",
+    "aria-label": "Titolo dell'evento", autocomplete: "off", autofocus: !esistente, enterkeyhint: "done" });
   titolo.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); sheet.confirm(); } });
-
-  const dal = pillolaScelta("date", giorno, giornoDa, (v) => { giorno = v; if (giornoFine < giorno) { giornoFine = giorno; al.set(giorno); } });
-  const al = pillolaScelta("date", giornoFine, (v) => (v === giorno ? "Stesso giorno" : `fino al ${giornoDa(v)}`), (v) => { giornoFine = v < giorno ? giorno : v; al.set(giornoFine); });
-  const inizio = pillolaScelta("time", ora, (v) => v || "Ora", (v) => { ora = v; });
-  const fine = pillolaScelta("time", oraFine, (v) => (v ? `fino alle ${v}` : "Un'ora"), (v) => { oraFine = v; });
-  const orari = el("div.segmenti", { style: "padding-top:0" }, inizio.nodo, fine.nodo);
-  const sceltaOrario = el("div.segmenti", { style: "padding-top:0" });
-  const disegnaOrario = () => {
-    sceltaOrario.replaceChildren(
-      el("button.pillola", { type: "button", class: conOrario ? "" : "on", onclick: () => { conOrario = false; disegnaOrario(); } }, "Tutto il giorno"),
-      el("button.pillola", { type: "button", class: conOrario ? "on" : "", onclick: () => { conOrario = true; disegnaOrario(); } }, "Con orario"),
-    );
-    orari.hidden = !conOrario;
-  };
-  disegnaOrario();
-
-  const luogo = el("input.linea-input", { value: e.luogo || prefill.luogo || "", placeholder: "Dove (facoltativo)", enterkeyhint: "done" });
+  const luogo = el("input.linea-input", { value: e.luogo || prefill.luogo || "", placeholder: "Aggiungi luogo", "aria-label": "Luogo", enterkeyhint: "done" });
   luogo.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); sheet.confirm(); } });
-  const note = el("textarea", { value: e.note || prefill.note || "", placeholder: "Note (facoltative)", rows: 3 });
+  const note = el("textarea.linea-input", { value: e.note || prefill.note || "", placeholder: "Aggiungi descrizione", "aria-label": "Descrizione", rows: 1 });
 
   const sheet = openSheet({
     title: esistente ? "Evento" : "Nuovo evento",
     body: [
-      el("div.campo", { style: "margin-top:14px" }, titolo),
-      scrivibili.length > 1 ? el("div.campo", {}, el("label", {}, "Calendario"), sceltaCal) : null,
-      el("div.campo", {}, el("label", {}, "Giorno"), el("div.segmenti", { style: "padding-top:0;flex-wrap:wrap" }, dal.nodo, al.nodo)),
-      el("div.campo", {}, el("label", {}, "Orario"), sceltaOrario, orari),
-      el("div.campo", {}, el("label", {}, "Luogo"), luogo),
-      campo("Note", note),
+      el("div.ev-gruppo.ev-gruppo--testa", {}, titolo, scrivibili.length > 1 ? sceltaCal : null),
+      el("div.ev-gruppo", {}, tuttoBtn, rigaInizio, rigaFine, ripetiRiga, ripetiScelte),
+      el("div.ev-gruppo", {},
+        el("label.ev-riga.ev-riga--campo", {}, icon("luogo"), luogo),
+        el("label.ev-riga.ev-riga--campo", {}, icon("appunto"), note)),
       esistente ? el("div.foglio__piede", {},
         e.link ? el("a.btn", { href: e.link, target: "_blank", rel: "noopener", style: "text-decoration:none" }, icon("calendario"), "In Google") : null,
         el("button.btn.btn--pericolo", { type: "button", onclick: async () => {
-          try { await eliminaEvento(e); sheet.close(); toast("Evento eliminato"); }
+          try { await eliminaEvento(e); sheet.close(); toast(e.serie ? "Eliminato per questa volta" : "Evento eliminato"); }
           catch (err) { toast(`Non eliminato: ${messaggioGoogle(err, "il calendario").testo}`, { ms: 6000 }); }
         } }, icon("cestino"), "Elimina"),
       ) : null,
@@ -176,7 +284,11 @@ export function apriEvento(esistente = null, prefill = {}) {
     onConfirm: async () => {
       const t = titolo.value.trim();
       if (!t) { titolo.focus(); return false; }
-      const dati = { titolo: t, giorno, giornoFine: giornoFine > giorno ? giornoFine : "", ora: conOrario ? ora : "", oraFine: conOrario ? oraFine : "", luogo: luogo.value.trim(), note: note.value.trim() };
+      const dati = {
+        titolo: t, giorno, giornoFine: tutto ? (giornoFine > giorno ? giornoFine : "") : giornoFine,
+        ora: tutto ? "" : ora, oraFine: tutto ? "" : oraFine, luogo: luogo.value.trim(), note: note.value.trim(),
+        ripeti: e.serie ? "" : ripeti,
+      };
       try {
         const fatto = esistente ? await aggiornaEvento(e, dati, calId) : await creaEvento(dati, calId);
         toast(esistente ? (fatto.calId !== e.calId ? `Evento spostato in ${fatto.calNome}` : "Evento aggiornato")

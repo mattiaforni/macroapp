@@ -133,6 +133,8 @@ function daGoogle(e, c) {
     // `originale`: l'evento è di questo calendario; altrimenti è un invito (`organizer.self` manca), che non si
     // modifica dall'app, salvo che l'organizzatore lo permetta agli invitati.
     originale,
+    // Una ricorrenza di un evento che si ripete (la lettura le espande, `singleEvents`): si modifica solo questa volta.
+    serie: e.recurringEventId || "",
     modificabile: !!c.modificabile && !e.locked && (originale || !!e.guestsCanModify),
   };
 }
@@ -141,12 +143,26 @@ function daGoogle(e, c) {
 const quando = (giorno, ora) => `${giorno}T${ora}:00`;
 
 /**
- * Il corpo di un evento per Google da { titolo, giorno, giornoFine?, ora?, oraFine?, luogo?, note? }.
+ * Ripetizioni che si scelgono nel foglio dell'evento (7/11, come in Google Calendar): la regola parte dal giorno
+ * dell'evento (settimana = stesso giorno della settimana, mese = stesso giorno del mese, anno = stessa data).
+ */
+export const RIPETIZIONI = {
+  giorno: "RRULE:FREQ=DAILY",
+  settimana: "RRULE:FREQ=WEEKLY",
+  mese: "RRULE:FREQ=MONTHLY",
+  anno: "RRULE:FREQ=YEARLY",
+  feriali: "RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR",
+};
+
+/**
+ * Il corpo di un evento per Google da { titolo, giorno, giornoFine?, ora?, oraFine?, luogo?, note?, ripeti? }.
  * Senza `ora` è di un giorno intero (fino a `giornoFine` compreso, o lo stesso giorno); con `ora` dura fino a
- * `oraFine`, o un'ora.
+ * `oraFine` di `giornoFine` (o dello stesso giorno), o un'ora. `ripeti`: una chiave di RIPETIZIONI; assente, il
+ * corpo non tocca la ripetizione.
  */
 function perGoogle(d) {
   const corpo = { summary: d.titolo, location: d.luogo || "", description: d.note || "" };
+  if (d.ripeti && RIPETIZIONI[d.ripeti]) corpo.recurrence = [RIPETIZIONI[d.ripeti]];
   if (!d.ora) {
     const ultimo = new Date(`${d.giornoFine || d.giorno}T12:00:00`);
     ultimo.setDate(ultimo.getDate() + 1);
@@ -279,6 +295,8 @@ export async function creaEvento(d, calId = "") {
   for (const k of ["start", "end"]) corpo[k] = Object.fromEntries(Object.entries(corpo[k]).filter(([, v]) => v != null));
   const e = daGoogle(await chiamaGoogle(cal(c.id), { method: "POST", body: corpo }), c);
   aggiungi(e);
+  // Un evento che si ripete torna da Google come serie: le sue volte nei prossimi giorni arrivano rileggendo.
+  if (corpo.recurrence) leggiEventi({ forza: true }).catch(() => {});
   return e;
 }
 
@@ -290,8 +308,10 @@ export async function aggiornaEvento(ev, d, calId = "") {
   const da = await doveScrivere(ev.calId);
   const verso = calId && calId !== da.id ? await doveScrivere(calId) : da;
   if (verso !== da) await chiamaGoogle(`${cal(da.id)}/${encodeURIComponent(ev.id)}/move`, { method: "POST", query: { destination: verso.id } });
-  const e = daGoogle(await chiamaGoogle(`${cal(verso.id)}/${encodeURIComponent(ev.id)}`, { method: "PATCH", body: perGoogle(d) }), verso);
+  const corpo = perGoogle(d);
+  const e = daGoogle(await chiamaGoogle(`${cal(verso.id)}/${encodeURIComponent(ev.id)}`, { method: "PATCH", body: corpo }), verso);
   aggiungi(e);
+  if (corpo.recurrence) leggiEventi({ forza: true }).catch(() => {});
   return e;
 }
 

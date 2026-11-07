@@ -6,6 +6,7 @@ import { el, clear, icon, toast } from "./core/ui.js";
 import { applicaTema } from "./core/theme.js";
 import { ensureMyName } from "./core/household.js";
 import { avviaRubrica, fermaRubrica, sincronizzaDaGoogle } from "./core/rubrica.js";
+import { allineaNote } from "./core/note.js";
 import { chiudiAscolti } from "./core/db.js";
 import { ritornoDaGoogle } from "./core/google.js";
 import { aggiornaAllAvvio as aggiornaNotifiche } from "./core/notifiche.js";
@@ -120,6 +121,8 @@ function startApp() {
   ensureMyName().catch((e) => console.warn("ensureMyName", e));
   aggiornaNotifiche().catch((e) => console.warn("notifiche", e)); // token di questo telefono, se le notifiche sono attive
   materializeRecurring().catch((e) => console.warn("materializeRecurring", e));
+  // Le tue note dei progetti condivisi diventano della casa (7/11), anche quelle scritte prima.
+  allineaNote().catch((e) => console.warn("allineaNote", e));
 }
 
 onSession((s) => {

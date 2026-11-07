@@ -6,7 +6,9 @@
 // arrivano (mai a pezzi). Scelta per non aggiungere un bucket, regole e un passo di deploy a parte: se le foto
 // diventano tante, la strada è Cloud Storage con gli stessi campi.
 //
-// journal_photos { ownerUid, householdId, visibility: "private", entryId, ordine, mime, w, h, dati (base64), mini (base64) }
+// Le foto hanno la visibilità della loro nota: condivise se la nota è di un progetto condiviso (7/11, core/note.js).
+//
+// journal_photos { ownerUid, householdId, visibility, entryId, ordine, mime, w, h, dati (base64), mini (base64) }
 import { el, icon, toast } from "../core/ui.js";
 import { create, update, remove, leggiDove, where, VIS } from "../core/db.js";
 import { session } from "../core/auth.js";
@@ -51,14 +53,14 @@ export async function preparaFoto(file) {
 const base64 = (url) => url.split(",")[1] || "";
 const daBase64 = (b64) => `data:image/jpeg;base64,${b64}`;
 
-/** Salva le foto nuove di una nota (dopo quelle che ha già) e aggiorna `foto` sulla nota. */
-export async function salvaFoto(entryId, nuove, giaSalvate = []) {
+/** Salva le foto nuove di una nota (dopo quelle che ha già), con la visibilità della nota, e aggiorna `foto` sulla nota. */
+export async function salvaFoto(entryId, nuove, giaSalvate = [], visibility = VIS.PRIVATE) {
   if (!nuove.length) return giaSalvate;
   const voci = [...giaSalvate];
   for (const f of nuove) {
     const { id, saved } = create(COLL, {
       entryId, ordine: voci.length, mime: "image/jpeg", w: f.w, h: f.h, dati: base64(f.url), mini: base64(f.mini),
-    }, VIS.PRIVATE);
+    }, visibility);
     saved.catch(() => toast("Una foto non si è salvata"));
     voci.push({ id, w: f.w, h: f.h });
   }
@@ -75,6 +77,11 @@ export async function eliminaFoto(entryId, ids, attuali = []) {
   return resto;
 }
 
+/** Le foto di una nota che cambia visibilità (spostata in un progetto condiviso o fuori): la seguono. */
+export function visibilitaFoto(foto, visibility) {
+  for (const f of foto) update(COLL, f.id, { visibility });
+}
+
 /** Tutte le foto di una nota eliminata. */
 export function eliminaFotoDi(n) {
   for (const f of n.foto || []) remove(COLL, f.id);
@@ -84,7 +91,11 @@ export function eliminaFotoDi(n) {
 export async function leggiFoto(n) {
   const voci = n.foto || [];
   if (!voci.length) return [];
-  const docs = await leggiDove(COLL, where("ownerUid", "==", session.user.uid), where("entryId", "==", n.id));
+  // Le foto di una nota dell'altra persona si leggono come le cose condivise della casa (le regole lo chiedono).
+  const mie = !n.ownerUid || n.ownerUid === session.user.uid;
+  const docs = mie
+    ? await leggiDove(COLL, where("ownerUid", "==", session.user.uid), where("entryId", "==", n.id))
+    : await leggiDove(COLL, where("householdId", "==", session.householdId), where("visibility", "==", VIS.SHARED), where("entryId", "==", n.id));
   const per = new Map(docs.map((d) => [d.id, d]));
   return voci.map((v) => per.get(v.id)).filter(Boolean)
     .map((d) => ({ id: d.id, url: daBase64(d.dati), mini: d.mini ? daBase64(d.mini) : daBase64(d.dati), w: d.w, h: d.h }));

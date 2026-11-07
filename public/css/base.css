@@ -149,7 +149,10 @@ html[data-passaggio="torna"]::view-transition-new(root) { animation: compare var
 
 /* ───────────── Struttura ───────────── */
 
-#app { min-height: 100dvh; display: flex; flex-direction: column; }
+/* Niente di più largo dello schermo (7/11, dalla schermata di Mattia: una tessera con la marca allargava la Lista,
+   il telefono rimpiccioliva la pagina e la barra in basso si spostava col dito). `clip` e non `hidden`: la testata
+   resta sticky e i pannelli fissi (barra, +, scorrimento) non sono toccati. */
+#app { min-height: 100dvh; display: flex; flex-direction: column; overflow-x: clip; }
 
 .testata {
   position: sticky; top: 0; z-index: 400; background: var(--testata);
@@ -424,9 +427,11 @@ a.pillola { text-decoration: none; }
 
 /* Quattro colonne di tessere basse anche sul telefono: entra più lista in uno schermo.
    Su schermi larghi le tessere crescono e tornano icona e nome più grandi. */
-.tessere { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+/* minmax(0, 1fr): le colonne restano un quarto anche quando una marca lunga sotto il nome (nowrap) vorrebbe
+   allargarle; il testo che non sta si tronca con i puntini. Con `1fr` la griglia dei recenti usciva dallo schermo. */
+.tessere { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
 .tessera {
-  position: relative; aspect-ratio: 1 / .8; border-radius: 10px; padding: 7px 4px 6px;
+  position: relative; aspect-ratio: 1 / .8; border-radius: 10px; padding: 7px 4px 6px; min-width: 0;
   background: var(--tessera-rossa); color: var(--su-tessera);
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-align: center;
   cursor: pointer; user-select: none; -webkit-user-select: none; transition: transform .08s;
@@ -643,8 +648,19 @@ html[data-colore] .pagina-progetto .btn--piatto svg { color: var(--c-testo); }
 .visore__chiudi { position: absolute; top: calc(env(safe-area-inset-top) + 8px); right: 8px; color: #fff; }
 .persona { display: inline-flex; align-items: center; gap: 3px; font-size: 12.5px; color: var(--inchiostro-2); }
 .persona svg { width: 13px; height: 13px; flex: none; color: var(--inchiostro-3); }
-/* Nel Diario l'etichetta del progetto e i temi di una nota prendono il colore del suo progetto (data-colore sulla riga) */
+/* Nel Diario l'etichetta del progetto e i temi di una nota prendono il colore del suo progetto (data-colore sulla riga);
+   dal 7/11 l'etichetta ha anche il pallino pieno del colore, come le pillole dei progetti. */
 .voce-nota[data-colore] .progetto, .meta[data-colore] .progetto { color: var(--c-testo); }
+.voce-nota[data-colore] .progetto::before, .meta[data-colore] .progetto::before { content: ""; display: inline-block; width: 7px; height: 7px;
+  border-radius: 50%; background: var(--c-pieno); margin-right: 5px; vertical-align: 1px; }
+/* Diario filtrato su un progetto (7/11, richiesta di Mattia): come la pagina del progetto, il giorno delle note e il +
+   nel suo colore (la pillola scelta è .pillola--progetto). */
+.elenco--progetto .voce-nota[data-colore] .lezione__giorno b { color: var(--c-testo); }
+.fab[data-colore] { background: var(--c-pieno); color: var(--c-su); }
+.segmenti[data-colore] > .btn--piatto svg { color: var(--c-testo); }
+/* Nota condivisa scritta dall'altra persona: il suo nome accanto all'ora */
+.lezione__autore { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; color: var(--inchiostro-2); }
+.lezione__autore svg { width: 13px; height: 13px; color: var(--inchiostro-3); }
 .voce-nota[data-colore] .lezione__temi .etichetta, .lezione__temi[data-colore] .etichetta { background: var(--c-tinta); border-color: transparent; color: var(--c-testo); }
 .lezione__stato { font-size: 12px; color: var(--accento); }
 .lezione__stato--errore { color: var(--frutto); }
@@ -696,6 +712,38 @@ html[data-colore] .pagina-progetto .btn--piatto svg { color: var(--c-testo); }
 .colori--piccoli .colore::after { content: ""; position: absolute; inset: -4px; } /* zona del tocco più larga del pallino */
 .colori--piccoli .colore svg { width: 11px; height: 11px; }
 .pillola .colore--pallino { width: 10px; height: 10px; margin: 0; }
+/* Pillola di un progetto (pillolaProgetto in ui.js, 7/11): il pallino del colore e, scelta, piena del colore. */
+.pillola--progetto[data-colore].on { background: var(--c-pieno); border-color: var(--c-pieno); color: var(--c-su); }
+.pillola--progetto[data-colore].on .colore--pallino { display: none; } /* piena del colore, il pallino non serve */
+
+/* Foglio dell'evento (7/11, richiesta di Mattia): la struttura di quello di Google Calendar con la grammatica
+   dell'app. Gruppi separati da filetti (titolo e calendari · quando · luogo e descrizione), a sinistra la colonna
+   delle icone, le date a sinistra e le ore a destra come testo che si tocca. */
+.ev-gruppo { border-bottom: 1px solid var(--linea); padding: 6px 0; }
+.ev-gruppo:last-child { border-bottom: none; }
+.ev-gruppo--testa { padding: 10px 0 14px; }
+.ev-titolo { font-size: 28px; border-bottom-color: transparent; }
+.ev-calendari { padding: 10px 0 0; flex-wrap: wrap; }
+.ev-riga { display: flex; align-items: center; gap: 16px; width: 100%; min-height: 48px; padding: 4px 0; text-align: left; color: inherit; }
+.ev-riga > svg { width: 20px; height: 20px; flex: none; color: var(--inchiostro-2); }
+.ev-riga__testo { flex: 1; min-width: 0; font-size: 16px; }
+.ev-riga .spunta { width: 30px; height: 30px; }
+.ev-riga[disabled] { cursor: default; }
+.ev-riga[disabled] .ev-riga__testo { color: var(--inchiostro-2); font-size: 14.5px; }
+.ev-riga--rientro { padding-left: 36px; min-height: 44px; }
+.ev-scelta { position: relative; display: inline-flex; }
+.ev-riga--rientro .ev-scelta:first-child { flex: 1; }
+.ev-valore { font-size: 16px; padding: 8px 0; text-align: left; color: var(--inchiostro); }
+.ev-valore--ora { text-align: right; padding-left: 16px; }
+.ev-riga--campo { align-items: flex-start; cursor: text; }
+.ev-riga--campo > svg { margin-top: 10px; }
+.ev-riga--campo .linea-input { flex: 1; min-width: 0; border-bottom-color: var(--linea); }
+.ev-riga--campo textarea { resize: none; field-sizing: content; min-height: 0; line-height: 1.45; }
+.ev-opzioni { padding: 0 0 6px 36px; }
+.ev-opzione { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 11px 0;
+  text-align: left; font-size: 15px; color: var(--inchiostro-2); border-top: 1px solid var(--linea); }
+.ev-opzione[aria-pressed="true"] { color: var(--accento); font-weight: 500; }
+.ev-opzione svg { width: 16px; height: 16px; }
 
 .prossimi { margin-bottom: 6px; }
 .prossimi .fascia { margin-top: 10px; }

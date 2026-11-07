@@ -22,7 +22,7 @@ export function modelloPer(profilo, conRiepilogo) {
  * (come quelle di un progetto Claude) l'agente scrive anche il riepilogo della nota e propone
  * la sintesi aggiornata del progetto, tenendo conto delle note precedenti.
  */
-function sezioneProgetto(progetto) {
+function sezioneProgetto(progetto, altro = "") {
   if (!progetto) return "";
   const righe = [`
 La nota appartiene al progetto «${progetto.name}»: i task che ne ricavi vanno in questo progetto
@@ -84,7 +84,7 @@ Il progetto non ha ancora una sintesi: costruiscila da tutte le note che seguono
       if (progetto.seguenti.length) righe.push(`
 Note dello stesso progetto con una data successiva a questa (servono solo per la sintesi, non per il riepilogo):
 <successive>
-${progetto.seguenti.map((n) => `<nota data="${n.data}">\n${n.testo}\n</nota>`).join("\n")}
+${progetto.seguenti.map((n) => `<nota data="${n.data}"${n.di ? ` di="${altro || "l'altra persona"}"` : ""}>\n${n.testo}\n</nota>`).join("\n")}
 </successive>`);
     }
     righe.push(sezioneDocumenti(progetto.documenti));
@@ -92,9 +92,10 @@ ${progetto.seguenti.map((n) => `<nota data="${n.data}">\n${n.testo}\n</nota>`).j
       ? `
 Note precedenti dello stesso progetto (con una data anteriore a questa), dalla più vecchia alla più
 recente. Servono a collegare la nota a ciò che è già emerso (correzioni che tornano, progressi, cose da
-riprendere): nel riepilogo non riassumerle e non prenderne punti.
+riprendere): nel riepilogo non riassumerle e non prenderne punti. Il progetto può essere condiviso: le note con
+l'attributo "di" le ha scritte l'altra persona della casa.
 <precedenti>
-${progetto.precedenti.map((n) => `<nota data="${n.data}">\n${n.testo}\n</nota>`).join("\n")}
+${progetto.precedenti.map((n) => `<nota data="${n.data}"${n.di ? ` di="${altro || "l'altra persona"}"` : ""}>\n${n.testo}\n</nota>`).join("\n")}
 </precedenti>`
       : progetto.dopo ? `
 Non ci sono note del progetto con una data anteriore a questa.` : `
@@ -164,7 +165,7 @@ Un'informazione da conservare non è un'azione: se riguarda la casa può essere 
 se riguarda un progetto con istruzioni va nel riepilogo e nella sintesi, altrimenti resta nella nota.
 Se la nota è una riflessione senza azioni, restituisci una lista vuota di azioni.
 ${sezioneNota({ titoloUtente })}
-${sezioneProgetto(progetto)}`;
+${sezioneProgetto(progetto, altro)}`;
 }
 
 const PAYLOAD = ["text", "due", "time", "place", "project", "people", "description", "amount", "name", "category", "notes",
@@ -351,30 +352,55 @@ const fmtData = (t) => new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome
  * PRIME_PRECEDENTI per costruire la prima. Le note con una data successiva (nota inserita dopo con la sua
  * data, o rianalizzata) non sono «precedenti» (29/10: una lezione ricostruita a posteriori aveva preso nel
  * riepilogo punti di lezioni successive): con la sintesi se ne dice solo quante sono, senza si danno a parte.
- * Le query usano l'indice ownerUid + projectId + createdAt; se manca (appena pubblicato) si va avanti senza.
+ * In un progetto condiviso (7/11) le note precedenti sono anche quelle dell'altra persona (`di` = suo uid), che
+ * nella richiesta portano il suo nome: la sintesi è una sola per il progetto.
+ * Le query usano gli indici ownerUid + projectId + createdAt e householdId + visibility + projectId + createdAt; se
+ * mancano (appena pubblicati) si va avanti senza.
  */
-async function progettoDellaNota(db, entry, uid, passo, tokenGoogle) {
+export async function progettoDellaNota(db, entry, uid, passo, tokenGoogle) {
   if (!entry.projectId) return null;
   const snap = await db.collection("projects").doc(entry.projectId).get();
   if (!snap.exists) return null;
   const p = snap.data();
-  const visibile = p.ownerUid === uid || (p.visibility === "shared" && p.householdId && p.householdId === entry.householdId);
+  // La casa della nota vale solo se chi chiama ne è membro (il campo è nella nota, non va preso sulla parola).
+  const membro = entry.householdId && p.householdId === entry.householdId
+    ? await db.collection("households").doc(entry.householdId).get().then((h) => (h.data()?.members || []).includes(uid), () => false)
+    : false;
+  const visibile = p.ownerUid === uid || (p.visibility === "shared" && membro);
   if (!visibile) return null;
   const istruzioni = s(p.istruzioni).slice(0, 8000);
   const sintesi = s(p.sintesi).slice(0, LUNGHEZZA_SINTESI);
   const quante = sintesi ? PRECEDENTI : PRIME_PRECEDENTI;
   let precedenti = [], seguenti = [], dopo = 0;
   if (istruzioni) {
-    const nota = (d) => ({ data: fmtData(d.data().createdAt), testo: (s(d.data().riepilogo) || s(d.data().text)).slice(0, LUNGHEZZA_NOTA) });
+    const nota = (d) => ({ data: fmtData(d.data().createdAt), testo: (s(d.data().riepilogo) || s(d.data().text)).slice(0, LUNGHEZZA_NOTA),
+      di: d.data().ownerUid && d.data().ownerUid !== uid ? d.data().ownerUid : "" });
     try {
-      const base = db.collection("journal_entries").where("ownerUid", "==", uid).where("projectId", "==", entry.projectId);
+      // Le proprie note del progetto e, se è condiviso, quelle della casa: due query, unite per id e per data.
+      const basi = [db.collection("journal_entries").where("ownerUid", "==", uid).where("projectId", "==", entry.projectId)];
+      if (p.visibility === "shared" && membro) {
+        basi.push(db.collection("journal_entries").where("householdId", "==", entry.householdId).where("visibility", "==", "shared")
+          .where("projectId", "==", entry.projectId));
+      }
       const quando = entry.createdAt || null;
-      const [q, succ] = await Promise.all([
+      const leggi = (base) => Promise.all([
         (quando ? base.where("createdAt", "<", quando) : base).orderBy("createdAt", "desc").limit(quante + 1).get(),
         quando ? base.where("createdAt", ">", quando).orderBy("createdAt", "desc").limit(DOPO_MAX).get() : null,
       ]);
-      precedenti = q.docs.filter((d) => d.id !== entry.id).slice(0, quante).reverse().map(nota).filter((n) => n.testo);
-      const altre = (succ?.docs || []).filter((d) => d.id !== entry.id);
+      // Se manca solo l'indice delle note della casa (appena pubblicato), si va avanti con le proprie.
+      const esiti = await Promise.all(basi.map((b, i) => leggi(b).catch((err) => {
+        if (!i) throw err;
+        passo(`note della casa non lette: ${err.message}`);
+        return [null, null];
+      })));
+      const unisci = (liste) => {
+        const visti = new Map();
+        for (const d of liste.flatMap((q) => q?.docs || [])) if (d.id !== entry.id && !visti.has(d.id)) visti.set(d.id, d);
+        const ms = (d) => d.data().createdAt?.toMillis?.() ?? new Date(d.data().createdAt || 0).getTime();
+        return [...visti.values()].sort((a, b) => ms(b) - ms(a));
+      };
+      precedenti = unisci(esiti.map(([q]) => q)).slice(0, quante).reverse().map(nota).filter((n) => n.testo);
+      const altre = unisci(esiti.map(([, succ]) => succ)).slice(0, DOPO_MAX);
       dopo = altre.length;
       if (!sintesi) seguenti = altre.reverse().map(nota).filter((n) => n.testo);
     } catch (err) {

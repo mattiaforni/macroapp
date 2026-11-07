@@ -1,4 +1,6 @@
-// Diario: scrivi o detta (microfono della tastiera). Le note sono sempre solo tue.
+// Diario: scrivi o detta (microfono della tastiera). Le note sono tue; quelle di un progetto condiviso sono della
+// casa, come il progetto (7/11, richiesta di Mattia): le leggete tutti e due, con il nome di chi l'ha scritta, ma la
+// modifica, la rianalizza e la elimina solo chi l'ha scritta (core/note.js).
 // Con l'AI collegata, ogni nota salvata viene letta dall'agente, che propone sotto di essa
 // le azioni che contiene: task, voci per la lista, spese, voci del manuale, bozze di mail.
 // Niente entra nell'app senza la tua spunta. Nella nota stessa l'agente scrive il titolo e le persone
@@ -33,9 +35,11 @@
 // `modello`: chi ha letto la nota l'ultima volta (haiku, sonnet, opus: scelta in menu → Modelli AI).
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-functions.js";
 import { functions } from "../../core/firebase.js";
-import { el, icon, toast, fascia, vuoto, attesa, toDate, meseLungo, fab, fabDoppio, testoRicco, isoGiorno, stessoGiorno, fmtDate, puntoToccato } from "../../core/ui.js";
+import { el, icon, toast, fascia, vuoto, attesa, toDate, meseLungo, fab, fabDoppio, testoRicco, isoGiorno, stessoGiorno, fmtDate, puntoToccato, pillolaProgetto } from "../../core/ui.js";
 import { openSheet, scriviDa } from "../../components/sheet.js";
-import { create, update, remove, watchMine, watchVisible, readVisible, VIS, where } from "../../core/db.js";
+import { create, update, remove, watchVisible, readVisible, VIS, where } from "../../core/db.js";
+import { seguiNote, visibilitaNota, notaMia } from "../../core/note.js";
+import { getHousehold, nomeDi } from "../../core/household.js";
 import { watchPending, renderAzione } from "../../components/proposals.js";
 import { aggiungiVoci } from "../lista/index.js";
 import { apriTask, apriProgetto } from "../task/index.js";
@@ -51,7 +55,7 @@ import { pulsanteRegistra } from "../../components/registratore.js";
 import { sceltaPersone } from "../../components/persone.js";
 import { personaDaId, personaDaGoogle } from "../../core/rubrica.js";
 import { linkGoogle } from "../../core/contatti-google.js";
-import { sceltaFoto, strisciaFoto, salvaFoto, eliminaFoto, eliminaFotoDi } from "../../components/foto.js";
+import { sceltaFoto, strisciaFoto, salvaFoto, eliminaFoto, eliminaFotoDi, visibilitaFoto } from "../../components/foto.js";
 
 export const id = "diario";
 export const title = "Diario";
@@ -77,7 +81,7 @@ function sceltaProgetto(progetti, iniziale) {
   const node = el("div.segmenti", { style: "padding-top:0;flex-wrap:wrap" });
   const disegna = () => node.replaceChildren(
     el("button.pillola", { type: "button", class: scelto ? "" : "on", onclick: () => { scelto = null; disegna(); } }, "Nessuno"),
-    ...progetti.map((p) => el("button.pillola", { type: "button", class: p.id === scelto ? "on" : "", onclick: () => { scelto = p.id; disegna(); } }, p.name)),
+    ...progetti.map((p) => pillolaProgetto(p, { on: p.id === scelto, onclick: () => { scelto = p.id; disegna(); } })),
   );
   disegna();
   return { node, valore: () => scelto };
@@ -244,12 +248,39 @@ export function sintesiInvariata(n, inAnalisi = false) {
   return n.sintesiEsito === "invariata" && !inAnalisi ? el("p.meta.nota__esito", {}, "Sintesi del progetto invariata") : null;
 }
 
-/** Scrive sulla nota le foto scelte nel suo foglio: prima toglie, poi aggiunge in coda (anche per la pagina Progetto). */
-export async function applicaFoto(entryId, attuali, { nuove, tolte }, attesa) {
+/**
+ * Scrive sulla nota le foto scelte nel suo foglio: prima toglie, poi aggiunge in coda (anche per la pagina Progetto).
+ * `visibility`: quella della nota (le foto la seguono).
+ */
+export async function applicaFoto(entryId, attuali, { nuove, tolte }, attesa, visibility = VIS.PRIVATE) {
   if (!nuove.length && !tolte.length) return;
   if (attesa) await attesa;
   const resto = await eliminaFoto(entryId, tolte, attuali);
-  await salvaFoto(entryId, nuove, resto);
+  await salvaFoto(entryId, nuove, resto, visibility);
+}
+
+/**
+ * Salva una nota nuova (Diario e pagina del progetto): con la visibilità del suo progetto, poi le foto. Ritorna
+ * { id, saved } come create().
+ */
+export function salvaNotaNuova(dati, foto, progetti) {
+  const visibility = visibilitaNota(dati.projectId, progetti);
+  const r = create(COLL, { ...dati, analyzed: false }, visibility);
+  applicaFoto(r.id, [], foto, r.saved, visibility);
+  return r;
+}
+
+/**
+ * Salva le modifiche a una nota: se cambia progetto cambia anche chi la vede (e con lei le foto). Ritorna la promessa
+ * della scrittura.
+ */
+export function salvaModificaNota(n, dati, foto, progetti) {
+  const visibility = visibilitaNota(dati.projectId, progetti);
+  const cambia = visibility !== (n.visibility || VIS.PRIVATE);
+  const salvata = update(COLL, n.id, cambia ? { ...dati, visibility } : dati);
+  if (cambia) visibilitaFoto(n.foto || [], visibility);
+  applicaFoto(n.id, n.foto || [], foto, salvata, visibility);
+  return salvata;
 }
 
 /** Analisi automatica attiva (scelta sul telefono, pillola in alto nel Diario). */
@@ -297,13 +328,15 @@ function pillolaPersona(p) {
  * «Tutte»), persone e temi, questi due nel colore del progetto (`colore`). Sotto, fuori dal pulsante, le azioni
  * proposte ancora in attesa.
  */
-export function rigaNota(n, { conGiorno = true, conOra = false, progetto = null, colore = null, proposte = [], inAnalisi = false, onApri } = {}) {
+export function rigaNota(n, { conGiorno = true, conOra = false, progetto = null, colore = null, autore = null, proposte = [], inAnalisi = false, onApri } = {}) {
   const d = toDate(n.createdAt) || new Date();
   const { titolo, anteprima } = testaNota(n);
   const persone = Array.isArray(n.persone) ? n.persone.filter((p) => p?.nome) : [];
   const nonAnalizzata = n.analysisError && !n.analyzed && !inAnalisi;
   const piede = [
     conOra ? el("span.lezione__ora", {}, d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }), n.analyzed && n.modello ? ` · ${nomeModello(n.modello)}` : "") : null,
+    // Nota condivisa scritta dall'altra persona (7/11): il suo nome.
+    autore ? el("span.lezione__autore", {}, icon("persona"), autore) : null,
     n.foto?.length ? el("span.lezione__foto", { title: n.foto.length === 1 ? "Una foto" : `${n.foto.length} foto` }, icon("fotocamera"), n.foto.length > 1 ? String(n.foto.length) : "") : null,
     progetto ? el("span.progetto", {}, progetto.name) : null,
     ...persone.map((p) => el("span.persona", {}, icon("persona"), p.nome)),
@@ -334,15 +367,18 @@ export function rigaNota(n, { conGiorno = true, conOra = false, progetto = null,
  * nota prende il posto di questo con il cursore dove hai toccato (`onModifica({ campo, pos })`). Modifica resta per
  * persone, progetto e giorno.
  */
-export function apriLettura(n, { progetto = null, proposte = [], onModifica, onAnalizza, onElimina }) {
+export function apriLettura(n, { progetto = null, proposte = [], autore = null, onModifica, onAnalizza, onElimina }) {
   const d = toDate(n.createdAt) || new Date();
   const persone = Array.isArray(n.persone) ? n.persone.filter((p) => p?.nome) : [];
+  // Una nota condivisa dell'altra persona (`autore`) si legge soltanto: niente tocchi per scrivere, niente pulsanti.
+  const mia = !autore;
   const tocca = (campo, sorgente) => (e) => {
-    if (e.target.closest("a, button")) return;
+    if (!mia || e.target.closest("a, button")) return;
     onModifica?.({ campo, pos: puntoToccato(e, sorgente) });
   };
+  const scrivibile = mia ? ".scrivibile" : "";
   let aperta = false;
-  const trascrizione = el("div.nota__testo.nota__testo--trascrizione.scrivibile", { hidden: true, onclick: tocca("testo", n.text) }, n.text);
+  const trascrizione = el(`div.nota__testo.nota__testo--trascrizione${scrivibile}`, { hidden: true, onclick: tocca("testo", n.text) }, n.text);
   const apri = el("button.nota__apri", { type: "button", "aria-expanded": "false", onclick: () => {
     aperta = !aperta; trascrizione.hidden = !aperta;
     apri.setAttribute("aria-expanded", aperta ? "true" : "false");
@@ -352,26 +388,27 @@ export function apriLettura(n, { progetto = null, proposte = [], onModifica, onA
   const sheet = openSheet({
     title: titoloDi(n) || "Nota",
     body: [
-      el("p.meta", { style: "margin-top:12px", "data-colore": progetto?.colore || null }, quando, n.analyzed && n.modello ? ` · letta da ${nomeModello(n.modello)}` : "",
+      el("p.meta", { style: "margin-top:12px", "data-colore": progetto?.colore || null }, autore ? `di ${autore} · ` : "", quando, n.analyzed && n.modello ? ` · letta da ${nomeModello(n.modello)}` : "",
         progetto ? [" · ", el("span.progetto", {}, progetto.name)] : null),
       persone.length ? el("div.lettura__persone", {}, ...persone.map(pillolaPersona)) : null,
       strisciaFoto(n),
       n.temi?.length ? el("div.lezione__temi", { "data-colore": progetto?.colore || null }, ...n.temi.map((t) => el("span.etichetta", {}, t))) : null,
       n.riepilogo
-        ? el("div.sintesi-testo.lezione__riepilogo.scrivibile", { onclick: tocca("riepilogo", n.riepilogo) }, ...testoRicco(n.riepilogo))
-        : el("div.nota__testo.lettura__testo.scrivibile", { onclick: tocca("testo", n.text) }, n.text),
+        ? el(`div.sintesi-testo.lezione__riepilogo${scrivibile}`, { onclick: tocca("riepilogo", n.riepilogo) }, ...testoRicco(n.riepilogo))
+        : el(`div.nota__testo.lettura__testo${scrivibile}`, { onclick: tocca("testo", n.text) }, n.text),
       n.riepilogo ? apri : null,
       n.riepilogo ? trascrizione : null,
       sintesiInvariata(n),
       proposte.length ? el("div.azioni-ai", { style: "margin-top:14px" }, ...proposte.map(renderAzione)) : null,
-      el("div.foglio__piede", {},
+      mia ? el("div.foglio__piede", {},
         el("button.btn", { onclick: () => { sheet.close(); onAnalizza?.(); } }, icon("scintilla"), n.analyzed ? "Rianalizza" : "Analizza"),
         el("button.btn.btn--pericolo", { "aria-label": "Elimina nota", onclick: () => { sheet.close(); onElimina?.(); } }, icon("cestino")),
-      ),
+      ) : el("p.muted.small", { style: "margin-top:18px" }, `L'ha scritta ${autore}: la modifica solo chi l'ha scritta.`),
     ],
     confirmLabel: "Modifica",
-    onConfirm: () => { onModifica?.(); },
+    onConfirm: mia ? () => { onModifica?.(); } : null,
   });
+  if (!mia) return;
   // Il titolo sta nella testata del foglio: anche lui si tocca per scriverlo.
   const testa = document.querySelector("#foglio .foglio__testa h2");
   testa?.classList.add("scrivibile");
@@ -439,8 +476,7 @@ export function mount(container) {
     apriNota({
       testo, progetti, projectId: filtro !== "tutte" ? filtro : null,
       onSalva: (dati, foto) => {
-        const { id: entryId, saved } = create(COLL, { ...dati, analyzed: false }, VIS.PRIVATE);
-        applicaFoto(entryId, [], foto, saved);
+        const { id: entryId, saved } = salvaNotaNuova(dati, foto, progetti);
         if (auto) analizza(entryId, saved);
       },
     });
@@ -450,8 +486,7 @@ export function mount(container) {
     apriNota({
       esistente: n, progetti, fuoco,
       onSalva: (dati, foto) => {
-        const salvata = update(COLL, n.id, dati);
-        applicaFoto(n.id, n.foto || [], foto, salvata);
+        const salvata = salvaModificaNota(n, dati, foto, progetti);
         // Spostata in un progetto con istruzioni e ancora senza riepilogo: lo scrive subito.
         const nuovo = dati.projectId !== (n.projectId || null) ? progettoDi(dati.projectId) : null;
         if (auto && nuovo?.istruzioni && !n.riepilogo) analizza(n.id, salvata);
@@ -512,10 +547,18 @@ export function mount(container) {
     disegnaProssimi();
   }
 
+  // Il nome di chi ha scritto una nota condivisa, se non sei tu (la casa arriva subito: è già in memoria).
+  let casa = null;
+  getHousehold().then((h) => { casa = h; if (note.some((n) => !notaMia(n))) render(); }).catch(() => {});
+  const autoreDi = (n) => (notaMia(n) ? null : nomeDi(n.ownerUid, casa));
+  // Le azioni proposte si vedono sotto le proprie note: quelle dell'altra persona le decide lei (niente doppioni).
+  const proposteDi = (n) => (notaMia(n) ? proposte.filter((p) => p.sourceEntryId === n.id) : []);
+
   function leggiNota(n) {
     apriLettura(n, {
       progetto: progettoDi(n.projectId),
-      proposte: proposte.filter((p) => p.sourceEntryId === n.id),
+      autore: autoreDi(n),
+      proposte: proposteDi(n),
       onModifica: (fuoco) => modifica(n, fuoco),
       onAnalizza: () => analizza(n.id),
       onElimina: () => { remove(COLL, n.id); eliminaFotoDi(n); toast("Nota eliminata"); },
@@ -527,7 +570,8 @@ export function mount(container) {
       conGiorno, conOra: true,
       progetto: filtro === "tutte" ? progettoDi(n.projectId) : null,
       colore: progettoDi(n.projectId)?.colore,
-      proposte: proposte.filter((p) => p.sourceEntryId === n.id),
+      autore: autoreDi(n),
+      proposte: proposteDi(n),
       inAnalisi: inCorso.has(n.id),
       onApri: () => leggiNota(n),
     });
@@ -540,7 +584,7 @@ export function mount(container) {
     filtri.hidden = !attivi.length;
     filtri.replaceChildren(
       el("button.pillola", { type: "button", class: filtro === "tutte" ? "on" : "", onclick: () => scegli("tutte") }, "Tutte"),
-      ...attivi.map((p) => el("button.pillola", { type: "button", class: filtro === p.id ? "on" : "", onclick: () => scegli(p.id) }, p.name)),
+      ...attivi.map((p) => pillolaProgetto(p, { on: filtro === p.id, onclick: () => scegli(p.id) })),
     );
   }
 
@@ -549,9 +593,14 @@ export function mount(container) {
     disegnaProssimi();
     disegnaFiltri();
     const prog = filtro !== "tutte" ? progettoDi(filtro) : null;
+    // Filtrato su un progetto, il Diario prende il suo colore come la pagina del progetto (7/11): la pillola scelta,
+    // il +, i giorni delle note. Sulla pagina, non su <html>: la pagina accanto nello scorrimento resta com'è.
+    piu.toggleAttribute("data-colore", !!prog?.colore);
+    if (prog?.colore) piu.dataset.colore = prog.colore;
+    elenco.classList.toggle("elenco--progetto", !!prog);
     const nodi = [];
     if (prog) {
-      nodi.push(el("div.segmenti", { style: "padding-top:4px;align-items:center" },
+      nodi.push(el("div.segmenti", { style: "padding-top:4px;align-items:center", "data-colore": prog.colore || null },
         prog.istruzioni
           ? el("button.btn.btn--piatto", { onclick: () => apriPaginaProgetto(prog.id) }, icon("cartella"), "Pagina del progetto")
           : el("button.btn.btn--piatto", { onclick: () => apriProgetto(prog) }, icon("matita"), "Modifica progetto"),
@@ -560,19 +609,19 @@ export function mount(container) {
     if (!note.length && caricate) {
       nodi.push(prog
         ? vuoto("Nessuna nota in questo progetto", "Tocca + e scrivi o incolla: la nota finisce qui.")
-        : vuoto("Il diario è vuoto", "Tocca + e scrivi o detta: un'idea, cosa devi fare, cosa hai speso. Le note sono visibili solo a te."));
+        : vuoto("Il diario è vuoto", "Tocca + e scrivi o detta: un'idea, cosa devi fare, cosa hai speso. Le note sono visibili solo a te, tranne quelle dei progetti condivisi."));
     }
     nodi.push(...elencoNote(note, nota));
     elenco.replaceChildren(...nodi);
   }
 
-  // Note: tutte (le ultime 100) o quelle di un progetto (indice ownerUid + projectId + createdAt).
+  // Note che vedi (le tue e quelle dei progetti condivisi, core/note.js): tutte (le ultime 100) o quelle di un progetto.
   let stopNote = () => {};
   function segui() {
     stopNote();
     const f = filtro;
     const extra = f !== "tutte" ? [where("projectId", "==", f)] : [];
-    stopNote = watchMine(COLL, { extra, max: f !== "tutte" ? 300 : 100 }, (docs) => {
+    stopNote = seguiNote({ extra, max: f !== "tutte" ? 300 : 100 }, (docs) => {
       note = docs;
       caricate = true;
       for (const n of docs) if (n.projectId) conNote.add(n.projectId);
@@ -584,7 +633,7 @@ export function mount(container) {
   // condiviso in db.js): danno le pillole dei progetti che hanno note e l'anteprima quando si cambia filtro.
   // Prima arrivavano solo dalle note viste: riaprendo il Diario già filtrato su Tennis, un progetto senza
   // istruzioni ma con note (LAMA) spariva dalle pillole (2/11, dal video di Mattia).
-  const stopTutte = watchMine(COLL, { max: 100 }, (docs) => {
+  const stopTutte = seguiNote({ max: 100 }, (docs) => {
     tutte = docs;
     for (const n of docs) if (n.projectId) conNote.add(n.projectId);
     dati.arriva("tutte");

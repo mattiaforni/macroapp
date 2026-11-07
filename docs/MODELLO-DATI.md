@@ -98,8 +98,10 @@ esportati come testo, file di testo così come sono; PDF e altri formati solo pe
 `people` è la copia in chiaro dei nomi: serve a chi non vede la voce in rubrica (voce privata dell'altro membro) e ai task vecchi, che avevano solo il testo.
 
 ## `journal_entries`
-`text, titolo?, titoloAMano?, persone?: [{ nome, voceId?, googleId? }], personeAMano?, projectId?, riepilogo?, temi?: [string], riepilogoAt?, analyzed, analyzedAt, analysisError, modello?, sintesiEsito?, avvisaAFine?, foto?: [{ id, w, h }]` — sempre `private`, solo il
-proprietario (anche nelle regole), anche quando il progetto è condiviso. `riepilogo` lo scrive l'agente
+`text, titolo?, titoloAMano?, persone?: [{ nome, voceId?, googleId? }], personeAMano?, projectId?, riepilogo?, temi?: [string], riepilogoAt?, analyzed, analyzedAt, analysisError, modello?, sintesiEsito?, avvisaAFine?, foto?: [{ id, w, h }]` — `private` (solo
+il proprietario), tranne le note di un progetto condiviso, che dal 7/11 sono `shared` come il progetto (le leggono i membri della
+casa; modifica ed eliminazione restano del proprietario, anche nelle regole). La visibilità la decide l'app al salvataggio e la
+riallinea all'avvio e al cambio di visibilità del progetto (`core/note.js`). `riepilogo` lo scrive l'agente
 (`analyzeEntry`) per le note di un progetto con `istruzioni`, tenendo conto delle 8 note precedenti dello
 stesso progetto; l'utente lo corregge dal foglio della nota. Con il riepilogo arrivano i `temi` (nomi delle sezioni
 della sintesi che la nota tocca: la pagina del progetto collega così le lezioni ai temi). Per ogni nota (29/10)
@@ -107,7 +109,8 @@ l'agente scrive `titolo` (una riga) e `persone`: le persone nominate, ciascuna c
 `googleId` (contatto Google non in rubrica) quando il nome corrisponde senza dubbi, altrimenti solo il nome; non
 crea voci in rubrica. Titolo e persone cambiati a mano nel foglio della nota segnano `titoloAMano` / `personeAMano`
 e l'agente non li tocca più (un titolo svuotato torna all'AI). `createdAt` si può cambiare dal foglio della nota (lezioni inserite dopo). Indici: `ownerUid+createdAt` e
-`ownerUid+projectId+createdAt` (Diario filtrato e note precedenti per l'agente). `modello`: chi ha fatto l'ultima
+`ownerUid+projectId+createdAt` (Diario filtrato e note precedenti per l'agente), dal 7/11 anche `householdId+visibility+createdAt` e
+`householdId+visibility+projectId+createdAt` (le note condivise della casa; per l'agente le precedenti dell'altra persona). `modello`: chi ha fatto l'ultima
 analisi (lo scrivono il server a fine analisi e l'app con la risposta di `analyzeEntry`; dal 1/11 anche `analyzed`,
 `analyzedAt`, `analysisError` li scrive il server, così valgono anche se l'app è stata chiusa durante l'analisi).
 `avvisaAFine`: l'app è passata in secondo piano mentre aspettava l'analisi (`true`) o è tornata (`false`); a fine
@@ -117,7 +120,7 @@ prima che le immagini arrivino); l'elenco del Diario non carica mai le immagini.
 
 ## `journal_photos`
 `entryId, ordine, mime ("image/jpeg"), w, h, dati (JPEG in base64, lato lungo ≤ 1600 px, ≤ 900 KB), mini (miniatura in base64, lato ≤ 240 px)`
-— sempre `private`, solo il proprietario, come le note. Una foto per documento (limite di Firestore: 1 MiB). Si
+— con la visibilità della loro nota (lettura come la nota, modifica ed eliminazione del proprietario). Una foto per documento (limite di Firestore: 1 MiB). Si
 leggono per `ownerUid + entryId` (senza ordinamento: nessun indice) aprendo la nota; si eliminano con la nota o
 con la × nel suo foglio. Scelta di tenerle su Firestore e non su Cloud Storage (nessun bucket, regole e deploy a
 parte): se diventano tante, la strada è Storage con gli stessi campi.
@@ -154,7 +157,7 @@ in che giorno è partito l'ultimo riepilogo del mattino.
 - creazione: `ownerUid` = chiamante, `householdId` di cui è membro, `visibility` valida
 - modifica: proprietario; i membri possono modificare i documenti condivisi senza toccare `ownerUid`, `householdId`, `visibility`
 - cancellazione: proprietario o membro (se condiviso)
-- `journal_entries`, `journal_photos`: solo proprietario, `visibility` forzata a `private`
+- `journal_entries`, `journal_photos`: lettura come le altre collezioni (proprietario, o `shared` e membro della casa), creazione con `validNew`, modifica ed eliminazione solo del proprietario
 - `households`: un non membro può solo aggiungersi, fino a 2 membri
 - `prodotti`: lettura per chi è autenticato, scrittura solo dal server
 - `avvisi_stato`, `google_tokens`, `off_account`: solo il server

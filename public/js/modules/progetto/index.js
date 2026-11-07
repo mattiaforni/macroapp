@@ -10,12 +10,15 @@
 // In fondo alla Sintesi, i documenti di Drive collegati al progetto (si aprono in Drive; si scelgono
 // dal foglio del progetto).
 // Il + scrive una nota nel progetto, come nel Diario. Le note restano note del diario: cambia solo
-// dove le guardi.
+// dove le guardi. In un progetto condiviso le note sono della casa (7/11, core/note.js): ci sono anche quelle
+// dell'altra persona, col suo nome, da leggere.
 import { el, icon, toast, fascia, vuoto, attesa, toDate, meseLungo, fab, testoRicco, puntoToccato } from "../../core/ui.js";
-import { create, update, remove, watchMine, watchVisible, VIS, where } from "../../core/db.js";
+import { remove, watchVisible, VIS, where } from "../../core/db.js";
+import { seguiNote, notaMia } from "../../core/note.js";
+import { getHousehold, nomeDi } from "../../core/household.js";
 import { watchPending } from "../../components/proposals.js";
 import { sezioniSintesi, tonoStato, apriSintesi, apriVersioni } from "../../components/sintesi.js";
-import { apriNota, analizzaNota, analisiAutomatica, rigaNota, apriLettura, elencoNote, applicaFoto } from "../diario/index.js";
+import { apriNota, analizzaNota, analisiAutomatica, rigaNota, apriLettura, elencoNote, salvaNotaNuova, salvaModificaNota } from "../diario/index.js";
 import { eliminaFotoDi } from "../../components/foto.js";
 import { apriProgetto, rigaTask } from "../task/index.js";
 import { elencoDocumenti } from "../../components/documenti.js";
@@ -68,8 +71,7 @@ export function mount(container) {
     apriNota({
       progetti, projectId: progetto.id,
       onSalva: (dati, foto) => {
-        const { id: entryId, saved } = create(NOTE, { ...dati, analyzed: false }, VIS.PRIVATE);
-        applicaFoto(entryId, [], foto, saved);
+        const { id: entryId, saved } = salvaNotaNuova(dati, foto, progetti);
         if (analisiAutomatica()) analizza(entryId, saved);
         if (vista !== "lezioni") scegli("lezioni");
       },
@@ -77,13 +79,21 @@ export function mount(container) {
   }
 
   function modifica(n, fuoco = null) {
-    apriNota({ esistente: n, progetti, fuoco, onSalva: (dati, foto) => applicaFoto(n.id, n.foto || [], foto, update(NOTE, n.id, dati)) });
+    apriNota({ esistente: n, progetti, fuoco, onSalva: (dati, foto) => salvaModificaNota(n, dati, foto, progetti) });
   }
+
+  // Il nome di chi ha scritto una nota condivisa, se non sei tu.
+  let casa = null;
+  getHousehold().then((h) => { casa = h; if (note.some((n) => !notaMia(n))) render(); }).catch(() => {});
+  const autoreDi = (n) => (notaMia(n) ? null : nomeDi(n.ownerUid, casa));
+  // Le azioni proposte si vedono sotto le proprie note: quelle dell'altra persona le decide lei (niente doppioni).
+  const proposteDi = (n) => (notaMia(n) ? proposte.filter((p) => p.sourceEntryId === n.id) : []);
 
   /** Foglio di lettura di una lezione: lo stesso del Diario. */
   function apriLezione(n) {
     apriLettura(n, {
-      proposte: proposte.filter((p) => p.sourceEntryId === n.id),
+      autore: autoreDi(n),
+      proposte: proposteDi(n),
       onModifica: (fuoco) => modifica(n, fuoco),
       onAnalizza: () => analizza(n.id),
       onElimina: () => { remove(NOTE, n.id); eliminaFotoDi(n); toast("Nota eliminata"); },
@@ -148,7 +158,8 @@ export function mount(container) {
     if (!note.length) return [!dati.ha("note") ? null : vuoto("Nessuna nota ancora", "Tocca + e scrivi o detta: la nota finisce in questo progetto.")];
     return elencoNote(note, (n, conGiorno) => rigaNota(n, {
       conGiorno,
-      proposte: proposte.filter((p) => p.sourceEntryId === n.id),
+      autore: autoreDi(n),
+      proposte: proposteDi(n),
       inAnalisi: inCorso.has(n.id),
       onApri: () => apriLezione(n),
     }));
@@ -212,7 +223,7 @@ export function mount(container) {
     dati.arriva("progetto");
     render();
   });
-  const stop2 = watchMine(NOTE, { extra: [where("projectId", "==", progettoId)], max: 300 }, (docs) => { note = docs; dati.arriva("note"); render(); });
+  const stop2 = seguiNote({ extra: [where("projectId", "==", progettoId)], max: 300 }, (docs) => { note = docs; dati.arriva("note"); render(); });
   const stop3 = watchVisible("tasks", {}, (docs) => { tasks = docs.filter((t) => t.projectId === progettoId); dati.arriva("task"); render(); });
   const stop4 = watchPending((docs) => { proposte = docs; render(); });
   return () => { dati.ferma(); stop1(); stop2(); stop3(); stop4(); piu.remove(); delete document.documentElement.dataset.colore; container.classList.remove("pagina-progetto"); };

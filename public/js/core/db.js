@@ -11,7 +11,7 @@
 // Le scritture non aspettano il server: con la cache offline l'app risponde subito anche senza rete.
 
 import {
-  collection, doc, addDoc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, query, where, or, and, orderBy,
+  collection, doc, addDoc, setDoc, getDoc, getDocs, getDocsFromServer, updateDoc, deleteDoc, query, where, or, and, orderBy,
   onSnapshot, queryEqual, serverTimestamp, limit as qLimit,
 } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js";
 import { db } from "./firebase.js";
@@ -118,10 +118,10 @@ function chiudi(a) {
 /** All'uscita dall'account: niente ascolti rimasti aperti con l'utente di prima. */
 export function chiudiAscolti() { for (const a of [...ascolti]) chiudi(a); }
 
-function ascolta(q, nome, cb) {
+function ascolta(q, nome, cb, onErrore = null) {
   let a = ascolti.find((x) => queryEqual(x.q, q));
   if (!a) {
-    const nuovo = { q, snap: null, cbs: new Set(), timer: null, stop: null };
+    const nuovo = { q, snap: null, cbs: new Set(), errori: new Set(), timer: null, stop: null };
     a = nuovo;
     ascolti.push(nuovo);
     nuovo.stop = onSnapshot(q, (snap) => {
@@ -131,12 +131,15 @@ function ascolta(q, nome, cb) {
       }
     }, (err) => {
       console.error(nome, err);
+      const errori = [...nuovo.errori];
       chiudi(nuovo); // un ascolto fallito non resta: la prossima volta si riprova
+      for (const f of errori) { try { f(err); } catch (e) { console.error(nome, e); } }
     });
   }
   const mio = a;
   clearTimeout(mio.timer);
   mio.cbs.add(cb);
+  if (onErrore) mio.errori.add(onErrore);
   // Dati già noti: arrivano appena finito il mount, prima che lo schermo si ridisegni.
   if (mio.snap) {
     const snap = mio.snap;
@@ -150,6 +153,7 @@ function ascolta(q, nome, cb) {
     if (fermo) return;
     fermo = true;
     mio.cbs.delete(cb);
+    if (onErrore) mio.errori.delete(onErrore);
     if (!mio.cbs.size && ascolti.includes(mio)) mio.timer = setTimeout(() => chiudi(mio), RESTA_APERTO);
   };
 }
@@ -159,10 +163,11 @@ function ascolta(q, nome, cb) {
  * i documenti condivisi della casa + i propri documenti personali.
  * `extra` sono vincoli aggiuntivi (where), `order` è [campo, direzione].
  * Gli ordinamenti fini si fanno nel modulo: ogni ordinamento qui richiede un indice.
+ * `onErrore(err)` (facoltativo): la query non è passata (es. indice appena pubblicato e ancora in costruzione).
  */
-export function watchVisible(coll, { extra = [], order = ["createdAt", "desc"], max = 500 } = {}, cb) {
+export function watchVisible(coll, { extra = [], order = ["createdAt", "desc"], max = 500 } = {}, cb, onErrore = null) {
   const q = query(collection(db, coll), and(visibleCondition(), ...extra), orderBy(order[0], order[1]), qLimit(max));
-  return ascolta(q, `watchVisible(${coll})`, cb);
+  return ascolta(q, `watchVisible(${coll})`, cb, onErrore);
 }
 
 /** Sottoscrizione ai soli documenti personali dell'utente (es. diario). */
@@ -195,6 +200,14 @@ export function readVisible(coll, opts = {}) {
  */
 export async function leggiDove(coll, ...vincoli) {
   try { return docsDi(await getDocs(query(collection(db, coll), ...vincoli))); } catch (e) { console.warn(`leggiDove(${coll})`, e); return []; }
+}
+
+/**
+ * Come leggiDove, ma solo dal server: errore se non risponde (senza rete), mai la copia del telefono. Per le decisioni
+ * che non devono partire da dati vecchi (core/note.js: chi vede le note).
+ */
+export async function leggiDalServer(coll, ...vincoli) {
+  return docsDi(await getDocsFromServer(query(collection(db, coll), ...vincoli)));
 }
 
 export { where, serverTimestamp };

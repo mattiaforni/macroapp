@@ -1308,22 +1308,35 @@ with sync_playwright() as p:
         pg.click(".filtri-calendari .pillola >> text=Casa")
         pg.wait_for_selector("text=Nessun evento nei prossimi 60 giorni in Casa")
         assert pg.locator("#view .vuoto").count() == 0, "calendario vuoto: una riga, non la pagina vuota"
+        import datetime
         pg.click("button.fab")
         pg.wait_for_selector("#foglio h2 >> text=Nuovo evento")
-        pg.fill("#foglio input[placeholder='Cosa']", "Lezione di tennis")
+        pg.fill("#foglio input[placeholder='Aggiungi titolo']", "Lezione di tennis")
         # Dove scrivere: la casa (il filtro) o il personale; gli altri calendari non ci sono
-        assert [t.strip() for t in pg.locator("#foglio .campo", has_text="Calendario").locator(".pillola").all_inner_texts()] == ["Casa", "Personale"]
+        assert [t.strip() for t in pg.locator("#foglio .ev-calendari .pillola").all_inner_texts()] == ["Casa", "Personale"]
         assert "on" in pg.locator("#foglio .pillola >> text=Casa").get_attribute("class")
-        pg.click("#foglio button.pillola >> text=Con orario")
-        pg.locator("#foglio input[type=time]").first.evaluate("i => { i.value = '18:00'; i.dispatchEvent(new Event('change')); }")
-        pg.fill("#foglio input[placeholder='Dove (facoltativo)']", "Circolo")
+        # Come in Google Calendar (7/11): titolo e calendari, poi «Tutto il giorno», inizio e fine con la data a sinistra e
+        # l'ora a destra, la ripetizione; poi luogo e descrizione. Un evento nuovo è con orario e dura un'ora.
+        gruppi = pg.locator("#foglio .ev-gruppo")
+        assert gruppi.count() == 3, gruppi.all_inner_texts()
+        assert [t.strip() for t in gruppi.nth(1).locator(".ev-riga").all_inner_texts()][0] == "Tutto il giorno"
+        assert gruppi.nth(1).locator(".ev-riga").last.inner_text().strip() == "Non si ripete"
+        assert pg.locator("#foglio .ev-riga .spunta.on").count() == 0, "un evento nuovo è con orario"
+        SET = "(i, v) => { i.value = v; i.dispatchEvent(new Event('change')); }"
+        oggi_iso = datetime.date.today().isoformat()
+        pg.locator("#foglio input[type=date]").first.evaluate(SET, oggi_iso)
+        pg.locator("#foglio input[type=time]").first.evaluate(SET, "18:00")
+        assert pg.locator("#foglio .ev-valore--ora").all_inner_texts() == ["18:00", "19:00"], "la fine segue l'inizio, un'ora dopo"
+        date = pg.locator("#foglio .ev-riga--rientro .ev-valore:not(.ev-valore--ora)").all_inner_texts()
+        import re as _re
+        assert date[0] == date[1] and _re.match(r"^[A-Z][a-zì]{2} \d{1,2} [a-z]{3} \d{4}$", date[0]), date
+        pg.fill("#foglio input[placeholder='Aggiungi luogo']", "Circolo")
         pg.wait_for_timeout(150)
         shot(pg, "19-evento-nuovo")
         pg.keyboard.press("Enter")
         pg.wait_for_selector(".evento >> text=Lezione di tennis")
         riga = pg.locator(".evento", has_text="Lezione di tennis")
         # Come le lezioni: il giorno in serif con «oggi» sotto, una fascia per mese
-        import datetime
         assert riga.locator(".evento__giorno b.display").inner_text() == str(datetime.date.today().day), riga.inner_text()
         assert riga.locator(".evento__giorno small").inner_text().lower() == "oggi"
         assert riga.locator(".evento__quando").inner_text() == "18:00 – 19:00 · Circolo", riga.inner_text()
@@ -1333,8 +1346,10 @@ with sync_playwright() as p:
         # Modifica: tutto il giorno, titolo nuovo
         riga.click()
         pg.wait_for_selector("#foglio h2 >> text=Evento")
-        pg.fill("#foglio input[placeholder='Cosa']", "Torneo")
-        pg.click("#foglio button.pillola >> text=Tutto il giorno")
+        assert pg.locator("#foglio .ev-valore--ora").all_inner_texts() == ["18:00", "19:00"], "si riapre con i suoi orari"
+        pg.fill("#foglio input[placeholder='Aggiungi titolo']", "Torneo")
+        pg.click("#foglio .ev-riga >> text=Tutto il giorno")
+        assert pg.locator("#foglio .ev-riga .spunta.on").count() == 1 and pg.locator("#foglio .ev-valore--ora:visible").count() == 0, "tutto il giorno: niente ore"
         conferma(pg)
         pg.wait_for_selector(".evento >> text=Torneo")
         assert pg.locator(".evento", has_text="Torneo").locator(".evento__quando").inner_text() == "Tutto il giorno · Circolo"
@@ -1379,7 +1394,7 @@ with sync_playwright() as p:
         pg.click(".filtri-calendari .pillola >> text=Tutti")
         pg.click("button.fab")
         pg.wait_for_selector("#foglio h2 >> text=Nuovo evento")
-        pg.fill("#foglio input[placeholder='Cosa']", "Dentista")
+        pg.fill("#foglio input[placeholder='Aggiungi titolo']", "Dentista")
         pg.click("#foglio .pillola >> text=Personale")
         conferma(pg)
         pg.wait_for_selector("text=Evento in Personale")
@@ -1395,6 +1410,39 @@ with sync_playwright() as p:
         pg.wait_for_timeout(300)
         assert pg.locator(".evento", has_text="Dentista").locator(".progetto").count() == 0, "ora è della casa"
         pg.click(".evento >> text=Dentista")
+        pg.click("#foglio button >> text=Elimina")
+        pg.wait_for_selector("text=Evento eliminato")
+        # Ripetizione e fine dopo mezzanotte, come in Google Calendar: 22:00 → 01:00 finisce il giorno dopo
+        pg.click("button.fab")
+        pg.wait_for_selector("#foglio h2 >> text=Nuovo evento")
+        pg.fill("#foglio input[placeholder='Aggiungi titolo']", "Corso di yoga")
+        giorni_ev = lambda: pg.locator("#foglio .ev-riga--rientro .ev-valore:not(.ev-valore--ora)").all_inner_texts()
+        # Alle 23 un'ora finisce a mezzanotte del giorno dopo; la fine alle 23:45 riporta allo stesso giorno (come Google)
+        pg.locator("#foglio input[type=time]").nth(0).evaluate(SET, "23:00")
+        assert pg.locator("#foglio .ev-valore--ora").all_inner_texts() == ["23:00", "00:00"] and giorni_ev()[0] != giorni_ev()[1], giorni_ev()
+        pg.locator("#foglio input[type=time]").nth(1).evaluate(SET, "23:45")
+        assert giorni_ev()[0] == giorni_ev()[1], f"23:00 → 23:45 nello stesso giorno: {giorni_ev()}"
+        pg.locator("#foglio input[type=time]").nth(1).evaluate(SET, "00:00")
+        pg.click("#foglio .ev-riga >> text=Tutto il giorno")
+        assert giorni_ev()[0] == giorni_ev()[1], f"fino a mezzanotte, per tutto il giorno è un giorno solo: {giorni_ev()}"
+        pg.click("#foglio .ev-riga >> text=Tutto il giorno")
+        pg.locator("#foglio input[type=time]").nth(0).evaluate(SET, "22:00")
+        pg.locator("#foglio input[type=time]").nth(1).evaluate(SET, "01:00")
+        date = pg.locator("#foglio .ev-riga--rientro .ev-valore:not(.ev-valore--ora)").all_inner_texts()
+        assert date[0] != date[1], f"la fine passa al giorno dopo: {date}"
+        pg.click("#foglio .ev-riga >> text=Non si ripete")
+        assert pg.locator("#foglio .ev-opzione").count() == 6
+        pg.click("#foglio .ev-opzione >> text=Ogni settimana")
+        assert pg.locator("#foglio .ev-opzioni").is_hidden(), "scelta la ripetizione, l'elenco si chiude"
+        assert pg.locator("#foglio .ev-riga[aria-expanded]").inner_text().startswith("Ogni settimana, "), pg.locator("#foglio .ev-riga[aria-expanded]").inner_text()
+        pg.wait_for_timeout(150)
+        shot(pg, "19g-evento-ripetuto")
+        conferma(pg)
+        pg.wait_for_selector("text=Evento nel calendario della casa")
+        yoga = next(e for e in cal["eventi"][CAL_CASA].values() if e["summary"] == "Corso di yoga")
+        assert yoga["recurrence"] == ["RRULE:FREQ=WEEKLY"], yoga
+        assert yoga["end"]["dateTime"][:10] > yoga["start"]["dateTime"][:10] and yoga["end"]["dateTime"][11:16] == "01:00", yoga
+        pg.click(".evento >> text=Corso di yoga")
         pg.click("#foglio button >> text=Elimina")
         pg.wait_for_selector("text=Evento eliminato")
         pg.click(".schede a[href='#/diario']")
@@ -1415,8 +1463,8 @@ with sync_playwright() as p:
         tondo.click()
         pg.wait_for_selector("#foglio h2 >> text=Nuovo evento")
         pg.wait_for_timeout(150)
-        assert pg.evaluate("document.activeElement.placeholder") == "Cosa", "si scrive subito il titolo"
-        pg.fill("#foglio input[placeholder='Cosa']", "Idraulico")
+        assert pg.evaluate("document.activeElement.placeholder") == "Aggiungi titolo", "si scrive subito il titolo"
+        pg.fill("#foglio input[placeholder='Aggiungi titolo']", "Idraulico")
         pg.keyboard.press("Enter")
         pg.wait_for_selector("text=Evento nel calendario della casa")
         assert any(e["summary"] == "Idraulico" for e in cal["eventi"][CAL_CASA].values()), cal["eventi"][CAL_CASA]
@@ -1427,8 +1475,8 @@ with sync_playwright() as p:
         pg.fill("#foglio textarea", "Aperitivo da Luca\nportare il vino")
         pg.click("#foglio button.pillola >> text=Evento")
         pg.wait_for_selector("#foglio h2 >> text=Nuovo evento")
-        assert pg.input_value("#foglio input[placeholder='Cosa']") == "Aperitivo da Luca"
-        assert pg.input_value("#foglio textarea[placeholder='Note (facoltative)']") == "portare il vino"
+        assert pg.input_value("#foglio input[placeholder='Aggiungi titolo']") == "Aperitivo da Luca"
+        assert pg.input_value("#foglio textarea[placeholder='Aggiungi descrizione']") == "portare il vino"
         pg.wait_for_timeout(200)
         shot(pg, "19f-evento-dalla-nota")
         conferma(pg)
@@ -1806,6 +1854,95 @@ with sync_playwright() as p:
         assert pg.evaluate("document.activeElement.classList.contains('nota__titolo-campo')"), "toccando il titolo si scrive il titolo"
         pg.click("#foglio button[aria-label='Indietro']")
         pg.wait_for_timeout(400)
+        # ── Note dei progetti condivisi (7/11, richiesta di Mattia): sono della casa, come il progetto; quelle
+        # dell'altra persona si leggono col suo nome, senza poterle cambiare. E il colore del progetto anche nel Diario ──
+        step[0] = "note dei progetti condivisi"
+        note_db = lambda: pg.evaluate("Object.fromEntries([...window.__finto.coll('journal_entries')].map(([k, v]) => [k, { vis: v.visibility, titolo: v.titolo || v.text.slice(0, 30), owner: v.ownerUid, projectId: v.projectId || null }]))")
+        pg.click(".schede a[href='#/diario']")
+        pg.click("button.pillola >> text=Circolo")
+        pg.wait_for_selector("button.pillola.on >> text=Circolo")
+        direttivo = next(k for k, v in note_db().items() if v["titolo"].startswith("Direttivo del circolo"))
+        assert note_db()[direttivo]["vis"] == "private", "nota di un progetto solo mio: privata"
+        # Il progetto diventa condiviso, color terra: la mia nota lo segue
+        pg.click("button.btn--piatto >> text=Modifica progetto")
+        pg.click("#foglio .pillola >> text=Condiviso")
+        pg.click("#foglio .colore[data-colore='terra']")
+        conferma(pg)
+        pg.wait_for_function(f"window.__finto.coll('journal_entries').get('{direttivo}').visibility === 'shared'", timeout=4000)
+        # Filtrato sul progetto, il Diario ne prende il colore: pillola piena, +, giorno delle note (terra: #9C6A4E, testo #7A4D33)
+        pg.wait_for_selector("button.pillola--progetto.on[data-colore='terra']")
+        sfondo = pg.locator("button.pillola.on >> text=Circolo").evaluate("e => getComputedStyle(e).backgroundColor")
+        assert sfondo == "rgb(156, 106, 78)", f"pillola piena del colore: {sfondo}"
+        assert pg.locator("#view > button.fab.fab--tondo").evaluate("e => getComputedStyle(e).backgroundColor") == "rgb(156, 106, 78)", "il + nel colore del progetto"
+        assert pg.locator(".voce-nota .lezione__giorno b").first.evaluate("e => getComputedStyle(e).color") == "rgb(122, 77, 51)", "il giorno nel colore del progetto"
+        # Una nota scritta prima del 7/11 (ancora privata) e una della compagna, già condivisa; una sua privata non si vede
+        pg.evaluate(f"""() => {{
+          const F = window.__finto, [hid, casa] = [...F.coll('households').entries()][0];
+          casa.memberNames = {{ ...(casa.memberNames || {{}}), 'uid-giulia': 'Giulia Bianchi' }};
+          const pid = F.coll('journal_entries').get('{direttivo}').projectId;
+          F.coll('journal_entries').get('{direttivo}').visibility = 'private';
+          const base = {{ ownerUid: 'uid-giulia', householdId: hid, analyzed: false, updatedAt: new Date() }};
+          F.coll('journal_entries').set('nota-giulia', {{ ...base, visibility: 'shared', projectId: pid, titolo: 'Sala libera il giovedì',
+            text: 'Ho sentito il presidente: la sala è libera il giovedì sera', createdAt: new Date(Date.now() - 3600e3) }});
+          F.coll('journal_entries').set('nota-giulia-privata', {{ ...base, visibility: 'private', titolo: 'Privata di Giulia', text: 'solo sua', createdAt: new Date() }});
+          F.notify();
+        }}""")
+        # Riaprendo l'app (dopo qualche ora: l'allineamento all'avvio si fa al più ogni 6) le proprie note dei progetti
+        # condivisi tornano condivise
+        pg.evaluate("localStorage.removeItem('macroapp.note.allineate')")
+        pg.reload()
+        pg.wait_for_selector(".schede a[aria-current='page'][href='#/diario']", timeout=8000)
+        pg.wait_for_function(f"window.__finto.coll('journal_entries').get('{direttivo}').visibility === 'shared'", timeout=4000)
+        pg.wait_for_selector("button.pillola.on >> text=Circolo")
+        sala = pg.locator(".voce-nota", has_text="Sala libera il giovedì")
+        sala.wait_for(timeout=4000)
+        assert sala.locator(".lezione__autore").inner_text().strip() == "Giulia", sala.inner_text()
+        assert pg.locator(".voce-nota", has_text="Privata di Giulia").count() == 0, "le note private dell'altra persona non si vedono"
+        assert pg.locator(".voce-nota", has_text="Direttivo del circolo").locator(".lezione__autore").count() == 0, "le mie senza nome"
+        pg.wait_for_timeout(200)
+        shot(pg, "26-diario-progetto-condiviso")
+        # La sua nota si legge soltanto: niente Modifica, Rianalizza, Elimina, niente tocco per scrivere
+        sala.locator("button.lezione").click()
+        pg.wait_for_selector("#foglio h2 >> text=Sala libera il giovedì")
+        assert pg.locator("#foglio .meta").first.inner_text().startswith("di Giulia · "), pg.locator("#foglio .meta").first.inner_text()
+        assert pg.locator("#foglio .btn--conferma").count() == 0 and pg.locator("#foglio button >> text=Rianalizza").count() == 0, "niente Modifica né Rianalizza"
+        assert pg.locator("#foglio .scrivibile").count() == 0, "niente tocco per scrivere"
+        pg.wait_for_selector("#foglio >> text=L'ha scritta Giulia")
+        pg.wait_for_timeout(200)
+        shot(pg, "26b-nota-di-giulia")
+        pg.click("#foglio button[aria-label='Indietro']")
+        pg.wait_for_timeout(300)
+        # Una nota nuova nel progetto condiviso nasce condivisa; una senza progetto resta mia
+        pg.click("button.fab.fab--tondo")
+        pg.wait_for_selector("#foglio button.pillola--progetto.on[data-colore='terra'] >> text=Circolo")
+        assert pg.locator("#foglio button.pillola--progetto", has_text="Tennis").locator(".colore--pallino").count() == 1, "le pillole dei progetti col loro colore"
+        pg.fill("#foglio textarea", "Preparare l'ordine del giorno del direttivo")
+        conferma(pg)
+        pg.wait_for_selector(".lezione__titolo >> text=Preparare l'ordine del giorno del direttivo", timeout=6000)
+        ordine = next(v for v in note_db().values() if v["titolo"].startswith("Preparare l'ordine"))
+        assert ordine["vis"] == "shared" and ordine["owner"] == "uid-test", ordine
+        # In «Tutte»: le pillole col pallino del colore, la nota di Giulia con l'etichetta del progetto nel suo colore
+        pg.click("button.pillola >> text=Tutte")
+        pg.wait_for_selector(".voce-nota >> text=Sala libera il giovedì")
+        assert pg.locator("#view > button.fab.fab--tondo").get_attribute("data-colore") is None, "su Tutte il + torna dell'app"
+        pillole_circolo = pg.locator("#view .segmenti button.pillola--progetto", has_text="Circolo")
+        assert pillole_circolo.count() == 1 and pillole_circolo.locator(".colore--pallino").count() == 1, f"pallino nella pillola: {pillole_circolo.evaluate_all('es => es.map((e) => e.outerHTML)')}"
+        etichetta = pg.locator(".voce-nota", has_text="Sala libera il giovedì").locator(".progetto")
+        colori = etichetta.evaluate("e => [getComputedStyle(e).color, getComputedStyle(e, '::before').backgroundColor]") if etichetta.count() == 1 else etichetta.count()
+        assert colori == ["rgb(122, 77, 51)", "rgb(156, 106, 78)"], f"etichetta e pallino del progetto: {colori}"
+        pg.evaluate("window.scrollTo(0, 0)")
+        pg.wait_for_timeout(200)
+        shot(pg, "26c-diario-tutte-colori")
+        # Il progetto torna solo mio: le mie note lo seguono, quella di Giulia (non posso cambiarla) resta condivisa
+        pg.click("button.pillola >> text=Circolo")
+        pg.click("button.btn--piatto >> text=Modifica progetto")
+        pg.click("#foglio .pillola >> text=Solo io")
+        conferma(pg)
+        pg.wait_for_function(f"window.__finto.coll('journal_entries').get('{direttivo}').visibility === 'private'", timeout=4000)
+        assert all(v["vis"] == "private" for v in note_db().values() if v["owner"] == "uid-test" and v["projectId"] == note_db()[direttivo]["projectId"]), note_db()
+        assert note_db()["nota-giulia"]["vis"] == "shared"
+        pg.click("button.pillola >> text=Tutte")
+
         # ── Barra in basso personalizzabile (3/11): sezioni e ordine per persona, progetti compresi ──
         step[0] = "barra in basso"
         menu(pg, "Barra in basso")

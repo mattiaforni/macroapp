@@ -117,6 +117,15 @@ export function sceltaColore(value, onChange) {
   return wrap;
 }
 
+/**
+ * Pillola di un progetto (7/11, richiesta di Mattia: il colore caratterizza sempre il progetto): il pallino del suo
+ * colore davanti al nome e, scelta, piena del colore (base.css, .pillola--progetto). Senza colore è una pillola come le altre.
+ */
+export function pillolaProgetto(p, { on = false, onclick } = {}) {
+  return el("button.pillola.pillola--progetto", { type: "button", class: on ? "on" : "", "data-colore": p.colore || null, onclick },
+    p.colore ? el("span.colore.colore--pallino") : null, p.name);
+}
+
 /** Il "+" in basso a destra: lo stesso in ogni pagina. */
 export function fab(label, onclick) {
   return el("button.fab.fab--tondo", { type: "button", "aria-label": label, title: label, onclick }, icon("piu"));

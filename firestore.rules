@@ -106,18 +106,26 @@ service cloud.firestore {
       allow delete: if signedIn() && canDelete();
     }
 
-    // Diario: sempre e solo il proprietario, qualunque sia il campo visibility.
+    // Diario: le note di un progetto condiviso sono `shared` e le leggono i membri della casa (7/11); le altre
+    // `private`, solo del proprietario. Modifica ed eliminazione restano sempre e solo del proprietario, che non può
+    // cambiare né il proprietario né la casa (l'agente si fida di `householdId` per leggere le note della casa).
+    function soloMieNote() {
+      return resource.data.ownerUid == uid()
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['ownerUid', 'householdId']);
+    }
     match /journal_entries/{id} {
-      allow read, update, delete: if signedIn() && resource.data.ownerUid == uid();
-      allow create: if signedIn() && request.resource.data.ownerUid == uid()
-        && request.resource.data.visibility == 'private';
+      allow read: if signedIn() && canRead();
+      allow create: if signedIn() && validNew();
+      allow update: if signedIn() && soloMieNote();
+      allow delete: if signedIn() && resource.data.ownerUid == uid();
     }
 
-    // Foto delle note (una per documento, JPEG in base64): solo del proprietario, come le note.
+    // Foto delle note (una per documento, JPEG in base64): con la visibilità della loro nota.
     match /journal_photos/{id} {
-      allow read, update, delete: if signedIn() && resource.data.ownerUid == uid();
-      allow create: if signedIn() && request.resource.data.ownerUid == uid()
-        && request.resource.data.visibility == 'private';
+      allow read: if signedIn() && canRead();
+      allow create: if signedIn() && validNew();
+      allow update: if signedIn() && soloMieNote();
+      allow delete: if signedIn() && resource.data.ownerUid == uid();
     }
 
     // Regole di classificazione delle spese (es. "ESSELUNGA → condivisa, categoria spesa"): per casa.

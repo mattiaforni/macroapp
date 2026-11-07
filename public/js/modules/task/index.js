@@ -8,8 +8,10 @@
 //          documenti = file di Google Drive [{ id, nome, mime, link }] che l'agente legge come contesto
 // tasks    { text, done, doneAt, due ("AAAA-MM-GG" o null), projectId, peopleIds[], people, note }
 //          people = nomi delle persone in chiaro, copia di peopleIds per chi non vede la voce in rubrica
-import { el, icon, toast, fascia, vuoto, attesa, sceltaVisibilita, sceltaColore, fmtDate, meseBreve, isoGiorno, toDate, fab } from "../../core/ui.js";
+import { el, icon, toast, fascia, vuoto, attesa, sceltaVisibilita, sceltaColore, fmtDate, meseBreve, isoGiorno, toDate, fab, pillolaProgetto } from "../../core/ui.js";
 import { create, update, remove, watchVisible, readVisible, VIS } from "../../core/db.js";
+import { allineaProgetto } from "../../core/note.js";
+import { session } from "../../core/auth.js";
 import { openSheet, campo } from "../../components/sheet.js";
 import { sceltaPersone } from "../../components/persone.js";
 import { sceltaDocumenti } from "../../components/documenti.js";
@@ -103,10 +105,10 @@ export async function apriTask(esistente = null, prefill = {}, progettiNoti = nu
   const disegnaProgetti = () => {
     sceltaProgetto.replaceChildren(
       el("button.pillola", { type: "button", class: projectId ? "" : "on", onclick: () => { projectId = null; disegnaProgetti(); } }, "Nessuno"),
-      ...progetti.map((p) => el("button.pillola", {
-        type: "button", class: p.id === projectId ? "on" : "",
+      ...progetti.map((p) => pillolaProgetto(p, {
+        on: p.id === projectId,
         onclick: () => { projectId = p.id; visibility = p.visibility; disegnaProgetti(); disegnaVis(); },
-      }, p.name)),
+      })),
     );
   };
   disegnaProgetti();
@@ -173,7 +175,7 @@ export function apriProgetto(esistente = null, onCreato) {
     body: [
       el("div.campo", { style: "margin-top:14px" }, nome),
       el("div.campo", {}, el("label", {}, "Visibilità"), sceltaVisibilita(visibility, (v) => { visibility = v; })),
-      el("p.meta", { style: "margin:-8px 0 18px" }, "Un progetto condiviso è visibile ai due membri della casa, insieme ai suoi task. Le note del diario restano solo tue."),
+      el("p.meta", { style: "margin:-8px 0 18px" }, "Un progetto condiviso è visibile ai due membri della casa, insieme ai suoi task e alle note del diario che ci scrivete."),
       campo("Istruzioni per il diario", istruzioni),
       // Le istruzioni si possono dettare come una nota (29/10, richiesta di Mattia): la trascrizione si aggiunge al campo.
       el("div.segmenti", { style: "margin-top:-10px;padding-top:0" }, pulsanteRegistra({
@@ -202,7 +204,13 @@ export function apriProgetto(esistente = null, onCreato) {
       const name = nome.value.trim();
       if (!name) { nome.focus(); return false; }
       const dati = { name, istruzioni: istruzioni.value.trim(), colore, documenti: documenti.valore() };
-      if (esistente) update(PROJ, esistente.id, { ...dati, visibility });
+      if (esistente) {
+        update(PROJ, esistente.id, { ...dati, visibility });
+        // Le tue note del progetto seguono la sua visibilità (7/11: le note dei progetti condivisi sono della casa). Solo
+        // chi ha creato il progetto può cambiarla (regole): per l'altra persona la modifica non passa, e le note restano.
+        const cambiata = visibility !== (esistente.visibility || VIS.PRIVATE);
+        if (cambiata && esistente.ownerUid === session.user.uid) allineaProgetto(esistente.id, visibility).catch((e) => console.warn("note del progetto", e));
+      }
       else onCreato?.(create(PROJ, { ...dati, name: cap(name), archived: false }, visibility).id);
     },
   });
@@ -261,7 +269,7 @@ export function mount(container) {
 
     chips.replaceChildren(
       el("button.pillola", { class: scelto === "tutti" ? "on" : "", onclick: () => scegli("tutti") }, "Tutti"),
-      ...attivi.map((p) => el("button.pillola", { class: scelto === p.id ? "on" : "", onclick: () => scegli(p.id) }, p.name)),
+      ...attivi.map((p) => pillolaProgetto(p, { on: scelto === p.id, onclick: () => scegli(p.id) })),
       el("button.pillola.pillola--accento", { onclick: () => apriProgetto(null, (nuovo) => scegli(nuovo)) }, icon("piu"), "Progetto"),
     );
 
