@@ -18,7 +18,7 @@ import { seguiNote, notaMia } from "../../core/note.js";
 import { getHousehold, nomeDi } from "../../core/household.js";
 import { watchPending } from "../../components/proposals.js";
 import { sezioniSintesi, tonoStato, apriSintesi, apriVersioni } from "../../components/sintesi.js";
-import { apriNota, analizzaNota, analisiAutomatica, rigaNota, apriLettura, elencoNote, salvaNotaNuova, salvaModificaNota, ultimaModifica } from "../diario/index.js";
+import { apriNota, analizzaNota, analisiAutomatica, rigaNota, apriLettura, elencoNote, salvaNotaNuova, salvaModificaNota, ultimaModifica, scadenzaAnalisi } from "../diario/index.js";
 import { eliminaFotoDi } from "../../components/foto.js";
 import { apriProgetto, rigaTask } from "../task/index.js";
 import { elencoDocumenti } from "../../components/documenti.js";
@@ -94,6 +94,7 @@ export function mount(container) {
       autore: autoreDi(n),
       modificata: ultimaModifica(n, casa),
       proposte: proposteDi(n),
+      inAnalisi: inCorso.has(n.id),
       onModifica: (fuoco) => modifica(n, fuoco),
       onAnalizza: () => analizza(n.id),
       onElimina: () => { remove(NOTE, n.id); eliminaFotoDi(n); toast("Nota eliminata"); },
@@ -180,8 +181,12 @@ export function mount(container) {
     render();
   }
 
+  let timerAnalisi = null; // come nel Diario: un'analisi «in corso» scaduta si ridisegna come non analizzata
   function render() {
     if (!progetto || !dati.pronta()) return;
+    clearTimeout(timerAnalisi);
+    const tra = scadenzaAnalisi(note);
+    if (tra != null) timerAnalisi = setTimeout(render, tra);
     nomeCorrente = progetto.name;
     if (titolo) titolo.textContent = progetto.name;
     // Il colore del progetto: sulla pagina e, per il titolo e il +, su <html>.
@@ -226,5 +231,5 @@ export function mount(container) {
   const stop2 = seguiNote({ extra: [where("projectId", "==", progettoId)], max: 300 }, (docs) => { note = docs; dati.arriva("note"); render(); });
   const stop3 = watchVisible("tasks", {}, (docs) => { tasks = docs.filter((t) => t.projectId === progettoId); dati.arriva("task"); render(); });
   const stop4 = watchPending((docs) => { proposte = docs; render(); });
-  return () => { dati.ferma(); stop1(); stop2(); stop3(); stop4(); piu.remove(); delete document.documentElement.dataset.colore; container.classList.remove("pagina-progetto"); };
+  return () => { clearTimeout(timerAnalisi); dati.ferma(); stop1(); stop2(); stop3(); stop4(); piu.remove(); delete document.documentElement.dataset.colore; container.classList.remove("pagina-progetto"); };
 }

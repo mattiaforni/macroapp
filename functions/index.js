@@ -52,6 +52,9 @@ function spiegaErrore(msg = "") {
   return ["internal", `Analisi non riuscita (${msg.slice(0, 160)})`];
 }
 
+/** Oltre questo tempo un'analisi «in corso» sulla nota è morta (tempo massimo della funzione 300 s, più il margine). */
+const ANALISI_MAX_MS = 330e3;
+
 export const analyzeEntry = onCall(
   // 300 s: Opus su una nota di progetto lunga può superare i due minuti (vedi src/ai/claude.js).
   { secrets: [ANTHROPIC_API_KEY, GEMINI_API_KEY, GOOGLE_OAUTH_CLIENT], timeoutSeconds: 300 },
@@ -65,6 +68,7 @@ export const analyzeEntry = onCall(
     const passo = (s) => console.log(`analyzeEntry ${entryId}: ${s} dopo ${Date.now() - t0} ms`);
     // A fine analisi: la nota segnata come letta dal server e, se l'app nel frattempo è andata in secondo piano,
     // una notifica a chi l'ha scritta (src/avvisi.js → fineAnalisi). Un errore qui non cambia la risposta.
+    let segnata = false; // la nota porta «in corso»: alla fine va chiusa comunque
     const fine = async (esito) => {
       try {
         const { fineAnalisi } = await import("./src/avvisi.js");
@@ -83,6 +87,21 @@ export const analyzeEntry = onCall(
       if (!n || (n.ownerUid !== req.auth.uid && !dellaCasa)) {
         throw new HttpsError("permission-denied", "Nota non trovata");
       }
+      // Stato dell'analisi sulla nota (7/11, Mattia: bloccando il telefono la risposta si perdeva, l'app diceva «non
+      // analizzata» e rilanciandola ne partiva una seconda): «in corso» lo scrive il server, così tutti i telefoni lo
+      // vedono finché non è davvero finita; una richiesta mentre un'altra è in corso non ne fa partire una seconda.
+      // Dopo ANALISI_MAX_MS (oltre il tempo massimo della funzione) un «in corso» rimasto è un'analisi morta.
+      const { FieldValue } = await import("firebase-admin/firestore");
+      const ref = db.collection("journal_entries").doc(entryId);
+      const gia = await db.runTransaction(async (t) => {
+        const a = (await t.get(ref)).data()?.analisi;
+        const inizio = a?.inizio?.toMillis?.() || 0;
+        if (a?.stato === "in_corso" && Date.now() - inizio < ANALISI_MAX_MS) return true;
+        t.update(ref, { analisi: { stato: "in_corso", inizio: FieldValue.serverTimestamp(), da: req.auth.uid } });
+        return false;
+      });
+      if (gia) { passo("già in corso"); return { giaInCorso: true }; }
+      segnata = true;
       const entry = { id: snap.id, ...snap.data() };
       passo("nota letta");
       const { analyzeJournalEntry } = await import("./src/agent.js");
@@ -95,7 +114,10 @@ export const analyzeEntry = onCall(
       await fine({ azioni, riepilogo, sintesiEsito, modello });
       return { proposals: azioni, riepilogo, titolo, persone, sintesi, sintesiEsito, modello };
     } catch (err) {
-      if (err instanceof HttpsError) throw err;
+      if (err instanceof HttpsError) {
+        if (segnata) await fine({ errore: err.message });
+        throw err;
+      }
       console.error("analyzeEntry", err);
       // 401: chiave assente o fittizia. Il telefono mostra «AI non ancora collegata».
       if (/\b401\b|authentication|invalid x-api-key/i.test(err.message)) {

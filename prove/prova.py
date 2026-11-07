@@ -921,6 +921,34 @@ with sync_playwright() as p:
         assert riga.locator(".lezione__titolo").inner_text() == "Big talk al circolo", "il titolo scritto a mano resta"
         assert riga.locator(".persona >> text=Anna Rossetti").count() == 0, "le persone corrette a mano restano"
         assert riga.locator(".persona >> text=Giulia Bianchi").count() == 1
+        # Telefono bloccato durante l'analisi (7/11, Mattia): la risposta si perde ma il server finisce. La riga dice
+        # «Analizzo…» (stato scritto dal server sulla nota), non «non analizzata»; nel foglio niente seconda analisi;
+        # quando il server ha finito l'esito compare da solo.
+        pg.evaluate("sessionStorage.setItem('finto.analisi.persa', '1'); sessionStorage.setItem('finto.analisi.ritardo', '2500')")
+        riga.locator("button.lezione").click()
+        pg.click("#foglio button >> text=Rianalizza")
+        pg.wait_for_selector("text=l'analisi continua")
+        pg.wait_for_timeout(300)
+        assert riga.locator(".lezione__stato", has_text="Analizzo").count() == 1, riga.inner_text()
+        assert riga.locator(".lezione__stato--errore").count() == 0, "non è «non analizzata»"
+        riga.locator("button.lezione").click()
+        rian = pg.locator("#foglio .foglio__barra button", has_text="Analizzo")
+        assert rian.count() == 1 and rian.is_disabled(), "in analisi: niente seconda analisi"
+        shot(pg, "9e-analisi-in-corso")
+        pg.click("#foglio button[aria-label='Indietro']")
+        riga.locator(".lezione__stato", has_text="Analizzo").wait_for(state="detached", timeout=5000)
+        assert riga.locator(".lezione__stato--errore").count() == 0
+        nid = riga.get_attribute("data-id")
+        assert pg.evaluate(f"window.__finto.coll('journal_entries').get('{nid}').analisi.stato") == "fatta"
+        # Un'analisi rimasta «in corso» oltre il tempo massimo (funzione interrotta) torna «non analizzata»
+        pg.evaluate(f"""() => {{ const n = window.__finto.coll('journal_entries').get('{nid}');
+          n.analyzed = false; n.analisi = {{ stato: 'in_corso', inizio: new Date(Date.now() - 340e3) }}; window.__finto.notify(); }}""")
+        riga.locator(".lezione__stato--errore").wait_for(timeout=3000)
+        pg.evaluate("sessionStorage.removeItem('finto.analisi.ritardo')")
+        riga.locator("button.lezione").click()
+        pg.click("#foglio button >> text=Analizza")
+        riga.locator(".lezione__stato--errore").wait_for(state="detached", timeout=3000)
+        assert pg.evaluate(f"window.__finto.coll('journal_entries').get('{nid}').analyzed") is True
         # Una nota nuova con il titolo scritto da te: l'AI non lo cambia
         pg.click("button.fab")
         pg.fill("#foglio input.nota__titolo-campo", "Idee per il giardino")

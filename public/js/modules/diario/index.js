@@ -206,6 +206,27 @@ export function apriNota({ esistente = null, testo = "", progetti = [], projectI
   if (fuoco) scriviDa({ titolo, testo: area, riepilogo }[fuoco.campo] || area, fuoco.pos);
 }
 
+/** Oltre questo tempo un'analisi «in corso» è morta (functions/index.js, ANALISI_MAX_MS: 300 s della funzione più margine). */
+const ANALISI_MAX_MS = 330e3;
+
+/**
+ * L'analisi della nota è in corso sul server (7/11): lo stato `analisi` lo scrive analyzeEntry all'inizio e lo chiude
+ * alla fine, quindi vale per tutti i telefoni e anche se la risposta si è persa (telefono bloccato, app chiusa).
+ */
+export function analisiInCorso(n) {
+  const a = n?.analisi;
+  const t = a?.stato === "in_corso" ? toDate(a.inizio) : null;
+  return !!t && Date.now() - t.getTime() < ANALISI_MAX_MS;
+}
+/** Rimasta «in corso» oltre il tempo massimo: morta senza esito (la funzione è stata interrotta). */
+const analisiMorta = (n) => n?.analisi?.stato === "in_corso" && !analisiInCorso(n);
+
+/** Fra quanti ms la prima analisi in corso tra queste note smette di esserlo, per ridisegnare la pagina; o null. */
+export function scadenzaAnalisi(note) {
+  const resti = note.filter(analisiInCorso).map((n) => toDate(n.analisi.inizio).getTime() + ANALISI_MAX_MS - Date.now());
+  return resti.length ? Math.max(0, Math.min(...resti)) + 500 : null;
+}
+
 /**
  * Manda una nota all'agente e segna l'esito sulla nota. Ritorna la risposta della funzione
  * ({ proposals, riepilogo, sintesi }) o null se non è riuscita (l'errore è già stato mostrato).
@@ -226,8 +247,12 @@ export async function analizzaNota(entryId, attesa) {
     if (attesa) await attesa;
     suVisibilita(); // già uscita mentre la nota si salvava
     const res = await analyzeEntry({ entryId });
+    // Un'analisi della stessa nota era già in corso (dall'altro telefono, o lanciata prima di bloccare questo): non ne
+    // parte una seconda, il risultato arriva nella nota.
+    if (res.data?.giaInCorso) { toast("È già in analisi: il risultato compare nella nota"); return null; }
     const n = res.data?.proposals ?? 0;
     scrivi(CHIAVE_AI, "on");
+    // Lo scrive già il server (fineAnalisi); qui resta come ripiego.
     update(COLL, entryId, { analyzed: true, analyzedAt: new Date(), analysisError: null, modello: res.data?.modello || null });
     if (!n && !res.data?.riepilogo) toast("Nessuna azione da proporre");
     else if (res.data?.sintesiEsito === "invariata") toast("Sintesi del progetto invariata");
@@ -236,6 +261,14 @@ export async function analizzaNota(entryId, attesa) {
     console.warn("analisi", err);
     const chiave = err.code === "functions/failed-precondition" && /non configurata/.test(err.message || "");
     if (chiave) scrivi(CHIAVE_AI, "off");
+    // Risposta persa per strada (7/11: telefono bloccato durante l'attesa, rete): l'errore è solo del collegamento,
+    // l'analisi prosegue sul server, che scrive l'esito sulla nota. Non è «non analizzata».
+    const persa = /^(functions\/)?(internal|deadline-exceeded|unavailable|cancelled|unknown)$/.test(err.code || "")
+      && /^(internal|deadline-exceeded|unavailable|cancelled|unknown)?$/i.test(String(err.message || "").trim());
+    if (persa) {
+      if (document.visibilityState === "visible") toast("La risposta non è arrivata: l'analisi continua e il risultato compare nella nota.", { ms: 6000 });
+      return null;
+    }
     update(COLL, entryId, { analysisError: err.message || err.code || "errore" });
     toast(chiave ? "AI non ancora collegata: la nota è salvata" : `${err.message || "Analisi non riuscita"}. La nota è salvata.`, { ms: 7000 });
     return null;
@@ -352,7 +385,9 @@ export function rigaNota(n, { conGiorno = true, conOra = false, progetto = null,
   const d = toDate(n.createdAt) || new Date();
   const { titolo, anteprima } = testaNota(n);
   const persone = Array.isArray(n.persone) ? n.persone.filter((p) => p?.nome) : [];
-  const nonAnalizzata = n.analysisError && !n.analyzed && !inAnalisi;
+  // In analisi: lanciata da qui (prima che il server scriva lo stato) o in corso sul server, da qualunque telefono.
+  inAnalisi = inAnalisi || analisiInCorso(n);
+  const nonAnalizzata = !inAnalisi && !n.analyzed && (n.analysisError || analisiMorta(n));
   const piede = [
     conOra ? el("span.lezione__ora", {}, d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }), n.analyzed && n.modello ? ` · ${nomeModello(n.modello)}` : "") : null,
     // Nota condivisa scritta dall'altra persona (7/11): il suo nome.
@@ -389,7 +424,9 @@ export function rigaNota(n, { conGiorno = true, conOra = false, progetto = null,
  * Una nota condivisa (7/11) la modificano tutti e due: `autore` è il nome di chi l'ha scritta, se non sei tu;
  * `modificata` = { chi, quando } dell'ultima modifica a mano (`modificataDa`, `modificataAt`), detta in piccolo in fondo.
  */
-export function apriLettura(n, { progetto = null, proposte = [], autore = null, modificata = null, onModifica, onAnalizza, onElimina }) {
+export function apriLettura(n, { progetto = null, proposte = [], autore = null, modificata = null, inAnalisi = false, onModifica, onAnalizza, onElimina }) {
+  // In analisi (da qui o sul server): niente seconda analisi, il pulsante lo dice.
+  const occupata = inAnalisi || analisiInCorso(n);
   const d = toDate(n.createdAt) || new Date();
   const persone = Array.isArray(n.persone) ? n.persone.filter((p) => p?.nome) : [];
   const tocca = (campo, sorgente) => (e) => {
@@ -418,12 +455,12 @@ export function apriLettura(n, { progetto = null, proposte = [], autore = null, 
         : el(`div.nota__testo.lettura__testo${scrivibile}`, { onclick: tocca("testo", n.text) }, n.text),
       n.riepilogo ? apri : null,
       n.riepilogo ? trascrizione : null,
-      sintesiInvariata(n),
+      sintesiInvariata(n, occupata),
       proposte.length ? el("div.azioni-ai", { style: "margin-top:14px" }, ...proposte.map(renderAzione)) : null,
       // Chi l'ha modificata per ultimo (note condivise, richiesta di Mattia del 7/11): appena visibile, in fondo.
       modificata ? el("p.nota__modifica", {}, `Ultima modifica: ${modificata.chi}, ${quandoBreve(modificata.quando)}`) : null,
       el("div.foglio__piede", {},
-        el("button.btn", { onclick: () => { sheet.close(); onAnalizza?.(); } }, icon("scintilla"), n.analyzed ? "Rianalizza" : "Analizza"),
+        el("button.btn", { disabled: occupata, onclick: () => { sheet.close(); onAnalizza?.(); } }, icon("scintilla"), occupata ? "Analizzo…" : n.analyzed ? "Rianalizza" : "Analizza"),
         el("button.btn.btn--pericolo", { "aria-label": "Elimina nota", onclick: () => { sheet.close(); onElimina?.(); } }, icon("cestino")),
       ),
     ],
@@ -580,6 +617,7 @@ export function mount(container) {
       autore: autoreDi(n),
       modificata: ultimaModifica(n, casa),
       proposte: proposteDi(n),
+      inAnalisi: inCorso.has(n.id),
       onModifica: (fuoco) => modifica(n, fuoco),
       onAnalizza: () => analizza(n.id),
       onElimina: () => { remove(COLL, n.id); eliminaFotoDi(n); toast("Nota eliminata"); },
@@ -609,8 +647,13 @@ export function mount(container) {
     );
   }
 
+  // Un'analisi «in corso» che supera il tempo massimo diventa «non analizzata» senza che la nota cambi: si ridisegna allora.
+  let timerAnalisi = null;
   function render() {
     if (!dati.pronta()) return;
+    clearTimeout(timerAnalisi);
+    const tra = scadenzaAnalisi(note);
+    if (tra != null) timerAnalisi = setTimeout(render, tra);
     disegnaProssimi();
     disegnaFiltri();
     const prog = filtro !== "tutte" ? progettoDi(filtro) : null;
@@ -696,5 +739,5 @@ export function mount(container) {
   const stop4 = suGoogle(() => caricaProssimi());
   const stop5 = suCalendari(() => caricaProssimi());
   caricaProssimi();
-  return () => { stopNote(); stopTutte(); stop1(); stop2(); stop3(); stop4(); stop5(); dati.ferma(); smontato = true; piu.remove(); eventoFab.remove(); lasciaDoppio?.(); lasciaDoppio = null; };
+  return () => { clearTimeout(timerAnalisi); stopNote(); stopTutte(); stop1(); stop2(); stop3(); stop4(); stop5(); dati.ferma(); smontato = true; piu.remove(); eventoFab.remove(); lasciaDoppio?.(); lasciaDoppio = null; };
 }

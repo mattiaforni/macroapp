@@ -228,9 +228,11 @@ export async function fineAnalisi(db, uid, entryId, esito = {}) {
   const n = (await ref.get()).data();
   if (!n || (n.ownerUid !== uid && n.visibility !== "shared")) return 0; // eliminata nel frattempo, o non di chi chiama (analyzeEntry ha già controllato la casa)
   const fuori = n.avvisaAFine === true;
+  // `analisi` chiude lo stato scritto all'inizio da analyzeEntry (l'app smette di dire «Analizzo…»).
   await ref.update(esito.errore
-    ? { analysisError: breve(esito.errore, 300), avvisaAFine: FieldValue.delete() }
-    : { analyzed: true, analyzedAt: FieldValue.serverTimestamp(), analysisError: null, modello: esito.modello || null, avvisaAFine: FieldValue.delete() });
+    ? { analysisError: breve(esito.errore, 300), avvisaAFine: FieldValue.delete(), analisi: { stato: "errore", fine: FieldValue.serverTimestamp() } }
+    : { analyzed: true, analyzedAt: FieldValue.serverTimestamp(), analysisError: null, modello: esito.modello || null, avvisaAFine: FieldValue.delete(),
+      analisi: { stato: "fatta", fine: FieldValue.serverTimestamp() } });
   if (!fuori) return 0;
   const titolo = breve(n.titolo, 60) || "Nota del diario";
   let testo;

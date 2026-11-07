@@ -201,7 +201,7 @@ export function httpsCallable(_f, name) {
     sessionStorage.setItem("finto.trascrizioni", JSON.stringify(viste));
     return { data: { testo: "Lezione di oggi con Marco: rovescio a due mani e split step prima della risposta al servizio." } };
   };
-  return async (data) => {
+  const esegui = async (data) => {
     if (name === "google") return { data: google(data) };
     if (name !== "analyzeEntry") return { data: {} };
     const hid = coll("users").get(UID)?.householdId || null;
@@ -257,6 +257,31 @@ export function httpsCallable(_f, name) {
     P.set("p" + (++seq), { ...base, visibility: "private", kind: "draft", summary: "Mail a Marco per l'assemblea", payload: { channel: "email", to: "Marco", subject: "Assemblea del circolo", body: "Ciao Marco,\nti propongo di vederci venerdì alle 21 per preparare l'assemblea.\n\nMattia" } });
     notify();
     return { data: { proposals: 4, modello: scelti.note || "sonnet" } };
+  };
+  if (name !== "analyzeEntry") return esegui;
+  // Come il server (functions/index.js, 7/11): «in corso» sulla nota all'inizio, una seconda richiesta intanto non
+  // riparte; alla fine la nota letta la scrive il server (fineAnalisi). Per le prove: `finto.analisi.ritardo` (ms) e
+  // `finto.analisi.persa` = "1" (la risposta si perde, come col telefono bloccato, ma il server finisce lo stesso).
+  return async (data) => {
+    const nota = coll("journal_entries").get(data.entryId);
+    const inizio = nota?.analisi?.stato === "in_corso" ? new Date(nota.analisi.inizio).getTime() : 0;
+    if (inizio && Date.now() - inizio < 330e3) return { data: { giaInCorso: true } };
+    if (nota) { nota.analisi = { stato: "in_corso", inizio: new Date(), da: UID }; notify(); }
+    const ritardo = Number(sessionStorage.getItem("finto.analisi.ritardo") || 0);
+    const persa = sessionStorage.getItem("finto.analisi.persa") === "1";
+    sessionStorage.removeItem("finto.analisi.persa");
+    const lavoro = (async () => {
+      if (ritardo) await new Promise((r) => setTimeout(r, ritardo));
+      const r = await esegui(data);
+      const n = coll("journal_entries").get(data.entryId);
+      if (n) {
+        Object.assign(n, { analyzed: true, analyzedAt: new Date(), analysisError: null, modello: r.data?.modello || null, analisi: { stato: "fatta", fine: new Date() } });
+        notify();
+      }
+      return r;
+    })();
+    if (persa) { const e = new Error("internal"); e.code = "functions/internal"; throw e; }
+    return lavoro;
   };
 }
 export function signInWithPopup() { return Promise.resolve(); }

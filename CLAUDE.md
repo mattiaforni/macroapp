@@ -153,6 +153,16 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
 
 ## Stato (7 novembre 2026) e prossimi passi
 
+- [x] **Analisi e telefono bloccato** (7/11, notte, Mattia: «spesso dice non analizzata dopo aver bloccato il telefono e rilancio
+      l'analisi… poi l'analisi dopo un po' compare»). Causa: bloccando il telefono la richiesta ad `analyzeEntry` cadeva, l'app
+      scriveva `analysisError` e mostrava «non analizzata» mentre il server finiva; rilanciandola ne partiva una seconda in
+      parallelo. Ora lo stato sta sulla nota e lo scrive il server (`journal_entries.analisi`, docs/MODELLO-DATI.md): «Analizzo…»
+      nella riga e nel foglio (pulsante spento) finché il server non ha finito, su tutti e due i telefoni; una seconda richiesta
+      mentre una è in corso non riparte (`giaInCorso`); una risposta persa (codici di collegamento senza messaggio del server) non
+      è un errore, l'app dice che l'analisi continua; un «in corso» oltre 330 s (funzione interrotta) torna «non analizzata» e si
+      rilancia (`analisiInCorso`, `scadenzaAnalisi` in diario). Il Firebase finto fa come il server (`finto.analisi.persa`,
+      `finto.analisi.ritardo`); la prova copre risposta persa, pulsante spento, esito che arriva da solo e analisi morta.
+
 - [x] **Seconda tornata del 7/11** (dal telefono, dopo la prima):
       1. **Note condivise modificabili da tutti e due** («le note condivise possono modificarle tutte, al massimo fammi vedere chi ha
          modificato per ultimo»): regole come le altre collezioni della casa (`modificaNota`: nessuno cambia proprietario né casa, la

@@ -98,7 +98,7 @@ esportati come testo, file di testo così come sono; PDF e altri formati solo pe
 `people` è la copia in chiaro dei nomi: serve a chi non vede la voce in rubrica (voce privata dell'altro membro) e ai task vecchi, che avevano solo il testo.
 
 ## `journal_entries`
-`text, titolo?, titoloAMano?, persone?: [{ nome, voceId?, googleId? }], personeAMano?, projectId?, riepilogo?, temi?: [string], riepilogoAt?, analyzed, analyzedAt, analysisError, modello?, sintesiEsito?, avvisaAFine?, foto?: [{ id, w, h }]` — `private` (solo
+`text, titolo?, titoloAMano?, persone?: [{ nome, voceId?, googleId? }], personeAMano?, projectId?, riepilogo?, temi?: [string], riepilogoAt?, analyzed, analyzedAt, analysisError, analisi?, modello?, sintesiEsito?, avvisaAFine?, foto?: [{ id, w, h }]` — `private` (solo
 il proprietario), tranne le note di un progetto condiviso, che dal 7/11 sono `shared` come il progetto (i membri della casa le
 leggono, le modificano, le rianalizzano e le eliminano; la visibilità la cambia solo il proprietario, e nessuno cambia `ownerUid`
 o `householdId`). `modificataDa`, `modificataAt`: chi ha salvato l'ultima modifica a mano dal foglio della nota (non l'analisi),
@@ -115,6 +115,9 @@ e l'agente non li tocca più (un titolo svuotato torna all'AI). `createdAt` si p
 `householdId+visibility+projectId+createdAt` (le note condivise della casa; per l'agente le precedenti dell'altra persona). `modello`: chi ha fatto l'ultima
 analisi (lo scrivono il server a fine analisi e l'app con la risposta di `analyzeEntry`; dal 1/11 anche `analyzed`,
 `analyzedAt`, `analysisError` li scrive il server, così valgono anche se l'app è stata chiusa durante l'analisi).
+`analisi` (7/11): `{ stato: "in_corso", inizio, da }` scritto da analyzeEntry all'inizio (in una transazione: se ce n'è già una
+in corso da meno di 330 s non ne parte un'altra, risposta `{ giaInCorso: true }`), poi `{ stato: "fatta" | "errore", fine }` da
+`fineAnalisi`. L'app mostra «Analizzo…» da qui, non dall'attesa della risposta; un «in corso» più vecchio di 330 s è morto.
 `avvisaAFine`: l'app è passata in secondo piano mentre aspettava l'analisi (`true`) o è tornata (`false`); a fine
 analisi, se è `true`, il server manda una notifica a chi ha scritto la nota e toglie il campo.
 `foto` (4/11): le foto della nota, in ordine, con id in `journal_photos` e proporzioni (per disegnare i riquadri
