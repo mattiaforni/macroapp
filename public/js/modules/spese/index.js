@@ -8,15 +8,20 @@
 // Il saldo è la somma, spesa per spesa, di quanto l'altro deve a te (positivo) o tu a lui (negativo).
 // Le ricorrenti generano la spesa alla data dovuta, con un id fisso (rec_<id>_<giorno>):
 // se entrambi i telefoni ci provano, la seconda volta non succede niente.
+// Le uscite lette dalla banca (proposte `expense` con source "bank", solo di chi ha collegato la banca) si confermano
+// da qui (7/11, richiesta di Mattia): «Dalla banca» accanto a «Ricorrenti», col numero di quelle da confermare in un
+// pallino; il foglio le elenca come righe di spesa con «Dividi a metà» e «Solo mia», e una riga toccata apre il foglio
+// della spesa già compilato, per cambiare importo, data o divisione prima di aggiungerla.
 import {
   el, icon, iconaDa, toast, fascia, vuoto, toDate, fmtMoney, parseImporto, meseBreve, meseLungo,
-  isoGiorno, stessoGiorno, fmtDate, fab, attesa,
+  isoGiorno, stessoGiorno, fmtDate, fab, attesa, colonnaGiorno,
 } from "../../core/ui.js";
 import { create, createWithId, update, remove, watchVisible, readVisible, VIS } from "../../core/db.js";
 import { session } from "../../core/auth.js";
 import { getHousehold, nomeDi } from "../../core/household.js";
 import { openSheet } from "../../components/sheet.js";
-import { richiesto } from "../../core/router.js";
+import { richiesto, vaiA } from "../../core/router.js";
+import { watchPending, accept, reject, segnaAccettata } from "../../components/proposals.js";
 
 export const id = "spese";
 export const title = "Spese";
@@ -111,7 +116,8 @@ function modoDi(e, me) {
 
 /**
  * Foglio della spesa, nuovo o in modifica. Esportato: lo usa anche il diario.
- * prefill: { description, amount }
+ * prefill: { description, amount, date, source, bankTxId, dopo } — `dopo()` dopo il salvataggio di una spesa nuova
+ * (dalla banca: la proposta si segna confermata).
  */
 export async function apriSpesa(esistente = null, prefill = {}) {
   const me = session.user.uid;
@@ -120,7 +126,7 @@ export async function apriSpesa(esistente = null, prefill = {}) {
   const altro = { uid: altroUid, nome: nomeDi(altroUid, h) };
   const elenco = modi(altro);
   let modo = esistente ? modoDi(esistente, me) : "me_equal";
-  let quando = esistente ? toDate(esistente.date) || new Date() : new Date();
+  let quando = esistente ? toDate(esistente.date) || new Date() : toDate(prefill.date) || new Date();
   let ripeti = "";
 
   const riquadro = el("div.riquadro", {}, icon(categoria(esistente?.description || prefill.description)));
@@ -192,7 +198,9 @@ export async function apriSpesa(esistente = null, prefill = {}) {
       if (ripeti) {
         recurringId = create(REC, { ...dati, every: ripeti, nextDate: avanza(dati.date, ripeti), active: true }, VIS.SHARED).id;
       }
-      create(COLL, { ...dati, source: "manual", ...(recurringId ? { recurringId } : {}) }, VIS.SHARED);
+      create(COLL, { ...dati, source: prefill.source || "manual", ...(prefill.bankTxId ? { bankTxId: prefill.bankTxId } : {}),
+        ...(recurringId ? { recurringId } : {}) }, VIS.SHARED);
+      prefill.dopo?.();
       toast(ripeti ? `Spesa aggiunta · ${nomePeriodo(ripeti).toLowerCase()}` : "Spesa aggiunta");
     },
   });
@@ -235,6 +243,46 @@ function apriRicorrenti(modelli, h) {
       ))
     : [vuoto("Nessuna spesa ricorrente", "Quando aggiungi una spesa, scegli «Ogni mese» per farla ripetere da sola.")];
   openSheet({ title: "Ricorrenti", body: righe });
+}
+
+/**
+ * Foglio «Dalla banca»: le uscite lette dalla banca da confermare (`elenco` lo ridisegna la pagina quando cambiano).
+ * Ritorna il foglio.
+ */
+function apriBanca(corpo) {
+  return openSheet({ title: "Dalla banca", body: [corpo] });
+}
+
+/** Le righe del foglio «Dalla banca»: una per uscita, con le due scelte sotto. */
+function righeBanca(proposte, altro) {
+  if (!proposte.length) {
+    return [vuoto("Niente da confermare", "Le uscite del conto arrivano qui ogni mattina, dopo la lettura della banca."),
+      el("div", { style: "text-align:center" }, el("button.btn", { type: "button", onclick: () => vaiA("banca") }, icon("banca"), "Pagina Banca"))];
+  }
+  return [
+    el("p.meta", { style: "margin:12px 0 4px;line-height:1.45" },
+      `Le uscite del tuo conto lette dalla banca. «Dividi a metà» la aggiunge alle spese con ${altro.nome}; «Solo mia» la toglie da qui. `
+      + "Tocca una riga per cambiare importo, data o divisione prima di aggiungerla."),
+    ...proposte.map((p) => {
+      const x = p.payload || {};
+      const d = toDate(x.date);
+      return el("div.banca-voce", {},
+        el("div.riga", { onclick: () => apriSpesa(null, {
+          description: x.description || p.summary || "", amount: x.amount, date: x.date, source: "bank", bankTxId: x.bankTxId,
+          dopo: () => segnaAccettata(p),
+        }) },
+          colonnaGiorno(d), // il giorno a sinistra come nelle altre sezioni (7/11)
+          el("div.pallino", {}, icon(categoria(x.description))),
+          el("div.testo", {}, el("b", {}, x.description || p.summary || "Uscita"), el("span", {}, x.account || "Dalla banca")),
+          el("div.importo", {}, el("b", {}, fmtMoney(Number(x.amount) || 0))),
+        ),
+        el("div.segmenti.banca-voce__scelte", {},
+          el("button.pillola.on", { type: "button", onclick: (e) => { e.currentTarget.disabled = true; accept(p); } }, icon("scambio"), "Dividi a metà"),
+          el("button.pillola", { type: "button", onclick: (e) => { e.currentTarget.disabled = true; reject(p); toast("Tolta: resta solo tua"); } }, icon("persona"), "Solo mia"),
+        ),
+      );
+    }),
+  ];
 }
 
 function apriModello(t, h) {
@@ -293,7 +341,10 @@ export function mount(container) {
   const me = session.user.uid;
   let spese = [];
   let modelli = [];
+  let banca = null; // uscite della banca da confermare (null = non ancora arrivate)
   let h = null;
+  let fogliobanca = null;
+  const corpoBanca = el("div");
   // Saldo, ricorrenti e nomi compaiono insieme; senza le spese non si dice nulla (né «in pari» né «Nessuna spesa»).
   const dati = attesa(["spese", "modelli", "casa"], () => render());
 
@@ -318,8 +369,12 @@ export function mount(container) {
       el("div.segmenti", {},
         netto !== 0 ? el("button.pillola.on", { onclick: () => apriPareggio(netto, altro) }, icon("scambio"), "Pareggia") : null,
         el("button.pillola", { onclick: () => apriRicorrenti(modelli, h) }, icon("ripeti"), `Ricorrenti${modelli.length ? " · " + modelli.length : ""}`),
+        // Le uscite della banca da confermare, col numero in un pallino come una notifica (7/11)
+        el("button.pillola", { onclick: () => mostraBanca(), "aria-label": banca?.length ? `Dalla banca, ${banca.length} da confermare` : "Dalla banca" },
+          icon("banca"), "Dalla banca", banca?.length ? el("span.contatore", {}, String(banca.length)) : null),
       ),
     );
+    disegnaBanca();
 
     if (!spese.length) { elenco.replaceChildren(vuoto("Nessuna spesa", "Tocca + per aggiungerne una.")); return; }
     const gruppi = new Map();
@@ -337,13 +392,35 @@ export function mount(container) {
     elenco.replaceChildren(...nodi);
   }
 
+  function disegnaBanca() {
+    if (!fogliobanca?.aperto() || !banca || !h) return; // mai «niente da confermare» prima dei dati
+    const altroUid = h?.members?.find((m) => m !== me);
+    corpoBanca.replaceChildren(...righeBanca(banca, { uid: altroUid, nome: nomeDi(altroUid, h) }));
+  }
+  function mostraBanca() {
+    corpoBanca.replaceChildren();
+    fogliobanca = apriBanca(corpoBanca);
+    disegnaBanca();
+  }
+
   container.append(testa, elenco, piu);
   getHousehold().then((x) => { h = x; dati.arriva("casa"); render(); });
   // Dal menu: «Spese ricorrenti» apre subito il foglio.
   if (richiesto("spese", "ricorrenti")) {
     Promise.all([readVisible(REC, { order: ["createdAt", "desc"] }), getHousehold()]).then(([m, x]) => apriRicorrenti(m, x));
   }
+  // Dalla pagina Banca o dalla notifica delle spese lette (#/spese/banca): il foglio «Dalla banca».
+  // Dopo il montaggio (il router chiude i fogli aperti quando ha finito di cambiare pagina).
+  const daLink = /^#\/spese\/banca/.test(location.hash);
+  if (daLink) history.replaceState(history.state, "", "#/spese");
+  if (richiesto("spese", "banca") || daLink) setTimeout(mostraBanca, 0);
   const stop1 = watchVisible(COLL, { order: ["date", "desc"], max: 400 }, (docs) => { spese = docs; dati.arriva("spese"); render(); });
   const stop2 = watchVisible(REC, { order: ["createdAt", "desc"] }, (docs) => { modelli = docs; dati.arriva("modelli"); render(); });
-  return () => { stop1(); stop2(); dati.ferma(); piu.remove(); };
+  const stop3 = watchPending((docs) => {
+    banca = docs.filter((p) => p.source === "bank" && p.kind === "expense" && p.ownerUid === me)
+      .sort((a, b) => (toDate(b.payload?.date)?.getTime() || 0) - (toDate(a.payload?.date)?.getTime() || 0));
+    render();
+    disegnaBanca();
+  });
+  return () => { stop1(); stop2(); stop3(); dati.ferma(); piu.remove(); };
 }

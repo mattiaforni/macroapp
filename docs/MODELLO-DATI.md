@@ -99,8 +99,10 @@ esportati come testo, file di testo così come sono; PDF e altri formati solo pe
 
 ## `journal_entries`
 `text, titolo?, titoloAMano?, persone?: [{ nome, voceId?, googleId? }], personeAMano?, projectId?, riepilogo?, temi?: [string], riepilogoAt?, analyzed, analyzedAt, analysisError, modello?, sintesiEsito?, avvisaAFine?, foto?: [{ id, w, h }]` — `private` (solo
-il proprietario), tranne le note di un progetto condiviso, che dal 7/11 sono `shared` come il progetto (le leggono i membri della
-casa; modifica ed eliminazione restano del proprietario, anche nelle regole). La visibilità la decide l'app al salvataggio e la
+il proprietario), tranne le note di un progetto condiviso, che dal 7/11 sono `shared` come il progetto (i membri della casa le
+leggono, le modificano, le rianalizzano e le eliminano; la visibilità la cambia solo il proprietario, e nessuno cambia `ownerUid`
+o `householdId`). `modificataDa`, `modificataAt`: chi ha salvato l'ultima modifica a mano dal foglio della nota (non l'analisi),
+detto in fondo al foglio di lettura delle note condivise. La visibilità la decide l'app al salvataggio e la
 riallinea all'avvio e al cambio di visibilità del progetto (`core/note.js`). `riepilogo` lo scrive l'agente
 (`analyzeEntry`) per le note di un progetto con `istruzioni`, tenendo conto delle 8 note precedenti dello
 stesso progetto; l'utente lo corregge dal foglio della nota. Con il riepilogo arrivano i `temi` (nomi delle sezioni
@@ -120,7 +122,8 @@ prima che le immagini arrivino); l'elenco del Diario non carica mai le immagini.
 
 ## `journal_photos`
 `entryId, ordine, mime ("image/jpeg"), w, h, dati (JPEG in base64, lato lungo ≤ 1600 px, ≤ 900 KB), mini (miniatura in base64, lato ≤ 240 px)`
-— con la visibilità della loro nota (lettura come la nota, modifica ed eliminazione del proprietario). Una foto per documento (limite di Firestore: 1 MiB). Si
+— con la visibilità della loro nota e le sue stesse regole (in una nota condivisa le foto possono averle aggiunte tutti e due:
+si leggono con la query del proprietario più quella della casa). Una foto per documento (limite di Firestore: 1 MiB). Si
 leggono per `ownerUid + entryId` (senza ordinamento: nessun indice) aprendo la nota; si eliminano con la nota o
 con la × nel suo foglio. Scelta di tenerle su Firestore e non su Cloud Storage (nessun bucket, regole e deploy a
 parte): se diventano tante, la strada è Storage con gli stessi campi.
@@ -157,7 +160,12 @@ in che giorno è partito l'ultimo riepilogo del mattino.
 - creazione: `ownerUid` = chiamante, `householdId` di cui è membro, `visibility` valida
 - modifica: proprietario; i membri possono modificare i documenti condivisi senza toccare `ownerUid`, `householdId`, `visibility`
 - cancellazione: proprietario o membro (se condiviso)
-- `journal_entries`, `journal_photos`: lettura come le altre collezioni (proprietario, o `shared` e membro della casa), creazione con `validNew`, modifica ed eliminazione solo del proprietario
+- `journal_entries`, `journal_photos`: come le altre collezioni della casa (`canRead`, `validNew`, `canWrite`, `canDelete`), in più nessuno cambia `ownerUid` né `householdId` (`modificaNota`)
 - `households`: un non membro può solo aggiungersi, fino a 2 membri
 - `prodotti`: lettura per chi è autenticato, scrittura solo dal server
 - `avvisi_stato`, `google_tokens`, `off_account`: solo il server
+
+## Eventi di Google Calendar (non su Firestore)
+Gli eventi restano su Google. L'app vi scrive solo `extendedProperties.shared.ddProgetto` = id del progetto dell'evento (7/11;
+"" = nessuno), letto come `progetto` da `core/calendario.js`. Le proposte `event` dell'agente per una nota di un progetto portano
+`payload.projectId`, che la conferma scrive nell'evento.

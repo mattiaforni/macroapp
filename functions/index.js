@@ -75,7 +75,12 @@ export const analyzeEntry = onCall(
       passo("inizio");
       const db = await getDb();
       const snap = await db.collection("journal_entries").doc(entryId).get();
-      if (!snap.exists || snap.data().ownerUid !== req.auth.uid) {
+      // La propria nota, o una nota condivisa della propria casa (note dei progetti condivisi, 7/11: le modificano e
+      // le rianalizzano tutti e due).
+      const n = snap.exists ? snap.data() : null;
+      const dellaCasa = n?.visibility === "shared" && n.householdId
+        && (await db.collection("households").doc(n.householdId).get()).data()?.members?.includes(req.auth.uid);
+      if (!n || (n.ownerUid !== req.auth.uid && !dellaCasa)) {
         throw new HttpsError("permission-denied", "Nota non trovata");
       }
       const entry = { id: snap.id, ...snap.data() };

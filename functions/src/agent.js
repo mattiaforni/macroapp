@@ -501,7 +501,8 @@ export async function analyzeJournalEntry(db, entry, { uid, keys, provider, clie
       kind: a.kind,
       source: "agent",
       status: "pending",
-      payload: pulisci(a.kind, a.payload),
+      // Un evento da una nota di un progetto è di quel progetto (7/11): l'app lo scrive nell'evento su Google.
+      payload: { ...pulisci(a.kind, a.payload), ...(a.kind === "event" && progetto?.id ? { projectId: progetto.id } : {}) },
       summary: s(a.summary),
       sourceEntryId: entry.id,
       createdAt: FieldValue.serverTimestamp(),

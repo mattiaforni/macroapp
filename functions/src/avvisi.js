@@ -220,13 +220,13 @@ export async function avvisaDaApp(db, uid, { coll, id, evento, prova, prima, cop
 /**
  * Fine dell'analisi di una nota (funzione analyzeEntry): segna la nota come letta (anche se l'app nel frattempo
  * è stata chiusa e non può farlo lei) e, se l'app ha detto di essere passata in secondo piano mentre aspettava
- * (`journal_entries.avvisaAFine`), avvisa chi l'ha scritta. esito: { azioni, riepilogo, sintesiEsito, modello }
+ * (`journal_entries.avvisaAFine`), avvisa chi l'ha chiesta (chi l'ha scritta, o l'altra persona per una nota condivisa). esito: { azioni, riepilogo, sintesiEsito, modello }
  * oppure { errore: "messaggio" }.
  */
 export async function fineAnalisi(db, uid, entryId, esito = {}) {
   const ref = db.collection("journal_entries").doc(entryId);
   const n = (await ref.get()).data();
-  if (!n || n.ownerUid !== uid) return 0; // nota eliminata nel frattempo, o non di chi chiama
+  if (!n || (n.ownerUid !== uid && n.visibility !== "shared")) return 0; // eliminata nel frattempo, o non di chi chiama (analyzeEntry ha già controllato la casa)
   const fuori = n.avvisaAFine === true;
   await ref.update(esito.errore
     ? { analysisError: breve(esito.errore, 300), avvisaAFine: FieldValue.delete() }
@@ -255,7 +255,7 @@ export async function avvisaBanca(db, esiti) {
     const msg = e.interrotto
       ? { titolo: "Banca: collegamento interrotto", testo: "La banca ha chiuso il consenso: rinnovalo dalla pagina Banca.", url: "/#/banca", tag: "banca" }
       : e.created > 0
-      ? { titolo: "Spese dalla banca", testo: e.created === 1 ? "1 spesa da confermare" : `${e.created} spese da confermare`, url: "/#/proposte", tag: "banca" }
+      ? { titolo: "Spese dalla banca", testo: e.created === 1 ? "1 spesa da confermare" : `${e.created} spese da confermare`, url: "/#/spese/banca", tag: "banca" }
       : null;
     if (!msg || !e.uid) continue;
     try {

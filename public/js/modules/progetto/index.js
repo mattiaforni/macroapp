@@ -11,14 +11,14 @@
 // dal foglio del progetto).
 // Il + scrive una nota nel progetto, come nel Diario. Le note restano note del diario: cambia solo
 // dove le guardi. In un progetto condiviso le note sono della casa (7/11, core/note.js): ci sono anche quelle
-// dell'altra persona, col suo nome, da leggere.
+// dell'altra persona, col suo nome, e le modificate tutti e due.
 import { el, icon, toast, fascia, vuoto, attesa, toDate, meseLungo, fab, testoRicco, puntoToccato } from "../../core/ui.js";
 import { remove, watchVisible, VIS, where } from "../../core/db.js";
 import { seguiNote, notaMia } from "../../core/note.js";
 import { getHousehold, nomeDi } from "../../core/household.js";
 import { watchPending } from "../../components/proposals.js";
 import { sezioniSintesi, tonoStato, apriSintesi, apriVersioni } from "../../components/sintesi.js";
-import { apriNota, analizzaNota, analisiAutomatica, rigaNota, apriLettura, elencoNote, salvaNotaNuova, salvaModificaNota } from "../diario/index.js";
+import { apriNota, analizzaNota, analisiAutomatica, rigaNota, apriLettura, elencoNote, salvaNotaNuova, salvaModificaNota, ultimaModifica } from "../diario/index.js";
 import { eliminaFotoDi } from "../../components/foto.js";
 import { apriProgetto, rigaTask } from "../task/index.js";
 import { elencoDocumenti } from "../../components/documenti.js";
@@ -86,13 +86,13 @@ export function mount(container) {
   let casa = null;
   getHousehold().then((h) => { casa = h; if (note.some((n) => !notaMia(n))) render(); }).catch(() => {});
   const autoreDi = (n) => (notaMia(n) ? null : nomeDi(n.ownerUid, casa));
-  // Le azioni proposte si vedono sotto le proprie note: quelle dell'altra persona le decide lei (niente doppioni).
-  const proposteDi = (n) => (notaMia(n) ? proposte.filter((p) => p.sourceEntryId === n.id) : []);
+  const proposteDi = (n) => proposte.filter((p) => p.sourceEntryId === n.id);
 
   /** Foglio di lettura di una lezione: lo stesso del Diario. */
   function apriLezione(n) {
     apriLettura(n, {
       autore: autoreDi(n),
+      modificata: ultimaModifica(n, casa),
       proposte: proposteDi(n),
       onModifica: (fuoco) => modifica(n, fuoco),
       onAnalizza: () => analizza(n.id),

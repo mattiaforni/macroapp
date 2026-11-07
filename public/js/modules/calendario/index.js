@@ -9,7 +9,8 @@
 // Instrument Serif a sinistra e il giorno della settimana sotto, una fascia per mese; più eventi dello stesso
 // giorno condividono il numero. Un evento che non è della casa porta il nome del suo calendario, nel suo colore
 // (come l'etichetta del progetto nel Diario). `rigaEvento` la usa anche «Prossimi giorni» in cima al Diario.
-import { el, icon, toast, fab, vuoto, fascia, attesa, isoGiorno, fmtDate, meseLungo, COLORI } from "../../core/ui.js";
+import { el, icon, toast, fab, vuoto, fascia, attesa, isoGiorno, fmtDate, meseLungo, COLORI, pillolaProgetto } from "../../core/ui.js";
+import { watchVisible, readVisible } from "../../core/db.js";
 import { statoGoogle, messaggioGoogle, suGoogle } from "../../core/google.js";
 import {
   calendarioCasa, scegliCalendario, elencoCalendari, altriCalendari, scegliAltri, calendariVisti, calendariNoti, suCalendari,
@@ -36,6 +37,11 @@ const scrivi = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
 
 /** Il nome del calendario di un evento, nel suo colore; niente per quelli della casa. */
 const etichettaCalendario = (e) => (!e.casa && e.calNome ? el("span.progetto", {}, e.calNome) : null);
+/** Il progetto di un evento (7/11), col pallino del suo colore, tra i progetti che vedi. */
+function etichettaProgetto(e, progetti = []) {
+  const p = e.progetto ? progetti.find((x) => x.id === e.progetto) : null;
+  return p ? el("span.progetto.progetto--evento", { "data-colore": p.colore || null }, p.name) : null;
+}
 
 /**
  * Quando, in una riga: "18:00 – 19:00", "Tutto il giorno, fino al 2 nov", "Dal 25 ott, fino al 2 nov"
@@ -63,14 +69,14 @@ export function quandoEvento(e, giorno = giornoMostrato(e)) {
  * `conCalendario: false` no, es. con il filtro su quel calendario). Con `conGiorno: false` la colonna resta vuota
  * (stesso giorno della riga sopra). Toccandola si apre il foglio dell'evento.
  */
-export function rigaEvento(e, { giorno = giornoMostrato(e), conGiorno = true, conCalendario = true } = {}) {
+export function rigaEvento(e, { giorno = giornoMostrato(e), conGiorno = true, conCalendario = true, progetti = [] } = {}) {
   const d = new Date(`${giorno}T12:00:00`);
   const oggi = giorno === isoGiorno(new Date());
   return el("button.evento", { type: "button", "data-colore": !e.casa && e.colore ? e.colore : null, onclick: () => apriEvento(e) },
     el("div.evento__giorno", {}, conGiorno ? [el("b.display", {}, String(d.getDate())), el("small", {}, oggi ? "oggi" : GIORNI_BREVI[d.getDay()])] : null),
     el("div.evento__testo", {},
       el("div.evento__titolo", {}, e.titolo),
-      el("div.evento__quando", {}, conCalendario ? etichettaCalendario(e) : null, quandoEvento(e, giorno))),
+      el("div.evento__quando", {}, conCalendario ? etichettaCalendario(e) : null, etichettaProgetto(e, progetti), quandoEvento(e, giorno))),
   );
 }
 
@@ -127,11 +133,15 @@ function ripetizioni(giorno) {
 /** Foglio di un evento che nell'app si legge soltanto: quando, luogo, note, il calendario e il link a Google. */
 function apriLettura(e) {
   const d = new Date(`${e.giornoInizio}T12:00:00`);
+  // Il progetto dell'evento, quando arrivano i progetti (di solito subito: l'ascolto è già aperto).
+  const progettoLettura = e.progetto ? el("p.meta", { style: "margin-top:6px" }) : null;
+  if (progettoLettura) readVisible("projects").then((ps) => { const l = etichettaProgetto(e, ps); if (l) progettoLettura.replaceChildren(l); });
   const giorno = cap(d.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" }));
   openSheet({
     title: e.titolo,
     body: [
       el("p.meta", { style: "margin-top:12px", "data-colore": e.colore || null }, el("span.progetto", {}, e.calNome || "Calendario"), " · sola lettura"),
+      progettoLettura,
       el("p.lettura__testo", { style: "margin-top:10px" }, `${giorno} · ${quandoEvento(e, e.giornoInizio)}`),
       e.note ? el("div.nota__testo.lettura__testo", {}, e.note) : null,
       el("p.muted.small", { style: "margin-top:16px" }, calendariNoti().find((c) => c.id === e.calId)?.modificabile
@@ -149,13 +159,14 @@ function apriLettura(e) {
  * - poi il quando: «Tutto il giorno» con la spunta a destra, la riga dell'inizio e quella della fine (data a sinistra,
  *   ora a destra; si toccano e si apre il selettore del telefono), la ripetizione («Non si ripete», le altre si
  *   aprono sotto);
- * - poi il luogo e la descrizione (le note), ciascuno con la sua icona.
+ * - poi il progetto (7/11: pillole dei progetti col loro colore, «Nessuno»; si salva nell'evento su Google), il luogo
+ *   e la descrizione (le note), ciascuno con la sua icona.
  * Come in Google: un evento nuovo è con orario, dall'ora piena dopo adesso, e dura un'ora; spostando l'inizio la fine
  * lo segue (la durata resta), una fine prima dell'inizio nello stesso giorno passa al giorno dopo. Il fuso è sempre
  * quello dell'app (Europe/Rome), quindi la riga del fuso non c'è. Una ricorrenza di un evento che si ripete si cambia
  * solo per quella volta: la riga della ripetizione lo dice e non si apre.
  * Un evento di un calendario che nell'app si legge soltanto apre apriLettura.
- * prefill: { titolo, giorno, ora, tuttoIlGiorno, luogo, note, calId }. Esportato: lo usano il Diario e le note.
+ * prefill: { titolo, giorno, ora, tuttoIlGiorno, luogo, note, calId, progetto }. Esportato: lo usano il Diario e le note.
  */
 export function apriEvento(esistente = null, prefill = {}) {
   if (esistente && esistente.modificabile === false) { apriLettura(esistente); return; }
@@ -257,6 +268,21 @@ export function apriEvento(esistente = null, prefill = {}) {
   }
   disegnaQuando();
 
+  // ── Progetto (7/11): i progetti attivi che vedi, quando arrivano (di solito subito: l'ascolto è già aperto) ──
+  let progetto = esistente ? e.progetto || "" : prefill.progetto || "";
+  let progetti = [];
+  const sceltaProg = el("div.segmenti.ev-progetti");
+  const rigaProg = el("div.ev-riga.ev-riga--campo", { hidden: true }, icon("cartella"), sceltaProg);
+  const disegnaProg = () => sceltaProg.replaceChildren(
+    el("button.pillola", { type: "button", class: progetto ? "" : "on", onclick: () => { progetto = ""; disegnaProg(); } }, "Nessun progetto"),
+    ...progetti.map((p) => pillolaProgetto(p, { on: p.id === progetto, onclick: () => { progetto = p.id; disegnaProg(); } })),
+  );
+  readVisible("projects").then((ps) => {
+    progetti = ps.filter((p) => !p.archived || p.id === progetto).sort((a, b) => a.name.localeCompare(b.name));
+    rigaProg.hidden = !progetti.length;
+    disegnaProg();
+  });
+
   // ── Titolo, luogo, descrizione ──
   const titolo = el("input.nota__titolo-campo.ev-titolo", { value: e.titolo && e.titolo !== "(senza titolo)" ? e.titolo : prefill.titolo || "", placeholder: "Aggiungi titolo",
     "aria-label": "Titolo dell'evento", autocomplete: "off", autofocus: !esistente, enterkeyhint: "done" });
@@ -271,6 +297,7 @@ export function apriEvento(esistente = null, prefill = {}) {
       el("div.ev-gruppo.ev-gruppo--testa", {}, titolo, scrivibili.length > 1 ? sceltaCal : null),
       el("div.ev-gruppo", {}, tuttoBtn, rigaInizio, rigaFine, ripetiRiga, ripetiScelte),
       el("div.ev-gruppo", {},
+        rigaProg,
         el("label.ev-riga.ev-riga--campo", {}, icon("luogo"), luogo),
         el("label.ev-riga.ev-riga--campo", {}, icon("appunto"), note)),
       esistente ? el("div.foglio__piede", {},
@@ -287,7 +314,7 @@ export function apriEvento(esistente = null, prefill = {}) {
       const dati = {
         titolo: t, giorno, giornoFine: tutto ? (giornoFine > giorno ? giornoFine : "") : giornoFine,
         ora: tutto ? "" : ora, oraFine: tutto ? "" : oraFine, luogo: luogo.value.trim(), note: note.value.trim(),
-        ripeti: e.serie ? "" : ripeti,
+        ripeti: e.serie ? "" : ripeti, progetto,
       };
       try {
         const fatto = esistente ? await aggiornaEvento(e, dati, calId) : await creaEvento(dati, calId);
@@ -409,6 +436,7 @@ export function mount(container) {
   let errore = null;         // nessun calendario ha risposto
   let calendari = calendariNoti();
   let filtro = leggi(CHIAVE_FILTRO, "tutti");
+  let progetti = []; // per il nome e il colore del progetto di un evento
   const dati = attesa(["eventi"], render);
   // Con l'elenco dei calendari già noto (lo legge anche il Diario all'apertura) la pagina si disegna subito;
   // senza, aspetta: con le pillole che arrivano dopo, l'agenda scenderebbe.
@@ -488,7 +516,7 @@ export function mount(container) {
         nodi.push(fascia(cap(d.getFullYear() === anno ? nome.split(" ")[0] : nome)));
         giorno = null;
       }
-      nodi.push(rigaEvento(e, { giorno: gg, conGiorno: gg !== giorno, conCalendario: !scelto }));
+      nodi.push(rigaEvento(e, { giorno: gg, conGiorno: gg !== giorno, conCalendario: !scelto, progetti }));
       giorno = gg;
     }
     if (!visibili.length) {
@@ -520,5 +548,6 @@ export function mount(container) {
   render();
   carica();
 
-  return () => { stopEventi(); stopGoogle(); stopCalendari(); dati.ferma(); piu.remove(); };
+  const stopProgetti = watchVisible("projects", {}, (docs) => { progetti = docs; if (dati.pronta()) render(); });
+  return () => { stopEventi(); stopGoogle(); stopCalendari(); stopProgetti(); dati.ferma(); piu.remove(); };
 }

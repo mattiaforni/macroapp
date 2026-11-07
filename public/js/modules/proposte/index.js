@@ -1,5 +1,5 @@
 // Tutte le azioni in attesa, da qualunque origine. Non è nella barra in basso:
-// quelle dell'AI compaiono sotto le note del diario, quelle della banca andranno nelle spese.
+// quelle dell'AI compaiono sotto le note del diario, quelle della banca in Spese → «Dalla banca» (7/11).
 import { el, vuoto } from "../../core/ui.js";
 import { watchPending, renderAzione } from "../../components/proposals.js";
 

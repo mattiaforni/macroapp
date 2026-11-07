@@ -91,11 +91,15 @@ export function eliminaFotoDi(n) {
 export async function leggiFoto(n) {
   const voci = n.foto || [];
   if (!voci.length) return [];
-  // Le foto di una nota dell'altra persona si leggono come le cose condivise della casa (le regole lo chiedono).
-  const mie = !n.ownerUid || n.ownerUid === session.user.uid;
-  const docs = mie
-    ? await leggiDove(COLL, where("ownerUid", "==", session.user.uid), where("entryId", "==", n.id))
-    : await leggiDove(COLL, where("householdId", "==", session.householdId), where("visibility", "==", VIS.SHARED), where("entryId", "==", n.id));
+  // Le proprie, e per una nota condivisa anche quelle della casa (le regole chiedono la query così): in una nota
+  // condivisa le foto possono averle aggiunte tutti e due.
+  const [mie, casa] = await Promise.all([
+    leggiDove(COLL, where("ownerUid", "==", session.user.uid), where("entryId", "==", n.id)),
+    n.visibility === VIS.SHARED && session.householdId
+      ? leggiDove(COLL, where("householdId", "==", session.householdId), where("visibility", "==", VIS.SHARED), where("entryId", "==", n.id))
+      : [],
+  ]);
+  const docs = [...mie, ...casa];
   const per = new Map(docs.map((d) => [d.id, d]));
   return voci.map((v) => per.get(v.id)).filter(Boolean)
     .map((d) => ({ id: d.id, url: daBase64(d.dati), mini: d.mini ? daBase64(d.mini) : daBase64(d.dati), w: d.w, h: d.h }));

@@ -106,26 +106,26 @@ service cloud.firestore {
       allow delete: if signedIn() && canDelete();
     }
 
-    // Diario: le note di un progetto condiviso sono `shared` e le leggono i membri della casa (7/11); le altre
-    // `private`, solo del proprietario. Modifica ed eliminazione restano sempre e solo del proprietario, che non può
-    // cambiare né il proprietario né la casa (l'agente si fida di `householdId` per leggere le note della casa).
-    function soloMieNote() {
-      return resource.data.ownerUid == uid()
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['ownerUid', 'householdId']);
+    // Diario: le note di un progetto condiviso sono `shared` (7/11) e i membri della casa le leggono, le modificano e le
+    // eliminano come le altre cose condivise (la visibilità la cambia solo chi l'ha scritta); le altre sono `private`,
+    // solo del proprietario. Nessuno cambia proprietario né casa di una nota (l'agente si fida di `householdId` per
+    // leggere le note della casa).
+    function modificaNota() {
+      return canWrite() && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['ownerUid', 'householdId']);
     }
     match /journal_entries/{id} {
       allow read: if signedIn() && canRead();
       allow create: if signedIn() && validNew();
-      allow update: if signedIn() && soloMieNote();
-      allow delete: if signedIn() && resource.data.ownerUid == uid();
+      allow update: if signedIn() && modificaNota();
+      allow delete: if signedIn() && canDelete();
     }
 
     // Foto delle note (una per documento, JPEG in base64): con la visibilità della loro nota.
     match /journal_photos/{id} {
       allow read: if signedIn() && canRead();
       allow create: if signedIn() && validNew();
-      allow update: if signedIn() && soloMieNote();
-      allow delete: if signedIn() && resource.data.ownerUid == uid();
+      allow update: if signedIn() && modificaNota();
+      allow delete: if signedIn() && canDelete();
     }
 
     // Regole di classificazione delle spese (es. "ESSELUNGA → condivisa, categoria spesa"): per casa.

@@ -853,7 +853,13 @@ with sync_playwright() as p:
         pg.wait_for_selector(".lezione__titolo >> text=Assemblea del circolo con Marco")  # il titolo scritto dall'AI
         mailto = pg.locator(".azione a.pillola", has_text="Apri nella mail").get_attribute("href")
         assert mailto.startswith("mailto:marco%40example.com"), mailto
-        pg.locator(".azione", has_text="del circolo entro venerdì").locator("button[aria-label='Conferma']").click()
+        # Le azioni come le righe delle altre sezioni (7/11): il giorno a sinistra, il titolo da solo, l'importo a destra
+        assemblea = pg.locator(".azione").filter(has=pg.locator(".azione__titolo", has_text="Preparare l'assemblea"))
+        assert assemblea.locator(".riga__giorno b").inner_text() == "30" and assemblea.locator(".azione__titolo").inner_text() == "Preparare l'assemblea", assemblea.inner_text()
+        assert pg.locator(".azione", has_text="Comprare lampadine").locator(".riga__giorno b").count() == 0, "senza giorno, l'icona del tipo"
+        pg.wait_for_timeout(200)
+        shot(pg, "8b-azioni")
+        assemblea.locator("button[aria-label='Conferma']").click()
         pg.wait_for_timeout(400)
         pg.locator(".azione", has_text="Comprare lampadine").locator("button[aria-label='Conferma']").click()
         pg.wait_for_timeout(400)
@@ -1331,18 +1337,25 @@ with sync_playwright() as p:
         import re as _re
         assert date[0] == date[1] and _re.match(r"^[A-Z][a-zì]{2} \d{1,2} [a-z]{3} \d{4}$", date[0]), date
         pg.fill("#foglio input[placeholder='Aggiungi luogo']", "Circolo")
+        # Il progetto dell'evento (7/11): le pillole dei progetti col loro colore, «Nessun progetto» di partenza
+        assert "on" in pg.locator("#foglio .ev-progetti .pillola >> text=Nessun progetto").get_attribute("class")
+        pg.click("#foglio .ev-progetti .pillola >> text=Tennis")
         pg.wait_for_timeout(150)
         shot(pg, "19-evento-nuovo")
-        pg.keyboard.press("Enter")
+        pg.locator("#foglio input[placeholder='Aggiungi luogo']").press("Enter")
         pg.wait_for_selector(".evento >> text=Lezione di tennis")
         riga = pg.locator(".evento", has_text="Lezione di tennis")
         # Come le lezioni: il giorno in serif con «oggi» sotto, una fascia per mese
         assert riga.locator(".evento__giorno b.display").inner_text() == str(datetime.date.today().day), riga.inner_text()
         assert riga.locator(".evento__giorno small").inner_text().lower() == "oggi"
-        assert riga.locator(".evento__quando").inner_text() == "18:00 – 19:00 · Circolo", riga.inner_text()
+        assert riga.locator(".evento__quando").inner_text().endswith("18:00 – 19:00 · Circolo"), riga.inner_text()
+        tennis_id = pg.evaluate("[...window.__finto.coll('projects')].find(([, p]) => p.name === 'Tennis')[0]")
+        assert cal["eventi"][CAL_CASA]["ev1"]["extendedProperties"]["shared"]["ddProgetto"] == tennis_id, cal["eventi"][CAL_CASA]["ev1"]
+        etichetta = riga.locator(".progetto--evento")
+        assert etichetta.inner_text().lower() == "tennis" and etichetta.get_attribute("data-colore") == "giallo", "il progetto nella riga, nel suo colore"
         assert pg.locator("#view .fascia").count() == 1, "una fascia, quella del mese"
         assert cal["eventi"][CAL_CASA]["ev1"]["start"]["timeZone"] == "Europe/Rome", cal["eventi"][CAL_CASA]
-        assert riga.locator(".progetto").count() == 0, "con il filtro sulla casa niente nome del calendario"
+        assert riga.locator(".progetto:not(.progetto--evento)").count() == 0, "con il filtro sulla casa niente nome del calendario"
         # Modifica: tutto il giorno, titolo nuovo
         riga.click()
         pg.wait_for_selector("#foglio h2 >> text=Evento")
@@ -1352,7 +1365,8 @@ with sync_playwright() as p:
         assert pg.locator("#foglio .ev-riga .spunta.on").count() == 1 and pg.locator("#foglio .ev-valore--ora:visible").count() == 0, "tutto il giorno: niente ore"
         conferma(pg)
         pg.wait_for_selector(".evento >> text=Torneo")
-        assert pg.locator(".evento", has_text="Torneo").locator(".evento__quando").inner_text() == "Tutto il giorno · Circolo"
+        assert pg.locator(".evento", has_text="Torneo").locator(".evento__quando").inner_text().endswith("Tutto il giorno · Circolo")
+        assert pg.locator(".evento", has_text="Torneo").locator(".progetto--evento").inner_text().lower() == "tennis", "il progetto resta"
         assert "date" in cal["eventi"][CAL_CASA]["ev1"]["start"] and "dateTime" not in cal["eventi"][CAL_CASA]["ev1"]["start"], cal["eventi"][CAL_CASA]["ev1"]
         # La proposta dell'agente ora passa: l'evento compare tra tre giorni
         step[0] = "prossimi giorni nel diario"
@@ -1592,14 +1606,41 @@ with sync_playwright() as p:
         pg.locator("text=In attesa di contabilizzazione").scroll_into_view_if_needed()
         pg.wait_for_timeout(5500)  # il toast se ne va
         shot(pg, "13b-banca-scartati")
-        pg.click("button.pillola >> text=Azioni da confermare")
-        pg.wait_for_selector(".azione >> text=dalla banca")
-        assert pg.locator(".azione", has_text="dalla banca").count() == 3, "tre proposte dalla banca"
-        assert pg.locator(".azione", has_text="AMAZON EU").locator("text=Carta").count() == 1, "l'acquisto con la carta dice da quale conto viene"
+        # Le uscite da confermare stanno in Spese (7/11, richiesta di Mattia): «Dalla banca» accanto a «Ricorrenti», col numero
+        # in un pallino; la pagina Banca ci porta col foglio già aperto
+        pg.click("button.pillola >> text=Da confermare in Spese")
+        pg.wait_for_selector(".schede a[aria-current='page'][href='#/spese']")
+        pg.wait_for_selector("#foglio h2 >> text=Dalla banca")
+        voci = pg.locator("#foglio .banca-voce")
+        voci.first.wait_for()
+        assert voci.count() == 3, "tre uscite dalla banca"
+        assert pg.locator("#foglio .banca-voce", has_text="AMAZON EU").locator(".testo span").inner_text() == "Carta", "l'acquisto con la carta dice da quale conto viene"
+        assert pg.locator("button.pillola", has_text="Dalla banca").locator(".contatore").inner_text() == "3", "il pallino col numero"
         pg.wait_for_timeout(300)
         shot(pg, "14-banca-proposte")
-        pg.locator(".azione", has_text="dalla banca").first.locator("button[aria-label='Conferma']").click()
-        pg.click(".schede a[href='#/spese']")
+        # «Dividi a metà»: la spesa entra, divisa
+        pg.locator("#foglio .banca-voce", has_text="ESSELUNGA FIRENZE").locator("button >> text=Dividi a metà").click()
+        pg.wait_for_selector("text=Spesa aggiunta")
+        pg.wait_for_function("document.querySelectorAll('#foglio .banca-voce').length === 2")
+        # Una riga toccata: il foglio della spesa già compilato; cambio la divisione e la aggiungo
+        pg.locator("#foglio .banca-voce", has_text="Enel Energia").locator(".riga").click()
+        pg.wait_for_selector("#foglio h2 >> text=Aggiungi spesa")
+        assert pg.input_value("#foglio input[placeholder='Descrizione']") == "Enel Energia" and pg.input_value("#foglio input[placeholder='0,00']") == "61,3"
+        pg.click("#foglio button.pillola >> text=Pagato da te e diviso")
+        conferma(pg)
+        pg.wait_for_selector(".riga >> text=Enel Energia")
+        spese_db = pg.evaluate("[...window.__finto.coll('expenses').values()].map((e) => ({ d: e.description, split: e.split, source: e.source, bankTxId: e.bankTxId || null }))")
+        enel = next(e for e in spese_db if e["d"] == "Enel Energia")
+        assert enel == {"d": "Enel Energia", "split": "full", "source": "bank", "bankTxId": "eb_prova_2"}, enel
+        assert pg.evaluate("window.__finto.coll('proposals').get('eb_prova_2').status") == "accepted", "la proposta della riga è confermata"
+        assert pg.locator("button.pillola", has_text="Dalla banca").locator(".contatore").inner_text() == "1"
+        # «Solo mia»: la toglie da qui, senza spesa; il pallino se ne va
+        pg.click("button.pillola >> text=Dalla banca")
+        pg.locator("#foglio .banca-voce", has_text="AMAZON EU").locator("button >> text=Solo mia").click()
+        pg.wait_for_selector("#foglio >> text=Niente da confermare")
+        assert pg.locator("button.pillola", has_text="Dalla banca").locator(".contatore").count() == 0
+        assert not any(e["d"] == "AMAZON EU" for e in pg.evaluate("[...window.__finto.coll('expenses').values()].map((e) => ({ d: e.description }))"))
+        pg.click("#foglio button[aria-label='Indietro']")
         pg.wait_for_selector(".riga >> text=ESSELUNGA FIRENZE")
 
         # ── Banca: la banca chiude il consenso prima della scadenza → stato interrotto e rinnovo ──
@@ -1901,13 +1942,24 @@ with sync_playwright() as p:
         assert pg.locator(".voce-nota", has_text="Direttivo del circolo").locator(".lezione__autore").count() == 0, "le mie senza nome"
         pg.wait_for_timeout(200)
         shot(pg, "26-diario-progetto-condiviso")
-        # La sua nota si legge soltanto: niente Modifica, Rianalizza, Elimina, niente tocco per scrivere
+        # La sua nota la modifico anch'io (seconda richiesta del 7/11); in fondo, appena visibile, chi l'ha modificata per ultimo
         sala.locator("button.lezione").click()
         pg.wait_for_selector("#foglio h2 >> text=Sala libera il giovedì")
         assert pg.locator("#foglio .meta").first.inner_text().startswith("di Giulia · "), pg.locator("#foglio .meta").first.inner_text()
-        assert pg.locator("#foglio .btn--conferma").count() == 0 and pg.locator("#foglio button >> text=Rianalizza").count() == 0, "niente Modifica né Rianalizza"
-        assert pg.locator("#foglio .scrivibile").count() == 0, "niente tocco per scrivere"
-        pg.wait_for_selector("#foglio >> text=L'ha scritta Giulia")
+        assert pg.locator("#foglio .nota__modifica").count() == 0, "mai modificata a mano: niente riga"
+        pg.click("#foglio .btn--conferma")
+        pg.wait_for_selector("#foglio h2 >> text=Nota")
+        # Solo i progetti condivisi e niente «Nessuno»: la nota resta visibile a Giulia
+        assert [t.strip() for t in pg.locator("#foglio .segmenti", has=pg.locator(".pillola--progetto")).first.locator(".pillola").all_inner_texts()] == ["Circolo"]
+        pg.fill("#foglio textarea", "Ho sentito il presidente: la sala è libera il giovedì sera e il martedì")
+        conferma(pg)
+        pg.wait_for_function("window.__finto.coll('journal_entries').get('nota-giulia').text.endsWith('il martedì')")
+        g = pg.evaluate("(() => { const n = window.__finto.coll('journal_entries').get('nota-giulia'); return { da: n.modificataDa, at: !!n.modificataAt, owner: n.ownerUid, vis: n.visibility }; })()")
+        assert g == {"da": "uid-test", "at": True, "owner": "uid-giulia", "vis": "shared"}, g
+        sala.locator("button.lezione").click()
+        pg.wait_for_selector("#foglio .nota__modifica")
+        assert pg.locator("#foglio .nota__modifica").inner_text().startswith("Ultima modifica: tu, oggi alle "), pg.locator("#foglio .nota__modifica").inner_text()
+        assert pg.locator("#foglio .foglio__barra button", has_text="Analizza").count() == 1, "si analizza anche la sua"
         pg.wait_for_timeout(200)
         shot(pg, "26b-nota-di-giulia")
         pg.click("#foglio button[aria-label='Indietro']")

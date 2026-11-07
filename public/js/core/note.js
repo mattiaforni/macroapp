@@ -1,7 +1,9 @@
 // Chi vede le note del diario (7/11, richiesta di Mattia: «rendi le note dei progetti condivisi condivise anch'esse»).
-// Una nota di un progetto condiviso è della casa, come il progetto: la leggono tutti e due, nel Diario e nella pagina
-// del progetto, con il nome di chi l'ha scritta; la modifica, la rianalizza e la elimina solo chi l'ha scritta. Le
-// altre note (senza progetto o di un progetto solo tuo) restano solo di chi le scrive. Le foto seguono la nota.
+// Una nota di un progetto condiviso è della casa, come il progetto: la leggono, la modificano, la rianalizzano e la
+// eliminano tutti e due (seconda richiesta del 7/11: «le note condivise possono modificarle tutte»), nel Diario e nella
+// pagina del progetto, con il nome di chi l'ha scritta; in fondo al foglio della nota chi l'ha modificata per ultimo
+// (`modificataDa`, `modificataAt`). La visibilità la cambia solo chi l'ha scritta. Le altre note (senza progetto o di
+// un progetto solo tuo) restano solo di chi le scrive. Le foto seguono la nota.
 //
 // La visibilità si decide quando la nota si salva (`visibilitaNota`) e si riallinea:
 // - all'avvio (`allineaNote`, al più ogni 6 ore per telefono): le proprie note dei progetti condivisi ancora private

@@ -135,6 +135,8 @@ function daGoogle(e, c) {
     originale,
     // Una ricorrenza di un evento che si ripete (la lettura le espande, `singleEvents`): si modifica solo questa volta.
     serie: e.recurringEventId || "",
+    // Il progetto dell'app a cui appartiene (7/11): id in una proprietà dell'evento, che Google conserva e non mostra.
+    progetto: e.extendedProperties?.shared?.[PROPRIETA_PROGETTO] || "",
     modificabile: !!c.modificabile && !e.locked && (originale || !!e.guestsCanModify),
   };
 }
@@ -146,6 +148,9 @@ const quando = (giorno, ora) => `${giorno}T${ora}:00`;
  * Ripetizioni che si scelgono nel foglio dell'evento (7/11, come in Google Calendar): la regola parte dal giorno
  * dell'evento (settimana = stesso giorno della settimana, mese = stesso giorno del mese, anno = stessa data).
  */
+/** Chiave della proprietà dell'evento con l'id del progetto (extendedProperties.shared). */
+const PROPRIETA_PROGETTO = "ddProgetto";
+
 export const RIPETIZIONI = {
   giorno: "RRULE:FREQ=DAILY",
   settimana: "RRULE:FREQ=WEEKLY",
@@ -158,11 +163,12 @@ export const RIPETIZIONI = {
  * Il corpo di un evento per Google da { titolo, giorno, giornoFine?, ora?, oraFine?, luogo?, note?, ripeti? }.
  * Senza `ora` è di un giorno intero (fino a `giornoFine` compreso, o lo stesso giorno); con `ora` dura fino a
  * `oraFine` di `giornoFine` (o dello stesso giorno), o un'ora. `ripeti`: una chiave di RIPETIZIONI; assente, il
- * corpo non tocca la ripetizione.
+ * corpo non tocca la ripetizione. `progetto`: id del progetto ("" = nessuno); assente, non si tocca.
  */
 function perGoogle(d) {
   const corpo = { summary: d.titolo, location: d.luogo || "", description: d.note || "" };
   if (d.ripeti && RIPETIZIONI[d.ripeti]) corpo.recurrence = [RIPETIZIONI[d.ripeti]];
+  if (d.progetto !== undefined) corpo.extendedProperties = { shared: { [PROPRIETA_PROGETTO]: d.progetto || "" } };
   if (!d.ora) {
     const ultimo = new Date(`${d.giornoFine || d.giorno}T12:00:00`);
     ultimo.setDate(ultimo.getDate() + 1);

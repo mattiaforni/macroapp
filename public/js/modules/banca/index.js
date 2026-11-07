@@ -1,7 +1,7 @@
 // Banca: collegamento del conto tramite Enable Banking (PSD2) e stato della lettura dei movimenti.
 // Il consenso si dà sul sito della banca: da qui si sceglie la banca e si parte; al ritorno
 // (/banca?code=…, messo da parte in app.js) si conclude il collegamento. Ogni uscita letta dal
-// conto diventa una proposta di spesa personale in «Azioni da confermare»: la spesa, se confermata,
+// conto diventa una proposta di spesa personale da confermare in Spese → «Dalla banca» (7/11): la spesa, se confermata,
 // nasce condivisa. Tutto il lavoro con Enable Banking lo fa la function `bank` (functions/index.js).
 import { doc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js";
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-functions.js";
@@ -274,7 +274,7 @@ export function mount(container) {
         c.lastError && !fermo ? el("p.errore", { style: "margin-top:10px" }, c.lastError) : null,
         el("div.segmenti", {},
           fermo ? null : leggi,
-          el("button.pillola", { type: "button", onclick: () => vaiA("proposte") }, icon("scintilla"), "Azioni da confermare"),
+          el("button.pillola", { type: "button", onclick: () => vaiA("spese", "banca") }, icon("spese"), "Da confermare in Spese"),
         ),
         fermo ? null : inAttesa(c.lettura?.inAttesa),
         scartati(c.scartati),

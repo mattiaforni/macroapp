@@ -11,7 +11,7 @@
 //   sourceEntryId  la nota del diario da cui nasce (se viene dall'agente)
 //   visibility  "shared" se riguarda la casa/coppia, "private" se è solo tua
 
-import { el, icon, toast, toDate, giornoRelativo, testoRicco } from "../core/ui.js";
+import { el, icon, toast, toDate, testoRicco, colonnaGiorno, fmtMoney } from "../core/ui.js";
 import { create, update, watchVisible, readVisible, VIS, where } from "../core/db.js";
 import { session } from "../core/auth.js";
 import { aggiungiVoci } from "../modules/lista/index.js";
@@ -88,7 +88,8 @@ const APPLICA = {
   async event(p) {
     const x = p.payload || {};
     if (!x.due) throw new Error("giorno mancante");
-    await creaEvento({ titolo: x.text || p.summary || "Evento", giorno: x.due, ora: x.time || "", luogo: x.place || "", note: "" });
+    await creaEvento({ titolo: x.text || p.summary || "Evento", giorno: x.due, ora: x.time || "", luogo: x.place || "", note: "",
+      ...(x.projectId ? { progetto: x.projectId } : {}) }); // da una nota di un progetto: l'evento è del progetto
     return "Evento nel calendario della casa";
   },
   async draft(p) {
@@ -115,6 +116,11 @@ export async function accept(p) {
     toast(e.motivo === "nessun-calendario" ? e.message : /scaduto|non-collegato/.test(e.motivo || "") ? "Google non è collegato: collegalo dal menu" : "Non sono riuscito ad applicarla", { ms: 5000 });
     update(COLL, p.id, { status: "pending" });
   }
+}
+
+/** La proposta è stata applicata altrove (es. la spesa della banca aggiunta dal suo foglio, già compilato): solo il segno. */
+export function segnaAccettata(p) {
+  update(COLL, p.id, { status: "accepted", decidedBy: session.user.uid });
 }
 
 export function reject(p) {
@@ -169,37 +175,52 @@ function sintesiProposta(x) {
   return el("div", {}, apri, corpo);
 }
 
-/** Una riga d'azione: icona, tipo, descrizione, conferma/scarta. */
+/** Il giorno di una proposta, se ne ha uno: la spesa (giorno del movimento), l'evento, la scadenza del task. */
+export function giornoDi(p) {
+  const x = p.payload || {};
+  if (p.kind === "expense") return toDate(x.date);
+  if ((p.kind === "event" || p.kind === "task") && /^\d{4}-\d{2}-\d{2}$/.test(x.due || "")) return new Date(`${x.due}T12:00:00`);
+  return null;
+}
+
+/** Il titolo di una proposta: quello che entrerà nell'app, senza l'importo (a destra) né la data (a sinistra). */
+export function titoloDi(p) {
+  const x = p.payload || {};
+  if (p.kind === "expense") return x.description || x.text || String(p.summary || "").replace(/\s*·\s*[\d.,]+\s*€\s*$/, "") || "Spesa";
+  if (p.kind === "event" || p.kind === "task") return x.text || p.summary || "";
+  return p.summary || x.text || x.name || "";
+}
+
+/**
+ * Una riga d'azione (7/11, richiesta di Mattia: «più chiare»), come le righe delle altre sezioni: a sinistra il giorno
+ * (numero in serif e sotto oggi, ieri, il giorno della settimana o il mese) o, senza giorno, l'icona del tipo; in mezzo
+ * il tipo in piccolo, il titolo e i dettagli (conto, ora e luogo, progetto e persone); a destra l'importo di una spesa,
+ * poi conferma e scarta.
+ */
 export function renderAzione(p) {
   const tipo = TIPI[p.kind] || { nome: p.kind, icona: "scintilla" };
-  const dettagli = [];
-  if (p.kind === "task") {
-    const x = p.payload || {};
-    const extra = [x.project && `progetto ${x.project}`, x.due && `entro ${x.due.split("-").reverse().join("/")}`, x.people].filter(Boolean).join(" · ");
-    if (extra) dettagli.push(el("span.meta", { style: "display:block" }, extra));
-  }
-  if (p.kind === "event") {
-    const x = p.payload || {};
-    const extra = [x.due && giornoRelativo(new Date(`${x.due}T12:00:00`)), x.time || "tutto il giorno", x.place].filter(Boolean).join(" · ");
-    if (extra) dettagli.push(el("span.meta", { style: "display:block" }, extra));
-  }
-  if (p.source === "bank") {
-    // Dalla banca: giorno del movimento e conto, per riconoscerlo.
-    const x = p.payload || {};
-    const d = toDate(x.date);
-    const extra = [d && giornoRelativo(d), x.account].filter(Boolean).join(" · ");
-    if (extra) dettagli.push(el("span.meta", { style: "display:block" }, extra));
-  }
-  return el("div.azione", {},
-    icon(tipo.icona),
+  const x = p.payload || {};
+  const giorno = giornoDi(p);
+  let dettagli = [];
+  if (p.kind === "task") dettagli = [x.project && `progetto ${x.project}`, x.people];
+  if (p.kind === "event") dettagli = [x.time || "tutto il giorno", x.place];
+  // Una spesa confermata è pagata da te e divisa a metà (si cambia poi dal suo foglio): lo dice la riga.
+  if (p.kind === "expense") dettagli = [x.account, "da dividere a metà"];
+  dettagli = dettagli.filter(Boolean);
+  const importo = p.kind === "expense" && Number(x.amount) > 0 ? el("div.azione__importo", {}, fmtMoney(Number(x.amount))) : null;
+  return el("div.azione", { class: giorno ? "azione--giorno" : "" },
+    giorno ? colonnaGiorno(giorno) : el("div.azione__icona", {}, icon(tipo.icona)),
     el("div.testo", {},
       el("small", {}, tipo.nome, p.source === "bank" ? " · dalla banca" : "", p.visibility === VIS.SHARED ? " · condiviso" : ""),
-      p.summary,
-      ...dettagli,
-      p.kind === "draft" ? bozza(p.payload || {}) : null,
-      p.kind === "project_summary" ? sintesiProposta(p.payload || {}) : null,
+      el("b.azione__titolo", {}, titoloDi(p)),
+      dettagli.length ? el("span.meta.azione__dettagli", {}, dettagli.join(" · ")) : null,
+      p.kind === "draft" ? bozza(x) : null,
+      p.kind === "project_summary" ? sintesiProposta(x) : null,
     ),
-    el("button.sì", { type: "button", "aria-label": "Conferma", onclick: (e) => { e.currentTarget.disabled = true; accept(p); } }, icon("spunta")),
-    el("button.no", { type: "button", "aria-label": "Scarta", onclick: () => reject(p) }, icon("chiudi")),
+    importo,
+    el("div.azione__scelte", {},
+      el("button.sì", { type: "button", "aria-label": "Conferma", onclick: (e) => { e.currentTarget.disabled = true; accept(p); } }, icon("spunta")),
+      el("button.no", { type: "button", "aria-label": "Scarta", onclick: () => reject(p) }, icon("chiudi")),
+    ),
   );
 }

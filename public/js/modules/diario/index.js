@@ -1,6 +1,6 @@
 // Diario: scrivi o detta (microfono della tastiera). Le note sono tue; quelle di un progetto condiviso sono della
-// casa, come il progetto (7/11, richiesta di Mattia): le leggete tutti e due, con il nome di chi l'ha scritta, ma la
-// modifica, la rianalizza e la elimina solo chi l'ha scritta (core/note.js).
+// casa, come il progetto (7/11, richieste di Mattia): le leggete e le modificate tutti e due, con il nome di chi l'ha
+// scritta e, in fondo al foglio, chi l'ha modificata per ultimo (core/note.js).
 // Con l'AI collegata, ogni nota salvata viene letta dall'agente, che propone sotto di essa
 // le azioni che contiene: task, voci per la lista, spese, voci del manuale, bozze di mail.
 // Niente entra nell'app senza la tua spunta. Nella nota stessa l'agente scrive il titolo e le persone
@@ -37,7 +37,8 @@ import { httpsCallable } from "https://www.gstatic.com/firebasejs/11.3.0/firebas
 import { functions } from "../../core/firebase.js";
 import { el, icon, toast, fascia, vuoto, attesa, toDate, meseLungo, fab, fabDoppio, testoRicco, isoGiorno, stessoGiorno, fmtDate, puntoToccato, pillolaProgetto } from "../../core/ui.js";
 import { openSheet, scriviDa } from "../../components/sheet.js";
-import { create, update, remove, watchVisible, readVisible, VIS, where } from "../../core/db.js";
+import { create, update, remove, watchVisible, readVisible, VIS, where, serverTimestamp } from "../../core/db.js";
+import { session } from "../../core/auth.js";
 import { seguiNote, visibilitaNota, notaMia } from "../../core/note.js";
 import { getHousehold, nomeDi } from "../../core/household.js";
 import { watchPending, renderAzione } from "../../components/proposals.js";
@@ -76,13 +77,13 @@ const leggi = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch (e)
 const scrivi = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
 
 /** Pillole per scegliere il progetto di una nota. Ritorna { node, valore() }. */
-function sceltaProgetto(progetti, iniziale) {
+function sceltaProgetto(progetti, iniziale, { senzaNessuno = false } = {}) {
   let scelto = iniziale || null;
   const node = el("div.segmenti", { style: "padding-top:0;flex-wrap:wrap" });
-  const disegna = () => node.replaceChildren(
-    el("button.pillola", { type: "button", class: scelto ? "" : "on", onclick: () => { scelto = null; disegna(); } }, "Nessuno"),
+  const disegna = () => node.replaceChildren(...[ // replaceChildren scriverebbe «null»
+    senzaNessuno ? null : el("button.pillola", { type: "button", class: scelto ? "" : "on", onclick: () => { scelto = null; disegna(); } }, "Nessuno"),
     ...progetti.map((p) => pillolaProgetto(p, { on: p.id === scelto, onclick: () => { scelto = p.id; disegna(); } })),
-  );
+  ].filter(Boolean));
   disegna();
   return { node, valore: () => scelto };
 }
@@ -110,8 +111,11 @@ export function apriNota({ esistente = null, testo = "", progetti = [], projectI
   titolo.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); area.focus(); } });
   const persone = sceltaPersone({ perNota: esistente?.persone || [] });
   const foto = sceltaFoto({ esistente });
-  const attivi = progetti.filter((p) => !p.archived || p.id === esistente?.projectId).sort((a, b) => a.name.localeCompare(b.name));
-  const progetto = sceltaProgetto(attivi, esistente ? esistente.projectId : projectId);
+  // Una nota dell'altra persona si sposta solo tra i progetti condivisi: resta visibile a lei (e senza «Nessuno»).
+  const altrui = esistente && !notaMia(esistente);
+  const attivi = progetti.filter((p) => (!p.archived || p.id === esistente?.projectId) && (!altrui || p.visibility === VIS.SHARED))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const progetto = sceltaProgetto(attivi, esistente ? esistente.projectId : projectId, { senzaNessuno: altrui });
   // Il riepilogo scritto dall'AI si corregge qui; se lo svuoti, torna a vedersi il testo.
   const riepilogo = esistente?.riepilogo ? el("textarea", { rows: Math.min(16, esistente.riepilogo.split("\n").length + 1) }) : null;
   if (riepilogo) riepilogo.value = esistente.riepilogo;
@@ -150,7 +154,7 @@ export function apriNota({ esistente = null, testo = "", progetti = [], projectI
       // titolo e il resto le note. Il giorno è quello della nota (oggi, se non l'hai cambiato).
       const t = titolo.value.trim();
       const [prima, ...resto] = text.split("\n");
-      apriEvento(null, { titolo: t || prima.trim(), note: t ? text : resto.join("\n").trim(), giorno: isoGiorno(quando) });
+      apriEvento(null, { titolo: t || prima.trim(), note: t ? text : resto.join("\n").trim(), giorno: isoGiorno(quando), progetto: progetto.valore() || "" });
     }
   }
 
@@ -275,19 +279,35 @@ export function salvaNotaNuova(dati, foto, progetti) {
  * della scrittura.
  */
 export function salvaModificaNota(n, dati, foto, progetti) {
-  const visibility = visibilitaNota(dati.projectId, progetti);
+  // Una nota dell'altra persona resta condivisa (il foglio le offre solo i progetti condivisi): la visibilità la cambia
+  // solo chi l'ha scritta.
+  const visibility = notaMia(n) ? visibilitaNota(dati.projectId, progetti) : n.visibility || VIS.PRIVATE;
   const cambia = visibility !== (n.visibility || VIS.PRIVATE);
-  const salvata = update(COLL, n.id, cambia ? { ...dati, visibility } : dati);
+  // Chi l'ha modificata per ultimo e quando (si legge in fondo al foglio della nota condivisa).
+  const firma = { modificataDa: session.user.uid, modificataAt: serverTimestamp() };
+  const salvata = update(COLL, n.id, cambia ? { ...dati, ...firma, visibility } : { ...dati, ...firma });
   if (cambia) visibilitaFoto(n.foto || [], visibility);
   applicaFoto(n.id, n.foto || [], foto, salvata, visibility);
   return salvata;
 }
+
+/** Ultima modifica a mano di una nota condivisa: { chi, quando } per apriLettura, o null. `casa` per i nomi. */
+export const ultimaModifica = (n, casa) => (n.visibility === VIS.SHARED && n.modificataDa
+  ? { chi: n.modificataDa === session.user.uid ? "tu" : nomeDi(n.modificataDa, casa), quando: n.modificataAt } : null);
 
 /** Analisi automatica attiva (scelta sul telefono, pillola in alto nel Diario). */
 export const analisiAutomatica = () => leggi(CHIAVE_AUTO, "1") === "1";
 
 const pulisci = (r) => r.replace(/^[-*•]\s+/, "").replace(/\*\*/g, "").trim();
 const unaRiga = (t) => String(t || "").replace(/\s+/g, " ").trim();
+/** «oggi alle 18:40», «ieri alle 9:05», «5 nov alle 21:10». */
+function quandoBreve(t) {
+  const d = toDate(t);
+  if (!d) return "adesso";
+  const ieri = new Date(); ieri.setDate(ieri.getDate() - 1);
+  const giorno = stessoGiorno(d, new Date()) ? "oggi" : stessoGiorno(d, ieri) ? "ieri" : fmtDate(d);
+  return `${giorno} alle ${d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}`;
+}
 
 /**
  * Titolo e anteprima di una nota per l'elenco. Il titolo è quello della nota (dell'AI o scritto a mano); senza,
@@ -366,17 +386,17 @@ export function rigaNota(n, { conGiorno = true, conOra = false, progetto = null,
  * Toccando il titolo o un testo (31/10, richiesta di Mattia) si scrive lì, senza passare da Modifica: il foglio della
  * nota prende il posto di questo con il cursore dove hai toccato (`onModifica({ campo, pos })`). Modifica resta per
  * persone, progetto e giorno.
+ * Una nota condivisa (7/11) la modificano tutti e due: `autore` è il nome di chi l'ha scritta, se non sei tu;
+ * `modificata` = { chi, quando } dell'ultima modifica a mano (`modificataDa`, `modificataAt`), detta in piccolo in fondo.
  */
-export function apriLettura(n, { progetto = null, proposte = [], autore = null, onModifica, onAnalizza, onElimina }) {
+export function apriLettura(n, { progetto = null, proposte = [], autore = null, modificata = null, onModifica, onAnalizza, onElimina }) {
   const d = toDate(n.createdAt) || new Date();
   const persone = Array.isArray(n.persone) ? n.persone.filter((p) => p?.nome) : [];
-  // Una nota condivisa dell'altra persona (`autore`) si legge soltanto: niente tocchi per scrivere, niente pulsanti.
-  const mia = !autore;
   const tocca = (campo, sorgente) => (e) => {
-    if (!mia || e.target.closest("a, button")) return;
+    if (e.target.closest("a, button")) return;
     onModifica?.({ campo, pos: puntoToccato(e, sorgente) });
   };
-  const scrivibile = mia ? ".scrivibile" : "";
+  const scrivibile = ".scrivibile";
   let aperta = false;
   const trascrizione = el(`div.nota__testo.nota__testo--trascrizione${scrivibile}`, { hidden: true, onclick: tocca("testo", n.text) }, n.text);
   const apri = el("button.nota__apri", { type: "button", "aria-expanded": "false", onclick: () => {
@@ -400,15 +420,16 @@ export function apriLettura(n, { progetto = null, proposte = [], autore = null, 
       n.riepilogo ? trascrizione : null,
       sintesiInvariata(n),
       proposte.length ? el("div.azioni-ai", { style: "margin-top:14px" }, ...proposte.map(renderAzione)) : null,
-      mia ? el("div.foglio__piede", {},
+      // Chi l'ha modificata per ultimo (note condivise, richiesta di Mattia del 7/11): appena visibile, in fondo.
+      modificata ? el("p.nota__modifica", {}, `Ultima modifica: ${modificata.chi}, ${quandoBreve(modificata.quando)}`) : null,
+      el("div.foglio__piede", {},
         el("button.btn", { onclick: () => { sheet.close(); onAnalizza?.(); } }, icon("scintilla"), n.analyzed ? "Rianalizza" : "Analizza"),
         el("button.btn.btn--pericolo", { "aria-label": "Elimina nota", onclick: () => { sheet.close(); onElimina?.(); } }, icon("cestino")),
-      ) : el("p.muted.small", { style: "margin-top:18px" }, `L'ha scritta ${autore}: la modifica solo chi l'ha scritta.`),
+      ),
     ],
     confirmLabel: "Modifica",
-    onConfirm: mia ? () => { onModifica?.(); } : null,
+    onConfirm: () => { onModifica?.(); },
   });
-  if (!mia) return;
   // Il titolo sta nella testata del foglio: anche lui si tocca per scriverlo.
   const testa = document.querySelector("#foglio .foglio__testa h2");
   testa?.classList.add("scrivibile");
@@ -500,7 +521,7 @@ export function mount(container) {
   // Evento nuovo senza passare dal Calendario (2/11, scelta B di Mattia): tondo col calendario sopra il +, come
   // «Scansiona» nella Lista. Solo se c'è un calendario in cui scrivere, come il + della pagina Calendario.
   const eventoFab = el("button.fab.fab--sopra", { type: "button", "aria-label": "Nuovo evento", title: "Nuovo evento", hidden: true,
-    onclick: () => apriEvento() }, icon("calendario"));
+    onclick: () => apriEvento(null, { progetto: filtro !== "tutte" ? filtro : "" }) }, icon("calendario"));
   let lasciaDoppio = null;
   let smontato = false; // caricaProssimi può finire dopo lo smontaggio: niente data-fab-doppio rimasto acceso
   function disegnaEventoFab() {
@@ -526,7 +547,7 @@ export function mount(container) {
     if (!vicini.length) { prossimi.replaceChildren(); return; }
     let giorno = null;
     const righe = vicini.slice(0, MAX_PROSSIMI).map(({ e, g: gg }) => {
-      const r = rigaEvento(e, { giorno: gg, conGiorno: gg !== giorno });
+      const r = rigaEvento(e, { giorno: gg, conGiorno: gg !== giorno, progetti });
       giorno = gg;
       return r;
     });
@@ -551,13 +572,13 @@ export function mount(container) {
   let casa = null;
   getHousehold().then((h) => { casa = h; if (note.some((n) => !notaMia(n))) render(); }).catch(() => {});
   const autoreDi = (n) => (notaMia(n) ? null : nomeDi(n.ownerUid, casa));
-  // Le azioni proposte si vedono sotto le proprie note: quelle dell'altra persona le decide lei (niente doppioni).
-  const proposteDi = (n) => (notaMia(n) ? proposte.filter((p) => p.sourceEntryId === n.id) : []);
+  const proposteDi = (n) => proposte.filter((p) => p.sourceEntryId === n.id);
 
   function leggiNota(n) {
     apriLettura(n, {
       progetto: progettoDi(n.projectId),
       autore: autoreDi(n),
+      modificata: ultimaModifica(n, casa),
       proposte: proposteDi(n),
       onModifica: (fuoco) => modifica(n, fuoco),
       onAnalizza: () => analizza(n.id),

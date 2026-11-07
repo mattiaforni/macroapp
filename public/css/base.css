@@ -460,6 +460,13 @@ a.pillola { text-decoration: none; }
 /* ───────────── Spese: saldo ───────────── */
 
 .saldo { padding: 18px 0 4px; }
+/* «Dalla banca» (7/11): quante uscite ci sono da confermare, in un pallino come una notifica */
+.contatore { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--frutto); color: var(--carta);
+  font-size: 11px; font-weight: 600; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums; }
+.banca-voce { border-bottom: 1px solid var(--linea); }
+.banca-voce > .riga { border-bottom: none; padding-bottom: 4px; }
+.banca-voce > .riga .riga__giorno { align-self: flex-start; padding-top: 4px; }
+.banca-voce__scelte { padding: 0 0 12px 102px; flex-wrap: wrap; } /* allineate al testo della riga (giorno e pallino a sinistra) */
 .saldo p { font-size: 17px; }
 .saldo .cifra { font-family: var(--display); font-size: 34px; line-height: 1.1; }
 .saldo .cifra.credito { color: var(--verde); }
@@ -492,11 +499,19 @@ a.pillola { text-decoration: none; }
 /* Azioni proposte dall'AI sotto la nota */
 .azioni-ai { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
 .azione {
-  display: flex; align-items: flex-start; gap: 10px; padding: 9px 10px 9px 12px; border-radius: var(--r);
+  display: flex; align-items: flex-start; gap: 10px; padding: 10px 10px 10px 6px; border-radius: var(--r);
   background: var(--accento-tinta);
 }
-.azione > svg { width: 17px; height: 17px; color: var(--accento); margin-top: 2px; }
+/* 7/11: come le righe delle altre sezioni. A sinistra il giorno (.riga__giorno, colonnaGiorno in ui.js) o l'icona del
+   tipo nella stessa colonna; il titolo separato dall'importo, che sta a destra; i dettagli in piccolo sotto. */
+.azione .riga__giorno { padding-top: 3px; }
+.azione__icona { width: 40px; flex: none; display: flex; justify-content: center; padding-top: 2px; color: var(--accento); }
+.azione__icona svg { width: 18px; height: 18px; }
 .azione .testo { flex: 1; min-width: 0; font-size: 14px; }
+.azione__titolo { display: block; font-size: 15px; font-weight: 500; line-height: 1.3; margin-top: 1px; overflow-wrap: anywhere; }
+.azione__dettagli { display: block; margin-top: 2px; }
+.azione__importo { flex: none; font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; padding-top: 17px; white-space: nowrap; }
+.azione__scelte { display: flex; gap: 2px; flex: none; padding-top: 10px; }
 .azione .testo small { display: block; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--accento); }
 .azione .sì, .azione .no { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex: none; }
 .azione .sì { background: var(--accento); color: var(--su-accento); }
@@ -658,6 +673,8 @@ html[data-colore] .pagina-progetto .btn--piatto svg { color: var(--c-testo); }
 .elenco--progetto .voce-nota[data-colore] .lezione__giorno b { color: var(--c-testo); }
 .fab[data-colore] { background: var(--c-pieno); color: var(--c-su); }
 .segmenti[data-colore] > .btn--piatto svg { color: var(--c-testo); }
+/* Nota condivisa: chi l'ha modificata per ultimo, appena visibile in fondo al foglio di lettura */
+.nota__modifica { font-size: 11.5px; color: var(--inchiostro-3); margin-top: 22px; }
 /* Nota condivisa scritta dall'altra persona: il suo nome accanto all'ora */
 .lezione__autore { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; color: var(--inchiostro-2); }
 .lezione__autore svg { width: 13px; height: 13px; color: var(--inchiostro-3); }
@@ -739,6 +756,11 @@ html[data-colore] .pagina-progetto .btn--piatto svg { color: var(--c-testo); }
 .ev-riga--campo > svg { margin-top: 10px; }
 .ev-riga--campo .linea-input { flex: 1; min-width: 0; border-bottom-color: var(--linea); }
 .ev-riga--campo textarea { resize: none; field-sizing: content; min-height: 0; line-height: 1.45; }
+.ev-progetti { flex: 1; min-width: 0; flex-wrap: wrap; padding: 4px 0; }
+/* Progetto di un evento (7/11): nel suo colore, col pallino, nella riga del quando e nel foglio di sola lettura */
+.progetto--evento[data-colore] { color: var(--c-testo); }
+.progetto--evento[data-colore]::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--c-pieno); margin-right: 5px; vertical-align: 1px; }
 .ev-opzioni { padding: 0 0 6px 36px; }
 .ev-opzione { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 11px 0;
   text-align: left; font-size: 15px; color: var(--inchiostro-2); border-top: 1px solid var(--linea); }

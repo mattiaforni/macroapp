@@ -83,6 +83,20 @@ export function giornoRelativo(d) {
 
 export const nomeProprio = (s) => String(s || "").trim().split(/\s+/)[0] || "";
 
+const GIORNI_SETTIMANA = ["dom", "lun", "mar", "mer", "gio", "ven", "sab"];
+/**
+ * Colonna del giorno a sinistra di una riga, come nel Diario, nei Task e nel Calendario (7/11: anche le azioni da
+ * confermare): il numero in serif e sotto «oggi», «ieri», «domani», il giorno della settimana entro una settimana, se
+ * no il mese. Senza data la colonna resta, vuota, perché i testi stiano allineati. Stile in base.css (.riga__giorno).
+ */
+export function colonnaGiorno(d) {
+  if (!d) return el("div.riga__giorno");
+  const inizio = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((inizio(d) - inizio(new Date())) / 864e5);
+  const sotto = diff === 0 ? "oggi" : diff === -1 ? "ieri" : diff === 1 ? "domani" : Math.abs(diff) < 7 ? GIORNI_SETTIMANA[d.getDay()] : MESI_BREVI[d.getMonth()];
+  return el("div.riga__giorno", {}, el("b.display", {}, String(d.getDate())), el("small", {}, sotto));
+}
+
 // ───────────── Componenti piccoli ─────────────
 
 /** Due pillole "Solo io / Condiviso". Ritorna il nodo; onChange("private"|"shared"). */
