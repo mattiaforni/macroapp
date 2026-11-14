@@ -320,3 +320,24 @@ Notifiche push con Firebase Cloud Messaging, senza chiave VAPID propria (quella 
   `node functions/strumenti/prova-avvisi.mjs`.
 - **Costi**: due lavori di Cloud Scheduler in tutto (`syncBank`, `giroAvvisi`: nel gratuito, tre per account di fatturazione);
   ogni giro legge il documento della casa, i due profili e lo stato (~1.200 letture al giorno), qualche chiamata a Calendar.
+
+## Prove e pubblicazione
+
+Ogni push su `main` passa da `.github/workflows/deploy.yml`, che prima chiama `.github/workflows/prove.yml` e pubblica
+solo se il job `prove` è passato (`needs`). Un'esecuzione alla volta (`concurrency: deploy-firebase`): un commit vecchio
+non si pubblica mai dopo uno nuovo; con più push ravvicinati resta in coda solo l'ultimo.
+- **Functions** (`functions/strumenti/prova-*.mjs`, senza rete): banca, avvisi, prodotti, Chiedi, contributo a OFF.
+- **Regole di Firestore** (`prove/regole/prova-regole.mjs`): `@firebase/rules-unit-testing` sull'emulatore vero, avviato da
+  `firebase emulators:exec` con un progetto `demo-macroapp` (l'emulatore non parla con il progetto vero). Due case (A con due
+  membri, B con uno) e una terza casa del primo membro: una casa non legge né scrive le cose dell'altra; i documenti privati
+  non si vedono, non si modificano e non si cercano dall'altro membro; le note e le foto condivise le modificano ed eliminano
+  tutti e due, ma nessuno cambia `ownerUid` o `householdId` (nemmeno verso una casa propria) e la visibilità la cambia solo chi
+  ha scritto; `off_account`, `google_tokens`, `avvisi_stato`, `drive_testi` chiusi all'app; `consumi` letti solo dal
+  proprietario (anche un mese senza documento) e mai scritti; `domande` solo del proprietario e sempre private.
+  Versioni fissate in `prove/regole/package.json` (firebase-tools compreso), Java 21 per l'emulatore.
+- **App** (`prove/costruisci.py` + `prove/prova.py`): il flusso completo in Chromium con il Firebase finto; esce con 1 se uno
+  step si ferma o se la pagina ha un errore non gestito o un `console.error`.
+Se una prova non passa, le schermate di `prove/_schermate` vanno nell'artifact `schermate` dell'esecuzione (7 giorni; il
+repository è pubblico, ma le schermate mostrano solo i dati finti delle prove). In emergenza il deploy si lancia a mano con
+«Emergenza: pubblica senza prove» (`senza_prove`): il job delle prove risulta saltato e il deploy lo segnala con un avviso.
+Sugli altri rami `prove.yml` gira da solo a ogni push: una modifica si prova su GitHub prima di portarla su `main`.

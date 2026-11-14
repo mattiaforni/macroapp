@@ -1,0 +1,78 @@
+# Prove, prima di ogni pubblicazione (14/11). Le chiama deploy.yml (il deploy aspetta che passino) e girano da sole
+# sui push degli altri rami, così una modifica si può provare prima di portarla su main. Si lanciano anche a mano:
+# Actions → Prove → Run workflow.
+#
+# 1. prove delle functions (functions/strumenti, senza rete);
+# 2. regole di Firestore sull'emulatore (prove/regole, progetto «demo-»: non tocca quello vero);
+# 3. flusso dell'app in Chromium (prove/costruisci.py + prove/prova.py, Firebase finto).
+# Se qualcosa non va, le schermate di prove/_schermate restano come artifact dell'esecuzione per 7 giorni
+# (Actions → l'esecuzione → Artifacts → schermate).
+name: Prove
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  push:
+    branches-ignore: [main]
+
+jobs:
+  prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Dipendenze functions
+        run: cd functions && npm ci
+
+      - name: Prove delle functions
+        run: |
+          for t in prova-banca prova-avvisi prova-prodotti prova-chiedi prova-contributo; do
+            echo "::group::$t"
+            node functions/strumenti/$t.mjs || { echo "::error title=Prove delle functions::$t non passa"; exit 1; }
+            echo "::endgroup::"
+          done
+
+      # L'emulatore di Firestore è un programma Java; firebase-tools lo scarica la prima volta (in cache le volte dopo).
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: emulatori-${{ hashFiles('prove/regole/package-lock.json') }}
+
+      - name: Prove delle regole di Firestore
+        run: |
+          npm ci --prefix prove/regole
+          npm run prova --prefix prove/regole
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Chromium e font per la prova dell'app
+        run: |
+          pip install playwright==1.63.0
+          python -m playwright install --with-deps chromium
+          npm install --prefix prove
+
+      - name: Prova dell'app
+        run: |
+          python3 prove/costruisci.py
+          python3 prove/prova.py
+
+      - name: Schermate della prova
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: schermate
+          path: prove/_schermate
+          retention-days: 7
+          if-no-files-found: ignore

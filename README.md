@@ -64,7 +64,7 @@ Condividi → Aggiungi alla schermata Home), aperta da lì.
 
 1. Console Google Cloud → IAM e amministrazione → Account di servizio → crea `github-deploy` con i ruoli *Editor*, *Amministratore Firebase*, *Utente account di servizio*, *Amministratore Secret Manager*.
 2. Crea una chiave JSON e incollane il contenuto nel secret GitHub `FIREBASE_SERVICE_ACCOUNT` (Settings → Secrets and variables → Actions). Poi cancella il file scaricato.
-3. Da quel momento ogni push su `main` pubblica hosting, regole, indici e functions. Per rilanciare a mano: Actions → Deploy Firebase → Run workflow.
+3. Da quel momento ogni push su `main` fa girare le prove (`.github/workflows/prove.yml`) e, se passano, pubblica hosting, regole, indici e functions. Per rilanciare a mano: Actions → Deploy Firebase → Run workflow (con la spunta «Emergenza: pubblica senza prove» le prove si saltano: solo per le emergenze). Se le prove non passano, le schermate sono nell'esecuzione, sotto Artifacts → schermate.
    Il deploy attiva anche la People API e tiene aggiornato il segreto GOOGLE_OAUTH_CLIENT con ID e secret del client
    OAuth web configurato in Firebase Authentication (provider Google).
 

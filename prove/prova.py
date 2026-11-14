@@ -22,6 +22,7 @@ threading.Thread(target=srv.serve_forever, daemon=True).start()
 
 errors = []
 step = ["avvio"]
+completo = False
 def shot(pg, name): pg.screenshot(path=f"{OUT}/{name}.png")
 def conferma(pg): pg.click("#foglio .btn--conferma")
 
@@ -2265,9 +2266,15 @@ with sync_playwright() as p:
         assert pg.evaluate("window.__segno") == 2, "stessa versione: niente ricarica"
         open(versione, "w").write('export const VERSION = "dev";\n')
         print("FLUSSO COMPLETO")
+        completo = True
     except Exception as e:
         shot(pg, "errore")
         print(f"FALLITO allo step {step[0]}: {e}")
     b.close()
 srv.shutdown()
 print("ERRORS:", "\n".join(errors) if errors else "none")
+# Esito per il deploy (deploy.yml, job «prove»): 1 se il flusso si è fermato o se la pagina ha avuto un errore non
+# gestito (pageerror) o un console.error. I console.warning restano: alcuni li provocano le prove (risposte perse).
+gravi = [e for e in errors if "] pageerror:" in e or "] console.error:" in e]
+if gravi: print("ERRORI DELLA PAGINA:", len(gravi))
+sys.exit(0 if completo and not gravi else 1)

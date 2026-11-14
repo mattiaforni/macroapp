@@ -1,6 +1,9 @@
-# Deploy su Firebase a ogni push su main (hosting, regole e indici Firestore, functions).
+# Deploy su Firebase a ogni push su main (hosting, regole e indici Firestore, functions), dopo le prove
+# (prove.yml: functions, regole di Firestore sull'emulatore, flusso dell'app in Chromium). Se le prove non passano
+# non si pubblica niente, e le schermate restano come artifact dell'esecuzione.
 # Si può anche lanciare a mano: Actions → Deploy Firebase → Run workflow
-# (serve per esempio dopo aver aggiornato un segreto in Secret Manager).
+# (serve per esempio dopo aver aggiornato un segreto in Secret Manager). Solo per le emergenze, la spunta
+# «Emergenza: pubblica senza prove» salta le prove.
 #
 # Richiede il secret di repository FIREBASE_SERVICE_ACCOUNT: il JSON della chiave
 # dell'account di servizio github-deploy (vedi README → Deploy automatico).
@@ -10,15 +13,33 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      senza_prove:
+        description: "Emergenza: pubblica senza prove"
+        type: boolean
+        default: false
 
+# Un'esecuzione alla volta, prove comprese: così un commit vecchio non si pubblica mai dopo uno nuovo. Se ne arrivano
+# altre mentre una gira, resta in coda solo l'ultima (che contiene anche le precedenti).
 concurrency:
   group: deploy-firebase
   cancel-in-progress: false
 
 jobs:
+  prove:
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.senza_prove) }}
+    uses: ./.github/workflows/prove.yml
+
   deploy:
+    needs: prove
+    # Con le prove passate; senza prove solo con la spunta dell'emergenza (allora «prove» risulta saltato).
+    if: ${{ !cancelled() && (needs.prove.result == 'success' || (needs.prove.result == 'skipped' && github.event_name == 'workflow_dispatch' && inputs.senza_prove)) }}
     runs-on: ubuntu-latest
     steps:
+      - name: Pubblicazione senza prove
+        if: ${{ needs.prove.result == 'skipped' }}
+        run: echo "::warning title=Emergenza::Pubblicazione senza prove, chiesta a mano"
+
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4

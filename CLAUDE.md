@@ -19,8 +19,11 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
   Google: collegamento una tantum con le spunte Contatti, Calendario e Drive, permessi di un'ora, `src/google/account.js`), `avvisa` (notifiche push,
   `src/avvisi.js`), `prodotto` (scheda di un prodotto da Open Food Facts con l'indice, cache in `prodotti/{ean}`;
   `src/prodotti/`, i cosmetici da Open Beauty Facts con `cosmetici.js`; con `scansione: true` anche la cronologia `scansioni`), `chiedi` (14/11: domande sui propri dati, Claude con strumenti di sola lettura, `src/chiedi.js`; stato e risposta su `domande/{id}`), `revisioneSettimana` (domenica 18:47, `src/settimana.js`), `contribuisci` (1/11: «Completa» su Open Food Facts / Open Beauty Facts: `leggi` le foto con Claude, `invia` i soli campi mancanti e le foto con l'account OFF dell'utente in `off_account/{uid}`, solo server; `src/prodotti/contributo.js`), `syncBank` (lettura quotidiana alle 7:15, poi le notifiche della banca a chi non riceve il riepilogo), `giroAvvisi` (ogni 5 minuti: eventi nuovi nel calendario della casa, promemoria degli eventi, riepilogo del mattino alle 7:30; `src/avvisi-calendario.js`). firebase-admin, agente e banca si importano dentro i gestori, non all'avvio.
-- **Pubblicazione**: push su `main` → `.github/workflows/deploy.yml` pubblica hosting,
-  regole, indici e functions (secret `FIREBASE_SERVICE_ACCOUNT`). Si può rilanciare a mano.
+- **Pubblicazione**: push su `main` → `.github/workflows/deploy.yml` fa girare le prove (`prove.yml`: functions,
+  regole di Firestore sull'emulatore, flusso dell'app in Chromium) e, solo se passano, pubblica hosting, regole, indici e
+  functions (secret `FIREBASE_SERVICE_ACCOUNT`). Prove non passate → niente pubblicazione, schermate nell'artifact
+  `schermate` dell'esecuzione. Si può rilanciare a mano; la spunta «Emergenza: pubblica senza prove» salta le prove.
+  Le prove girano da sole anche sui push degli altri rami.
 - **Segreti** in Secret Manager (ANTHROPIC_API_KEY, GEMINI_API_KEY, ENABLE_BANKING_*):
   li gestisce Mattia dalla console; dopo un aggiornamento serve un nuovo deploy.
   ANTHROPIC_API_KEY (dal 27/10) è una chiave dell'organizzazione Console dell'account col piano Max, collegata
@@ -142,19 +145,34 @@ per le funzioni elencate nell'ultimo passo di `deploy.yml`: una nuova funzione o
 
 ## Prove
 
+Le stesse prove girano prima di ogni pubblicazione (`.github/workflows/prove.yml`): una prova rossa ferma il deploy.
 ```
 npm install --prefix prove        # una volta: font per le schermate
 python3 prove/costruisci.py       # copia public/ con Firebase finto in memoria
-python3 prove/prova.py            # flusso completo in Chromium, schermate in prove/_schermate
+python3 prove/prova.py            # flusso completo in Chromium, schermate in prove/_schermate (esce con 1 se si ferma
+                                  # o se la pagina ha un errore non gestito / console.error)
+npm ci --prefix prove/regole && npm run prova --prefix prove/regole   # regole di Firestore sull'emulatore (serve Java)
 node functions/strumenti/prova-banca.mjs   # quali movimenti bancari diventano proposte (servono le dipendenze di functions)
 node functions/strumenti/prova-avvisi.mjs  # cosa dicono le notifiche e a chi (anche giro del calendario con Google finto e riepilogo)
 node functions/strumenti/prova-prodotti.mjs # indice dei prodotti su schede OFF costruite a mano
 node functions/strumenti/prova-chiedi.mjs   # Chiedi senza rete: strumenti, privacy, fonti, giro con un Claude finto; revisione e costi
 python3 prove/additivi.py                   # rigenera la tabella degli additivi dalla tassonomia OFF
 ```
-Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggiorna `prove/finto/firebase.js`.
+Il Firebase finto di `prova.py` non applica le regole: per quelle c'è `prove/regole/prova-regole.mjs` (emulatore vero, due
+case, note e foto condivise, collezioni del server). Una regola nuova o cambiata → un caso lì. Se usi nuove funzioni dell'SDK,
+aggiorna `prove/finto/firebase.js`. In questa sessione Python Playwright si installa con
+`pip install --break-system-packages playwright==1.63.0` (stessa versione del Chromium in /opt/pw-browsers).
 
 ## Stato (14 novembre 2026) e prossimi passi
+
+- [x] **Prove prima della pubblicazione** (14/11, richiesta di Mattia). Il deploy aspetta il job `prove` (`prove.yml`, chiamato
+      da deploy.yml): le cinque prove delle functions, le regole di Firestore sull'emulatore (`prove/regole`, nuove: 34 casi —
+      case separate, documenti privati, note e foto condivise modificabili da tutti e due senza cambiare `ownerUid`,
+      `householdId` né, se non chi l'ha scritta, la visibilità; `off_account`, `consumi`, `domande` e le altre collezioni del
+      server) e il flusso dell'app in Chromium, che ora esce con 1 quando si ferma. Se fallisce, le schermate sono nell'artifact
+      «schermate» dell'esecuzione (7 giorni). Emergenza: Actions → Deploy Firebase → Run workflow con «Emergenza: pubblica
+      senza prove». Un'esecuzione alla volta: un commit vecchio non si pubblica dopo uno nuovo. Il deploy ora dura ~8 minuti
+      in più.
 
 - [x] **Aggiornamento più agile** (14/11, Mattia: «non c'è modo di avere una modalità più agile di aggiornamento?»). Le pagine
       arrivano già alla riapertura dell'app, ma un'app rimasta aperta in background restava sulla versione vecchia (il service
