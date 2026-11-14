@@ -288,6 +288,7 @@ const D = {
   manuale: '<path d="M12 6.5C10 5 7 4.5 3.5 5v13c3.5-.5 6.5 0 8.5 1.5 2-1.5 5-2 8.5-1.5V5C17 4.5 14 5 12 6.5z"/><path d="M12 6.5v13"/>',
   impostazioni: '<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>',
   piu: '<path d="M12 5v14M5 12h14"/>',
+  cerca: '<circle cx="10.5" cy="10.5" r="6"/><path d="m15 15 5 5"/>',
   indietro: '<path d="M19 12H5M11 6l-6 6 6 6"/>',
   chiudi: '<path d="M6 6l12 12M18 6 6 18"/>',
   spunta: '<path d="m5 12.5 4.5 4.5L19 7"/>',

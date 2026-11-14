@@ -915,10 +915,11 @@ with sync_playwright() as p:
         pg.evaluate("window.scrollTo(0, 0)")
         pg.wait_for_timeout(300)
         shot(pg, "9b-diario-persone")
-        # Il foglio di lettura: Giulia apre la rubrica, Anna Google Contatti (in rubrica non entra da sola)
+        # Il foglio di lettura: dal 14/11 ogni persona porta alle sue note nel Diario (da lì la scheda in rubrica, o
+        # Google Contatti per Anna, che in rubrica non entra da sola)
         riga.locator("button.lezione").click()
         pg.wait_for_selector("#foglio h2 >> text=Smartphone e adolescenti")
-        assert pg.locator("#foglio .lettura__persone a.pillola", has_text="Anna Rossetti").get_attribute("href") == "https://contacts.google.com/person/c4"
+        assert pg.locator("#foglio .lettura__persone button.pillola", has_text="Anna Rossetti").get_attribute("title") == "Note con Anna Rossetti"
         assert pg.locator("#foglio .lettura__persone button.pillola", has_text="Giulia Bianchi").count() == 1
         pg.wait_for_timeout(150)
         shot(pg, "9c-nota-lettura")
@@ -2298,6 +2299,96 @@ with sync_playwright() as p:
         azione.locator("button[aria-label='Conferma']").click()
         pg.wait_for_selector("text=Task segnato fatto")
         assert pg.evaluate(f"window.__finto.coll('tasks').get('{tid}').done") is True
+
+        # ── Ricerca nel Diario e note di una persona (14/11, scelte di Mattia: lente in testata, tocco sulla persona) ──
+        step[0] = "ricerca nel diario"
+        pg.evaluate("location.hash = '#/diario'")  # a questo punto la barra in basso è personalizzata, senza Diario
+        pg.wait_for_selector("#page-title >> text=Diario")
+        pg.click("#view .segmenti .pillola >> text=Tutte")
+        # Dati: 120 note di settembre, sotto una nota d'agosto che non è tra le ultime 100; una nota del Tennis con gli
+        # accenti; una lunga con la parola in fondo; Bruno Neri in rubrica e in tre note (due nelle persone, una nel testo).
+        pg.evaluate("""(tennis) => { const F = window.__finto, U = 'uid-test', hid = F.coll('users').get(U).householdId;
+          const J = F.coll('journal_entries');
+          const n = (id, giorno, x) => J.set(id, { ownerUid: U, householdId: hid, visibility: 'private', analyzed: true, modello: 'sonnet', createdAt: new Date(giorno), temi: [], persone: [], ...x });
+          for (let i = 0; i < 120; i++) n('riemp' + i, `2026-09-${String(1 + (i % 28)).padStart(2, '0')}T10:${String(i % 60).padStart(2, '0')}:00`, { titolo: `Appunto ${i}`, text: 'Niente di speciale.' });
+          n('zaff', '2026-08-02T12:00:00', { titolo: 'Ricetta di casa', text: 'Risotto allo zafferano della nonna: brodo caldo, burro alla fine.' });
+          n('accenti', '2026-11-10T18:00:00', { projectId: tennis, visibility: 'shared', titolo: 'Perché il rovescio non va', text: 'Il rovescio a due mani si blocca.' });
+          n('rov2', '2026-11-09T18:00:00', { titolo: 'Video sul rovescio', text: 'Un video sul rovescio di Federer.' });
+          n('lunga', '2026-11-08T18:00:00', { titolo: 'Domenica', text: 'Siamo andati al lago con gli amici e abbiamo camminato tutta la mattina lungo la riva, poi pranzo al rifugio con polenta e funghi, e la sera a casa una frittata con le erbe del giardino.' });
+          F.coll('manual_entries').set('bruno', { ownerUid: U, householdId: hid, visibility: 'private', type: 'person', name: 'Bruno Neri', phone: '+39 333 000 1111', category: '', notes: '', createdAt: new Date() });
+          n('b1', '2026-11-07T20:00:00', { titolo: 'Cena con Bruno', text: 'Bruno ha parlato del nuovo lavoro.', persone: [{ nome: 'Bruno Neri', voceId: 'bruno' }] });
+          n('b2', '2026-11-03T20:00:00', { titolo: 'Calcetto', text: 'Partita del giovedì.', persone: [{ nome: 'Bruno Neri' }] });
+          n('b3', '2026-10-20T20:00:00', { titolo: 'Trasloco', text: 'Ci ha aiutato Bruno Neri con il furgone.' });
+          n('b4', '2026-10-18T20:00:00', { titolo: 'Un altro Bruno', text: 'Bruno del bar ha cambiato orari.' });
+          F.notify(); }""", tennis_id)
+        pg.wait_for_selector(".voce-nota[data-id='accenti']", timeout=6000)
+        assert pg.locator(".voce-nota[data-id='zaff']").count() == 0, "la nota d'agosto non è tra le ultime 100"
+        pg.click("header button[aria-label='Cerca nelle note']")
+        pg.wait_for_selector("#view .cerca-campo:not([hidden])")
+        assert pg.evaluate("document.activeElement?.getAttribute('aria-label')") == "Cerca nelle note", "la lente apre la tastiera"
+        assert pg.locator("#view .stato-ai").is_hidden() and pg.locator("#view .prossimi").is_hidden(), "cercando, stato e prossimi giorni spariscono"
+        campo = pg.locator("#view .cerca-campo input")
+        def trovate(): return pg.evaluate("[...document.querySelectorAll('#view .voce-nota')].map((v) => v.dataset.id)")
+        campo.fill("zafferano")
+        pg.wait_for_selector(".voce-nota[data-id='zaff'] mark.trovato", timeout=6000)
+        assert trovate() == ["zaff"], trovate()
+        assert pg.locator("#view .cerca-esito").inner_text().startswith("1 nota"), pg.locator("#view .cerca-esito").inner_text()
+        campo.fill("perche ROVESCIO")  # senza accenti, maiuscole indifferenti, tutte e due le parole
+        pg.wait_for_selector(".voce-nota[data-id='accenti'] .lezione__titolo mark.trovato", timeout=4000)
+        assert trovate() == ["accenti"], trovate()
+        assert pg.locator(".voce-nota[data-id='accenti'] .lezione__titolo mark.trovato").all_inner_texts() == ["Perché", "rovescio"]
+        campo.fill("frittata")  # in fondo a un testo lungo: l'estratto parte da lì
+        pg.wait_for_selector(".voce-nota[data-id='lunga'] .lezione__anteprima mark.trovato", timeout=4000)
+        assert pg.locator(".voce-nota[data-id='lunga'] .lezione__anteprima").inner_text().startswith("…"), "estratto intorno alla parola"
+        campo.fill("rovescio")
+        pg.wait_for_function("document.querySelectorAll('#view .voce-nota[data-id=\"accenti\"], #view .voce-nota[data-id=\"rov2\"]').length === 2", timeout=4000)
+        pg.wait_for_timeout(300)
+        shot(pg, "29-ricerca")
+        pg.click("#view .segmenti .pillola >> text=Tennis")  # la ricerca si combina col progetto
+        pg.wait_for_function("!document.querySelector('#view .voce-nota[data-id=\"rov2\"]')", timeout=4000)
+        assert "accenti" in trovate() and "in Tennis" in pg.locator("#view .cerca-esito").inner_text()
+        pg.click("#view .segmenti .pillola >> text=Tutte")
+        campo.fill("xyzzy")
+        pg.wait_for_selector("#view .cerca-esito >> text=Nessuna nota per «xyzzy»", timeout=4000)
+        assert pg.locator("#view .voce-nota").count() == 0 and pg.locator("#view .vuoto").count() == 0, "una riga, non la pagina vuota"
+        pg.click("#view button[aria-label='Chiudi la ricerca']")
+        pg.wait_for_selector("#view .cerca-campo", state="hidden")
+        assert pg.locator("#view .stato-ai").is_visible() and pg.locator(".voce-nota[data-id='zaff']").count() == 0, "chiusa, il Diario com'era"
+
+        step[0] = "note di una persona"
+        pg.locator(".voce-nota[data-id='b1'] button.lezione").click()
+        pg.wait_for_selector("#foglio h2 >> text=Cena con Bruno")
+        pg.click("#foglio .lettura__persone button.pillola >> text=Bruno Neri")
+        pg.wait_for_selector("#view .pillola--persona >> text=Bruno Neri", timeout=6000)
+        pg.wait_for_selector("#foglio", state="hidden", timeout=4000)
+        pg.wait_for_function("document.querySelectorAll('#view .voce-nota').length === 3", timeout=6000)
+        assert sorted(trovate()) == ["b1", "b2", "b3"], f"nelle persone o con nome e cognome nel testo, non «Bruno del bar»: {trovate()}"
+        assert pg.locator("#view .cerca-esito").inner_text() == "3 note con Bruno Neri · scheda in rubrica", pg.locator("#view .cerca-esito").inner_text()
+        pg.wait_for_timeout(300)
+        shot(pg, "29b-persona")
+        pg.click("#view .cerca-esito button >> text=scheda in rubrica")
+        pg.wait_for_selector("#foglio .voce__note >> text=Note con Bruno Neri", timeout=6000)
+        pg.wait_for_selector("#foglio .voce__note small >> text=3 note", timeout=6000)
+        pg.wait_for_timeout(200)
+        shot(pg, "29c-persona-rubrica")
+        pg.click("#foglio button[aria-label='Indietro']")
+        pg.click("#view .pillola--persona")
+        pg.wait_for_selector("#view .pillola--persona", state="detached", timeout=4000)
+        assert pg.locator(".voce-nota[data-id='b3']").count() == 1 and pg.locator("#view .cerca-esito").is_hidden()
+        # Da un'altra pagina: «Note con …» nella voce della rubrica porta al Diario filtrato.
+        pg.click(".schede a[href='#/lista']")
+        pg.wait_for_selector("#page-title >> text=Lista")
+        pg.evaluate("""async () => { const m = await import('/js/modules/manuale/index.js'); const { leggiUno } = await import('/js/core/db.js');
+          m.apriVoceManuale(await leggiUno('manual_entries', 'bruno')); }""")
+        pg.click("#foglio .voce__note")
+        pg.wait_for_selector("#page-title >> text=Diario", timeout=6000)
+        pg.wait_for_selector("#view .pillola--persona >> text=Bruno Neri", timeout=6000)
+        pg.wait_for_function("document.querySelectorAll('#view .voce-nota').length === 3", timeout=6000)
+        # Nessun «null» scritto nella pagina (replaceChildren(null) lo scrive: successo due volte il 14/11)
+        nulli = pg.evaluate("""() => { const g = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); const out = [];
+          for (let t = g.nextNode(); t; t = g.nextNode()) if (t.textContent.trim() === 'null') out.push(t.parentElement.className); return out; }""")
+        assert not nulli, f"«null» scritto in: {nulli}"
+        pg.click("#view .pillola--persona")
 
         # ── Versione nuova mentre l'app è aperta (14/11): tornando nell'app, con un foglio aperto la chiede; senza, si
         #    ricarica da sola (e una volta ricaricata non ricomincia) ──

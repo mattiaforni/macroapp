@@ -943,3 +943,18 @@ button.tessera__indice:active, .tessera .altro:active { background: rgba(255,255
 .domanda__segui { margin-top: 10px; }
 /* Il campo per continuare una domanda è una riga, che cresce col testo. */
 .domanda__segui textarea { min-height: 0; }
+
+/* Ricerca nel Diario (14/11): campo con la sola linea sotto, parole trovate evidenziate, filtro per persona. */
+.cerca-campo { display: flex; align-items: center; gap: 10px; margin-top: 6px; padding: 8px 0 7px; border-bottom: 1px solid var(--linea-forte); color: var(--inchiostro-2); }
+.cerca-campo[hidden] { display: none; }
+.cerca-campo > svg { width: 20px; height: 20px; flex: none; }
+.cerca-campo input { flex: 1; min-width: 0; border: 0; background: none; padding: 0; font: inherit; font-size: 18px; color: var(--inchiostro); outline: none; }
+.cerca-campo input::-webkit-search-cancel-button { display: none; }
+.cerca-campo__chiudi { flex: none; display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; margin-right: -6px; background: none; border: 0; color: var(--inchiostro-3); }
+.cerca-campo__chiudi svg { width: 18px; height: 18px; }
+mark.trovato { background: var(--accento-tinta); color: inherit; border-radius: 3px; padding: 0 1px; }
+.cerca-esito { margin: 10px 0 0; font-size: 13px; color: var(--inchiostro-2); }
+.cerca-esito .link { background: none; border: 0; padding: 0; font: inherit; color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.pillola.pillola--persona { background: var(--accento-tinta); color: var(--accento); border-color: var(--accento); }
+.pillola.pillola--persona svg { width: 14px; height: 14px; }
+.voce__note { margin-top: 6px; }

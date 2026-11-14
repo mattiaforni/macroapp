@@ -486,6 +486,9 @@ export function onSnapshot(q, cb) {
     const ord = q.parts.find((p) => p.orderBy);
     let docs = [...coll(q.coll).entries()].filter(([, d]) => matches(d, cond));
     if (ord) docs.sort(([, a], [, b]) => { const x = a[ord.orderBy], y = b[ord.orderBy]; const r = x > y ? 1 : x < y ? -1 : 0; return ord.dir === "desc" ? -r : r; });
+    // Come Firestore (14/11): al più `limit` documenti (il Diario segue le ultime 100 note, la ricerca tutte).
+    const lim = q.parts.find((p) => p.limit)?.limit;
+    if (lim) docs = docs.slice(0, lim);
     cb({ docs: docs.map(([id, d]) => ({ id, data: () => d })) });
   };
   listeners.add(run); primaVolta(run);

@@ -33,13 +33,23 @@
 //   riepilogo, temi, riepilogoAt, analyzed, analyzedAt, analysisError, modello, sintesiEsito, foto: [{ id, w, h }],
 //   avvisaAFine (l'app è uscita durante l'analisi: notifica alla fine, poi il server lo toglie) }
 // `modello`: chi ha letto la nota l'ultima volta (haiku, sonnet, opus: scelta in menu → Modelli AI).
+//
+// Ricerca e persona (14/11, scelte di Mattia: A tra tre schermate, e il tocco sulla persona che filtra). La lente in
+// testata apre il campo in cima (con la tastiera; stato e «Prossimi giorni» spariscono, × torna com'era): la ricerca è
+// locale e istantanea, senza AI né accenti, su titolo, testo, riepilogo, persone e temi di tutte le note che vedi
+// (`seguiTutteLeNote`, non solo le ultime 100), e si combina con la pillola del progetto. Le righe hanno le parole
+// evidenziate e, se la parola è più avanti nel testo, l'estratto intorno (core/cerca.js). Il filtro per persona arriva
+// toccando una persona nel foglio di lettura o «Note con …» nella sua voce della rubrica (`mostraNoteDi`): una pillola
+// col suo nome (× per toglierla) prima di quelle dei progetti, e sotto quante note e la sua scheda. Finché tutte le note
+// non sono arrivate si filtrano le ultime già in memoria e non si dice mai «nessuna» (regola del vuoto).
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-functions.js";
 import { functions } from "../../core/firebase.js";
 import { el, icon, toast, fascia, vuoto, attesa, toDate, meseLungo, fab, fabDoppio, testoRicco, isoGiorno, stessoGiorno, fmtDate, puntoToccato, pillolaProgetto } from "../../core/ui.js";
 import { openSheet, scriviDa } from "../../components/sheet.js";
 import { create, update, remove, watchVisible, readVisible, leggiUno, VIS, where, serverTimestamp } from "../../core/db.js";
 import { session } from "../../core/auth.js";
-import { seguiNote, visibilitaNota, notaMia } from "../../core/note.js";
+import { seguiNote, seguiTutteLeNote, visibilitaNota, notaMia } from "../../core/note.js";
+import { parole, notaTrovata, notaConPersona, evidenzia, trovaIn, estratto, mostraNoteDi, registraFiltroPersona, lasciaFiltroPersona } from "../../core/cerca.js";
 import { getHousehold, nomeDi } from "../../core/household.js";
 import { watchPending, renderAzione } from "../../components/proposals.js";
 import { aggiungiVoci } from "../lista/index.js";
@@ -61,9 +71,12 @@ import { sceltaFoto, strisciaFoto, salvaFoto, eliminaFoto, eliminaFotoDi, visibi
 export const id = "diario";
 export const title = "Diario";
 export const nav = true;
-/** In testata, a destra: Chiedi (14/11), che apre subito il foglio per scrivere la domanda. */
-export const azioni = () => [el("button.tondo.tondo--piatto", { type: "button", "aria-label": "Chiedi", title: "Chiedi",
-  onclick: () => vaiA("chiedi", "nuova") }, icon("domanda"))];
+/** In testata, a destra: la lente della ricerca (14/11) e Chiedi (14/11), che apre subito il foglio per scrivere la domanda. */
+let apriRicerca = null; // la pagina montata la lega qui
+export const azioni = () => [
+  el("button.tondo.tondo--piatto", { type: "button", "aria-label": "Cerca nelle note", title: "Cerca", onclick: () => apriRicerca?.() }, icon("cerca")),
+  el("button.tondo.tondo--piatto", { type: "button", "aria-label": "Chiedi", title: "Chiedi", onclick: () => vaiA("chiedi", "nuova") }, icon("domanda")),
+];
 const navIcon = "diario";
 export { navIcon as icon };
 
@@ -410,13 +423,27 @@ export function testaNota(n) {
 /** Titolo di una nota (per i fogli e la pagina del progetto). */
 export const titoloDi = (n) => testaNota(n).titolo;
 
-/** Una persona della nota come pillola: si apre in rubrica se c'è, se no su Google Contatti, se no è solo un nome. */
-function pillolaPersona(p) {
+/**
+ * Una persona della nota come pillola: toccandola (14/11, scelta di Mattia) si vedono le sue note nel Diario, da cui
+ * «scheda in rubrica» apre la voce (o il contatto Google). `chiudi` chiude il foglio di lettura.
+ */
+function pillolaPersona(p, chiudi) {
   const voce = (p.voceId && personaDaId(p.voceId)) || personaDaGoogle(p.googleId);
-  if (voce) return el("button.pillola", { type: "button", onclick: () => apriVoceManuale(voce) }, icon("persona"), voce.name);
-  if (p.googleId) return el("a.pillola", { href: linkGoogle(p.googleId), target: "_blank", rel: "noopener", title: "Su Google Contatti" }, icon("contatto"), p.nome);
-  return el("span.pillola", {}, icon("persona"), p.nome);
+  const chi = { nome: voce?.name || p.nome, voceId: voce?.id || p.voceId || null, googleId: voce?.googleId || p.googleId || null };
+  return el("button.pillola", { type: "button", title: `Note con ${chi.nome}`, onclick: () => mostraNoteDi(chi, chiudi) },
+    icon(voce || !p.googleId ? "persona" : "contatto"), chi.nome);
 }
+
+/** La scheda di una persona: la voce della rubrica, o il contatto su Google Contatti; null se è solo un nome. */
+function schedaDi(chi) {
+  const voce = (chi.voceId && personaDaId(chi.voceId)) || personaDaGoogle(chi.googleId);
+  if (voce) return el("button.link", { type: "button", onclick: () => apriVoceManuale(voce) }, "scheda in rubrica");
+  if (chi.googleId) return el("a.link", { href: linkGoogle(chi.googleId), target: "_blank", rel: "noopener" }, "su Google Contatti");
+  return null;
+}
+
+/** Il testo di un campo per l'estratto della ricerca: senza i segni del riepilogo (titoli, elenchi, grassetto). */
+const pianoDi = (t) => String(t || "").replace(/^#+\s*/gm, "").replace(/^\s*[-*•]\s+/gm, "").replace(/\*\*/g, "");
 
 /**
  * Riga di una nota, come le lezioni del tennis: giorno a sinistra (solo sulla prima nota del giorno, `conGiorno`),
@@ -424,9 +451,13 @@ function pillolaPersona(p) {
  * «Tutte»), persone e temi, questi due nel colore del progetto (`colore`). Sotto, fuori dal pulsante, le azioni
  * proposte ancora in attesa.
  */
-export function rigaNota(n, { conGiorno = true, conOra = false, progetto = null, colore = null, autore = null, proposte = [], inAnalisi = false, onApri } = {}) {
+export function rigaNota(n, { conGiorno = true, conOra = false, progetto = null, colore = null, autore = null, proposte = [], inAnalisi = false, onApri, cerca = [] } = {}) {
   const d = toDate(n.createdAt) || new Date();
-  const { titolo, anteprima } = testaNota(n);
+  const { titolo, anteprima: inizio } = testaNota(n);
+  // Cercando (14/11): se le parole non sono all'inizio dell'anteprima, l'estratto intorno alla prima che si trova.
+  const anteprima = !cerca.length || trovaIn(inizio, cerca).some(([a]) => a < 120) ? inizio
+    : estratto(pianoDi(n.riepilogo), cerca) || estratto(n.text, cerca) || inizio;
+  const segna = (t) => (cerca.length ? evidenzia(t, cerca) : [t]);
   const persone = Array.isArray(n.persone) ? n.persone.filter((p) => p?.nome) : [];
   // In analisi: lanciata da qui (prima che il server scriva lo stato) o in corso sul server, da qualunque telefono.
   inAnalisi = inAnalisi || analisiInCorso(n);
@@ -437,8 +468,8 @@ export function rigaNota(n, { conGiorno = true, conOra = false, progetto = null,
     autore ? el("span.lezione__autore", {}, icon("persona"), autore) : null,
     n.foto?.length ? el("span.lezione__foto", { title: n.foto.length === 1 ? "Una foto" : `${n.foto.length} foto` }, icon("fotocamera"), n.foto.length > 1 ? String(n.foto.length) : "") : null,
     progetto ? el("span.progetto", {}, progetto.name) : null,
-    ...persone.map((p) => el("span.persona", {}, icon("persona"), p.nome)),
-    ...(n.temi || []).map((t) => el("span.etichetta", {}, t)),
+    ...persone.map((p) => el("span.persona", {}, icon("persona"), ...segna(p.nome))),
+    ...(n.temi || []).map((t) => el("span.etichetta", {}, ...segna(t))),
     inAnalisi ? el("span.lezione__stato", {}, "Analizzo…") : null,
     nonAnalizzata ? el("span.lezione__stato.lezione__stato--errore", {}, "non analizzata") : null,
     n.sintesiEsito === "invariata" && !inAnalisi ? el("span.lezione__stato.lezione__stato--muto", {}, "sintesi invariata") : null,
@@ -449,8 +480,8 @@ export function rigaNota(n, { conGiorno = true, conOra = false, progetto = null,
     el("button.lezione", { type: "button", onclick: onApri },
       el("div.lezione__giorno", {}, conGiorno ? [el("b.display", {}, String(d.getDate())), el("small", {}, oggi ? "oggi" : GIORNI[d.getDay()])] : null),
       el("div.lezione__testo", {},
-        el("div.lezione__titolo", {}, titolo || "Senza titolo"),
-        anteprima ? el("div.lezione__anteprima", {}, anteprima) : null,
+        el("div.lezione__titolo", {}, ...(titolo ? segna(titolo) : ["Senza titolo"])),
+        anteprima ? el("div.lezione__anteprima", {}, ...segna(anteprima)) : null,
         piede.length ? el("div.lezione__temi", {}, ...piede) : null,
       ),
     ),
@@ -490,7 +521,7 @@ export function apriLettura(n, { progetto = null, proposte = [], autore = null, 
     body: [
       el("p.meta", { style: "margin-top:12px", "data-colore": progetto?.colore || null }, autore ? `di ${autore} · ` : "", quando, n.analyzed && n.modello ? ` · letta da ${nomeModello(n.modello)}` : "",
         progetto ? [" · ", el("span.progetto", {}, progetto.name)] : null),
-      persone.length ? el("div.lettura__persone", {}, ...persone.map(pillolaPersona)) : null,
+      persone.length ? el("div.lettura__persone", {}, ...persone.map((p) => pillolaPersona(p, () => sheet.close()))) : null,
       strisciaFoto(n),
       n.temi?.length ? el("div.lezione__temi", { "data-colore": progetto?.colore || null }, ...n.temi.map((t) => el("span.etichetta", {}, t))) : null,
       n.riepilogo
@@ -542,6 +573,10 @@ export function mount(container) {
   let filtro = leggi(CHIAVE_FILTRO, "tutte");
   let caricate = false; // le note del filtro scelto sono arrivate: solo allora si può dire «vuoto»
   let tutte = null;     // le ultime note senza filtro: anteprima immediata quando si cambia filtro
+  let cerca = null;     // null: niente ricerca; "" o il testo: ricerca aperta (la lente in testata)
+  let persona = null;   // { nome, voceId, googleId }: le note di una persona
+  let tutteNote = null; // tutte le note che vedi, per ricerca e persona; null finché non arrivano
+  let stopTutteNote = null;
   // La pagina compare quando ci sono note, ultime note senza filtro (pillole dei progetti con note) e progetti
   // (pillole, nomi): intera, non a pezzi.
   const dati = attesa(["note", "tutte", "progetti"], () => render());
@@ -597,6 +632,45 @@ export function mount(container) {
 
   const filtri = el("div.segmenti", { style: "padding-top:8px" });
   const elenco = el("div");
+
+  // ── Ricerca e persona (14/11) ──
+  const campoCerca = el("input", { type: "search", placeholder: "Cerca nelle note", "aria-label": "Cerca nelle note", enterkeyhint: "search", autocomplete: "off", spellcheck: false });
+  campoCerca.addEventListener("input", () => { cerca = campoCerca.value; render(); });
+  campoCerca.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); campoCerca.blur(); } // Invio chiude la tastiera: i risultati ci sono già
+    if (e.key === "Escape") chiudiRicerca();
+  });
+  const barraCerca = el("div.cerca-campo", { hidden: true }, icon("cerca"), campoCerca,
+    el("button.cerca-campo__chiudi", { type: "button", "aria-label": "Chiudi la ricerca", onclick: () => chiudiRicerca() }, icon("chiudi")));
+  const esito = el("p.cerca-esito", { hidden: true, role: "status" });
+  const rigaStato = el("div.segmenti", { style: "align-items:center;justify-content:space-between" }, stato, autoBtn);
+  /** Tutte le note servono solo cercando o con una persona: l'ascolto parte allora e si ferma quando non serve più. */
+  function servonoTutte() {
+    const serve = cerca != null || !!persona;
+    if (serve && !stopTutteNote) {
+      stopTutteNote = seguiTutteLeNote((docs) => {
+        tutteNote = docs;
+        for (const n of docs) if (n.projectId) conNote.add(n.projectId);
+        render();
+      });
+    }
+    if (!serve && stopTutteNote) { stopTutteNote(); stopTutteNote = null; tutteNote = null; }
+  }
+  const questaRicerca = apriRicerca = () => {
+    if (cerca == null) { cerca = ""; campoCerca.value = ""; servonoTutte(); render(); }
+    campoCerca.focus(); // nel tocco sulla lente: la tastiera si apre
+  };
+  function chiudiRicerca() {
+    cerca = null; campoCerca.value = ""; campoCerca.blur();
+    servonoTutte(); render();
+  }
+  /** Le note di una persona (dal foglio di lettura o dalla rubrica): su tutti i progetti, combinabile poi con uno. */
+  function filtraPersona(chi) {
+    persona = chi;
+    if (filtro !== "tutte") scegli("tutte");
+    servonoTutte(); render();
+  }
+  registraFiltroPersona(filtraPersona);
   const piu = fab("Nuova nota", () => nuova());
   // Evento nuovo senza passare dal Calendario (2/11, scelta B di Mattia): tondo col calendario sopra il +, come
   // «Scansiona» nella Lista. Solo se c'è un calendario in cui scrivere, come il + della pagina Calendario.
@@ -618,7 +692,7 @@ export function mount(container) {
   let eventi = statoGoogle().permessi.calendario ? eventiNoti() : null;
   function disegnaProssimi() {
     const g = statoGoogle();
-    if (!dati.pronta() || !g.collegato || !g.permessi.calendario || !eventi) { prossimi.hidden = true; return; }
+    if (!dati.pronta() || !g.collegato || !g.permessi.calendario || !eventi || cerca != null) { prossimi.hidden = true; return; }
     const ora = new Date();
     const limite = new Date(); limite.setDate(limite.getDate() + GIORNI_PROSSIMI);
     const fino = isoGiorno(limite);
@@ -705,6 +779,7 @@ export function mount(container) {
       proposte: proposteDi(n),
       inAnalisi: inCorso.has(n.id),
       onApri: () => leggiNota(n),
+      cerca: cerca != null ? parole(cerca) : [],
     });
   }
 
@@ -712,8 +787,11 @@ export function mount(container) {
   function disegnaFiltri() {
     const attivi = progetti.filter((p) => !p.archived && (p.istruzioni || conNote.has(p.id) || p.id === filtro))
       .sort((a, b) => a.name.localeCompare(b.name));
-    filtri.hidden = !attivi.length;
+    filtri.hidden = !attivi.length && !persona;
     filtri.replaceChildren(
+      // (replaceChildren scrive «null» per un null: la pillola della persona entra solo se c'è)
+      ...(persona ? [el("button.pillola.pillola--persona", { type: "button", "aria-label": `Togli il filtro: ${persona.nome}`,
+        onclick: () => { persona = null; servonoTutte(); render(); } }, icon("persona"), persona.nome, icon("chiudi"))] : []),
       el("button.pillola", { type: "button", class: filtro === "tutte" ? "on" : "", onclick: () => scegli("tutte") }, "Tutte"),
       ...attivi.map((p) => pillolaProgetto(p, { on: filtro === p.id, onclick: () => scegli(p.id) })),
     );
@@ -729,6 +807,22 @@ export function mount(container) {
     disegnaProssimi();
     disegnaFiltri();
     const prog = filtro !== "tutte" ? progettoDi(filtro) : null;
+    const ricerca = cerca != null;
+    barraCerca.hidden = !ricerca;
+    rigaStato.hidden = ricerca;
+    const ps = ricerca ? parole(cerca) : [];
+    const filtrando = ps.length > 0 || !!persona;
+    // Cercando o con una persona: tutte le note che vedi; finché non arrivano, le ultime già in memoria (mai «nessuna»).
+    const mostrate = !filtrando ? note
+      : (tutteNote || tutte || note).filter((n) => (!prog || n.projectId === prog.id) && (!persona || notaConPersona(n, persona)) && notaTrovata(n, ps));
+    esito.hidden = !filtrando || !tutteNote;
+    if (filtrando && tutteNote) {
+      const k = mostrate.length;
+      const dove = [persona ? ` con ${persona.nome}` : "", prog ? ` in ${prog.name}` : ""].join("");
+      const cosa = ps.length ? ` per «${cerca.trim()}»` : "";
+      const scheda = persona ? schedaDi(persona) : null;
+      esito.replaceChildren(k ? `${k} ${k === 1 ? "nota" : "note"}${dove}` : `Nessuna nota${dove}${cosa}`, ...(scheda ? [" · ", scheda] : []));
+    }
     // Filtrato su un progetto, il Diario prende il suo colore come la pagina del progetto (7/11): la pillola scelta,
     // il +, i giorni delle note. Sulla pagina, non su <html>: la pagina accanto nello scorrimento resta com'è.
     piu.toggleAttribute("data-colore", !!prog?.colore);
@@ -742,12 +836,12 @@ export function mount(container) {
           : el("button.btn.btn--piatto", { onclick: () => apriProgetto(prog) }, icon("matita"), "Modifica progetto"),
         el("span.meta", {}, prog.istruzioni ? "Con riepilogo e sintesi" : "Senza istruzioni, senza riepilogo")));
     }
-    if (!note.length && caricate) {
+    if (!filtrando && !note.length && caricate) {
       nodi.push(prog
         ? vuoto("Nessuna nota in questo progetto", "Tocca + e scrivi o incolla: la nota finisce qui.")
         : vuoto("Il diario è vuoto", "Tocca + e scrivi o detta: un'idea, cosa devi fare, cosa hai speso. Le note sono visibili solo a te, tranne quelle dei progetti condivisi."));
     }
-    nodi.push(...elencoNote(note, nota));
+    nodi.push(...elencoNote(mostrate, nota));
     elenco.replaceChildren(...nodi);
   }
 
@@ -787,9 +881,11 @@ export function mount(container) {
 
   container.append(
     vocali,
+    barraCerca,
     prossimi,
-    el("div.segmenti", { style: "align-items:center;justify-content:space-between" }, stato, autoBtn),
+    rigaStato,
     filtri,
+    esito,
     elenco,
     piu,
     eventoFab,
@@ -797,6 +893,10 @@ export function mount(container) {
 
   // Una nota chiesta da un'altra pagina (le fonti di Chiedi, 14/11): si apre il suo foglio di lettura.
   const chiesta = richiestaPer("diario");
+  if (chiesta?.startsWith("persona:")) {
+    // Le note di una persona, chieste dalla rubrica o dal foglio di una nota in un'altra pagina (core/cerca.js).
+    try { filtraPersona(JSON.parse(chiesta.slice(8))); } catch (e) {}
+  }
   if (chiesta?.startsWith("nota:")) {
     // Dopo il montaggio: il router chiude i fogli aperti quando ha finito di cambiare pagina.
     setTimeout(() => leggiUno(COLL, chiesta.slice(5)).then((n) => { if (n && !smontato) leggiNota(n); else if (!n) toast("Questa nota non c'è più"); }), 0);
@@ -830,5 +930,5 @@ export function mount(container) {
   const stop5 = suCalendari(() => caricaProssimi());
   caricaProssimi();
   disegnaVocali();
-  return () => { window.removeEventListener("registrazioni", disegnaVocali); clearTimeout(timerAnalisi); stopNote(); stopTutte(); stop1(); stop2(); stop3(); stop4(); stop5(); dati.ferma(); smontato = true; piu.remove(); eventoFab.remove(); lasciaDoppio?.(); lasciaDoppio = null; };
+  return () => { if (apriRicerca === questaRicerca) apriRicerca = null; lasciaFiltroPersona(filtraPersona); stopTutteNote?.(); window.removeEventListener("registrazioni", disegnaVocali); clearTimeout(timerAnalisi); stopNote(); stopTutte(); stop1(); stop2(); stop3(); stop4(); stop5(); dati.ferma(); smontato = true; piu.remove(); eventoFab.remove(); lasciaDoppio?.(); lasciaDoppio = null; };
 }

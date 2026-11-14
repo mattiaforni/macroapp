@@ -59,7 +59,8 @@ Una riga per file, per orientarsi; i dettagli di ciascuno sono in `docs/MAPPA.md
 | `core/scorrimento.js` | scorrimento col dito tra le sezioni della barra, con la pagina accanto montata a lato |
 | `core/ui.js` | `el()`, icone, date, importi, `colonnaGiorno`, pillole e colori dei progetti, `fab` / `fabDoppio`, `attesa`, `puntoToccato` |
 | `core/db.js` | scritture con visibilità, ascolti condivisi (aperti 10 min dopo l'uscita), `segnala` per le notifiche |
-| `core/note.js` | chi vede le note: visibilità dal progetto, `seguiNote`, `allineaProgetto` / `allineaNote` |
+| `core/note.js` | chi vede le note: visibilità dal progetto, `seguiNote`, `seguiTutteLeNote`, `allineaProgetto` / `allineaNote` |
+| `core/cerca.js` | ricerca locale nelle note (senza accenti, evidenziata, estratti) e note di una persona, `mostraNoteDi` |
 | `core/modelli.js` | modelli dell'AI per persona (`users.modelli`) e consumi del mese |
 | `core/notifiche.js` | notifiche push su questo telefono, categorie per persona, `segnala` → function `avvisa` |
 | `core/household.js` · `core/auth.js` | casa e nomi dei membri · accesso con Google e profilo |
@@ -78,7 +79,7 @@ Una riga per file, per orientarsi; i dettagli di ciascuno sono in `docs/MAPPA.md
 | `components/registratore.js` | nota vocale a pezzi: taglia nelle pause, trascrive ogni pezzo, tiene tutto sul telefono fino al salvataggio |
 | `components/persone.js` | scelta delle persone (rubrica e Google Contatti) |
 | `modules/*/index.js` | un modulo = `{ id, title, nav, icon, mount(container) → smonta }`, in `modules/registry.js` |
-| `modules/diario` | Diario: note che vedi, riga, foglio di lettura e di scrittura, filtro per progetto, prossimi giorni, analisi |
+| `modules/diario` | Diario: note che vedi, riga, foglio di lettura e di scrittura, filtri per progetto e persona, ricerca (lente in testata), prossimi giorni, analisi |
 | `modules/progetto` | pagina di un progetto: Sintesi, Note, Da fare |
 | `modules/chiedi` | Chiedi: domande sui propri dati, risposta con fonti toccabili e azioni da confermare |
 | `modules/lista` · `modules/scansioni` | lista della spesa a tessere e reparti, scansione · prodotti scansionati |
@@ -205,6 +206,8 @@ Scelte di Mattia da non riproporre (il perché e il contesto in docs/STORIA.md, 
   nel Diario (2/11: tondo sopra il + e trasformazione della nota).
 - Niente ricerca libera dell'agente su tutto il Drive (27/10).
 - Backup: export settimanale (8 settimane) **più** ripristino a un momento passato (PITR, 7 giorni), scelto il 14/11.
+- Ricerca nel Diario: lente in testata (scelta A del 14/11, scartati campo fisso in cima e pillola «Cerca»); toccare una
+  persona nel foglio di lettura porta alle sue note (la scheda in rubrica da lì).
 - Icona: due palline, giallo e verdolino (26/10). Nome: «Debiti e Doveri» (25/10).
 
 ## Da verificare
@@ -219,6 +222,8 @@ Dal telefono o con i dati veri (dettagli in docs/STORIA.md alla data):
 - **Chiedi che agisce** (14/11): una domanda che chiede di fare qualcosa («sposta la cena a sabato», «segna pagata la
   bolletta», «mettimi in lista il latte»): le azioni sotto la risposta, la conferma, l'evento spostato su Google con la sua
   durata; che Claude non proponga niente a una semplice domanda.
+- **Ricerca e persona** (14/11): la ricerca sulle note vere (velocità con tutte le note, parole dettate con errori), la
+  tastiera che si apre toccando la lente, una persona nominata in modi diversi (solo nome, nome e cognome).
 - **Foto** (4/11): «Scatta» torna alla nota col testo già scritto; tempi con foto da 12 MP; foto senza rete.
 - **Barra** (3/11): nome di un progetto in barra alla prima apertura su un telefono nuovo; scorrimento verso un progetto.
 - **Notifiche** (25/10, 1/11): attivazione su entrambi i telefoni; `silent` di notte; il riepilogo delle 7:30; un evento
@@ -243,7 +248,6 @@ Dal telefono o con i dati veri (dettagli in docs/STORIA.md alla data):
   se la sintesi proposta rispetta le correzioni a mano. Da valutare: Fable 5.1 o Opus con `effort` alto per i progetti.
 - Lista: ordine dei reparti da adattare al supermercato di Mattia; cronologia delle scansioni condivisa o solo sua.
 - Note vocali: salvare e analizzare subito dopo la trascrizione, se Mattia lo vuole.
-- Filtro del Diario per persona e ricerca nelle note (richiesta del 14/11, in corso).
 - Prodotti, a mano: ingredienti e categoria della crema 100% nocciole Esselunga su OFF; il modulo d'uso dell'API di OFF.
 - Banca: la compagna collega il suo conto con «Link accounts» nel Control Panel di Enable Banking (una sola app per la casa).
 - Note condivise, casi scoperti (7/11): un progetto condiviso reso privato rende private le note dell'altra persona solo al

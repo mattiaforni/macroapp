@@ -562,3 +562,18 @@ a percentuale.
       della cena con le sue due ore su Google Calendar finto, luogo e descrizione intatti). Trovato per strada: aprendo una
       persona già in rubrica senza Google collegato il foglio mostrava «null» (`replaceChildren(null)`), corretto.
 
+- [x] **Ricerca nel Diario e note di una persona** (14/11, richiesta di Mattia; scelte sue tra tre schermate: A, lente in
+      testata, scartati B campo fisso in cima e C pillola «Cerca» tra i filtri; il tocco sulla persona nel foglio di lettura
+      filtra il Diario invece di aprire la rubrica). La lente accanto al «?» apre il campo in cima con la tastiera (stato e
+      prossimi giorni spariscono, × torna com'era); ricerca locale e istantanea, senza AI e senza accenti né maiuscole, su
+      titolo, testo, riepilogo, persone e temi di tutte le note che vedi (non solo le ultime 100), combinabile con la pillola
+      del progetto; righe del Diario con le parole evidenziate e, se la parola è avanti nel testo, l'estratto intorno.
+      Persona: pillola col nome prima di quelle dei progetti (× per toglierla), sotto «N note con … · scheda in rubrica»;
+      ci si arriva toccando la persona nel foglio di lettura (anche dalla pagina del progetto) o da «Note con …» in cima alla
+      sua voce in rubrica, con quante note e l'ultima. Una nota è «di» una persona se è tra le sue persone (stessa voce,
+      stesso contatto Google o stesso nome) o se nome e cognome sono nel testo (un nome solo no: «Bruno del bar»).
+      Regola del vuoto: finché tutte le note non sono arrivate si filtrano quelle in memoria e il conteggio non compare;
+      «Nessuna nota per «…»» è una riga, non la pagina vuota. Prova: passo «ricerca nel diario» e «note di una persona» in
+      prova.py (nota d'agosto oltre le ultime 100, accenti e maiuscole, estratto, progetto, nessun risultato, persona dal
+      foglio di lettura, scheda in rubrica col conteggio, «Note con …» da un'altra pagina).
+

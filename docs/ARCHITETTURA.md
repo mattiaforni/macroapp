@@ -29,6 +29,13 @@ sw.js                       cache statica, installazione PWA
 
 Scelte: nessun framework né bundler (coerente con i progetti precedenti, deploy = copia di file). SDK Firebase modulare da CDN. Query in tempo reale con `onSnapshot`; cache IndexedDB per usare la lista anche senza rete. Le query in tempo reale sono condivise e restano aperte 10 minuti dopo l'uscita da una pagina (db.js): tornandoci i dati ci sono già, senza schermo vuoto né «vuoto» di passaggio.
 
+**Ricerca nel Diario** (14/11): tutta sul telefono, senza AI né rete. Le note che vedi stanno già in memoria (ascolti
+condivisi di db.js); per cercare si apre l'ascolto di tutte (`seguiTutteLeNote`, fino a 5000: oggi qualche centinaio di
+documenti, testi senza foto) solo mentre la ricerca o il filtro per persona sono aperti. Il confronto è su testo
+normalizzato (NFD senza segni diacritici, minuscolo) e l'evidenziazione riporta le posizioni sul testo vero carattere per
+carattere (core/cerca.js). Niente indice di ricerca su Firestore: con queste quantità filtrare in memoria a ogni lettera è
+istantaneo; se le note diventassero decine di migliaia, la strada è un indice locale (IndexedDB) o un servizio di ricerca.
+
 ## Backend (`functions/`)
 
 - `analyzeEntry` (callable): legge una nota del diario del chiamante, chiama `reason()` con uno schema JSON e scrive proposte. Non modifica mai i moduli. In ogni nota scrive il titolo e le persone nominate (`persone`: collegate a una voce della rubrica o a un contatto Google, scelto tra quelli con una parola del nome nel testo: `src/google/contatti.js`; nessuna voce entra in rubrica), salvo che l'utente li abbia scritti a mano nel foglio della nota. Se la nota è di un progetto con istruzioni, scrive anche il riepilogo nella nota (testo della nota, correggibile, come titolo e persone) con i temi della nota, e propone la sintesi aggiornata del progetto (`project_summary`, da confermare; solo se cambia). Contesto: la sintesi attuale e le ultime 8 note dello stesso progetto (riepilogo se c'è, se no testo); senza sintesi, fino a 30 note, per costruire la prima. Ritorna `{ proposals, riepilogo, titolo, persone, sintesi, sintesiEsito, modello }`.

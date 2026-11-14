@@ -42,6 +42,24 @@ export function seguiNote({ extra = [], max = 100 } = {}, cb) {
   return () => stop();
 }
 
+/** Quante note al più si seguono per la ricerca e il filtro per persona: in pratica tutte. */
+export const TUTTE_LE_NOTE = 5000;
+
+/**
+ * Tutte le note che vedi (14/11: la ricerca e il filtro per persona del Diario, il conteggio nella voce della rubrica),
+ * non solo le ultime 100 che il Diario mostra. Stesso ascolto per tutti (db.js lo condivide e lo tiene aperto 10 minuti):
+ * aprendo la ricerca una seconda volta le note ci sono già.
+ */
+export const seguiTutteLeNote = (cb) => seguiNote({ max: TUTTE_LE_NOTE }, cb);
+
+/** Una volta sola: tutte le note che vedi. */
+export function tutteLeNote() {
+  return new Promise((ok) => {
+    let stop = null, fatto = false;
+    stop = seguiTutteLeNote((docs) => { if (fatto) return; fatto = true; ok(docs); setTimeout(() => stop?.(), 0); });
+  });
+}
+
 /**
  * Porta alla visibilità `vis` le proprie note del progetto `pid` (e le loro foto) che hanno l'altra. Ritorna quante
  * ne ha cambiate. Query di sole uguaglianze: bastano gli indici dei singoli campi.

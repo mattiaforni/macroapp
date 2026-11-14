@@ -6,7 +6,9 @@
 // documenti: file di Google Drive collegati alla voce [{ id, nome, mime, link }] (contratti, garanzie, istruzioni).
 // Le categorie sono della casa: households/{id}.manualCategories (nomi). Se mancano valgono
 // quelle predefinite; la categoria di una voce è facoltativa.
-import { el, icon, toast, fascia, vuoto, sceltaVisibilita, iconaDa, fab } from "../../core/ui.js";
+import { el, icon, toast, fascia, vuoto, sceltaVisibilita, iconaDa, fab, fmtDate } from "../../core/ui.js";
+import { mostraNoteDi, notaConPersona } from "../../core/cerca.js";
+import { tutteLeNote } from "../../core/note.js";
 import { create, update, remove, watchVisible, readVisible, VIS } from "../../core/db.js";
 import { getHousehold, updateHousehold } from "../../core/household.js";
 import { session } from "../../core/auth.js";
@@ -226,9 +228,25 @@ export async function apriVoceManuale(esistente = null, prefill = {}) {
   }
 
   const documenti = sceltaDocumenti({ documenti: d.documenti || [] });
+  // Una persona già in rubrica (14/11): «Note con …» porta alle sue note nel Diario, con quante sono e l'ultima (il
+  // numero arriva quando le note sono lette: prima solo il titolo, mai «nessuna»).
+  let noteCon = null;
+  if (esistente?.type === "person" && esistente.name) {
+    const chi = { nome: esistente.name, voceId: esistente.id, googleId: esistente.googleId || null };
+    const sotto = el("small", { hidden: true });
+    noteCon = el("button.fonte.voce__note", { type: "button", onclick: () => mostraNoteDi(chi, () => sheet.close()) },
+      icon("diario"), el("span.fonte__testo", {}, el("b", {}, `Note con ${esistente.name}`), sotto), icon("freccia"));
+    tutteLeNote().then((docs) => {
+      const sue = docs.filter((n) => notaConPersona(n, chi));
+      sotto.textContent = sue.length ? `${sue.length} ${sue.length === 1 ? "nota" : "note"} · l'ultima il ${fmtDate(sue[0].createdAt)}` : "Nessuna nota per ora";
+      sotto.hidden = false;
+    }).catch(() => {});
+  }
+
   const sheet = openSheet({
     title: esistente ? esistente.name : "Nuova voce",
     body: [
+      noteCon,
       el("div.campo", { style: "margin-top:14px" }, nome),
       suggeriti,
       legame,
