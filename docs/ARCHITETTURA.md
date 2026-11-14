@@ -362,7 +362,15 @@ temporanea» predefinita); dà `roles/datastore.importExportAdmin` sul progetto 
 (`<numero>-compute@developer.gserviceaccount.com`) e a quello del deploy (per il flusso Ripristino), e `roles/storage.admin`
 sul solo bucket a loro e all'agente di servizio di Firestore (`service-<numero>@gcp-sa-firestore.iam.gserviceaccount.com`).
 Se un permesso non si può dare da GitHub (il service account del deploy non può cambiare l'IAM del progetto), il deploy
-lascia un avviso con il passo da fare nella console e va avanti.
+lascia un avviso con il passo da fare nella console e va avanti. Attiva anche il ripristino a un momento passato (PITR) del
+database, se non lo è.
+
+**Da fare una volta in console** (14/11: il primo deploy ha creato bucket e regola, ma `github-deploy` non può dare ruoli sul
+progetto, e il primo backup lanciato dalla Diagnosi è finito con «HTTP 403: The caller does not have permission»):
+Google Cloud → IAM e amministrazione → IAM → **Concedi l'accesso**, una volta per ciascuno dei due account
+«Default compute service account», `<numero del progetto>-compute@developer.gserviceaccount.com` (le functions; il nome intero è nell'avviso del deploy) e `github-deploy@macroapp-b9bd0.iam.gserviceaccount.com`
+(il flusso Ripristino), ruolo **Amministratore importazione/esportazione Cloud Datastore**
+(`roles/datastore.importExportAdmin`). Poi Diagnosi con `backup` e `backupora`: deve dire «Backup nuovo».
 
 **Costi**: l'export si paga come una lettura per documento (qualche migliaio: frazioni di centesimo); il bucket costa circa
 2 centesimi di dollaro al GB al mese, per otto copie; il lavoro di Cloud Scheduler è il quarto (`syncBank`, `giroAvvisi`,
@@ -404,7 +412,7 @@ Permessi che il flusso usa (service account del deploy): import ed export (`role
 deploy), creazione ed eliminazione di un database (se manca, l'annotazione dice di dare «Proprietario Cloud Datastore» a
 github-deploy dalla console).
 
-### Ripristino a un momento passato (PITR): valutato, non attivo
+### Ripristino a un momento passato (PITR): attivo dal 14/11
 
 Firestore può tenere per 7 giorni una versione al minuto di ogni documento (`gcloud firestore databases update
 --database='(default)' --enable-pitr`). Vantaggi: il backup settimanale può perdere fino a 7 giorni di modifiche, il PITR
@@ -412,5 +420,6 @@ nessuna (si torna al minuto prima del guaio, con il campo `momento` del flusso R
 cancellata leggendola com'era, senza ripristinare altro. Costo: si paga lo spazio delle versioni (per un database che cambia
 poco, circa quanto il database stesso) al prezzo dello spazio di Firestore, senza la quota gratuita: per un database di
 qualche decina di MB, uno o due centesimi di dollaro al mese; le letture delle versioni passate si pagano come letture.
-Limiti: 7 giorni soltanto e dentro lo stesso database (non sostituisce il backup nel bucket). Si spegne quando si vuole.
-Decisione a Mattia (14/11).
+Limiti: 7 giorni soltanto e dentro lo stesso database (non sostituisce il backup nel bucket). Si spegne quando si vuole
+(`--no-enable-pitr`, o dalla console). Mattia ha scelto di attivarlo (14/11): lo fa il deploy (passo «Backup»), la Diagnosi
+con `backup` ne mostra lo stato; con il PITR attivo il campo `momento` del flusso Ripristino vale per gli ultimi 7 giorni.

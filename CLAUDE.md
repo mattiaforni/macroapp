@@ -202,13 +202,15 @@ Scelte di Mattia da non riproporre (il perché e il contesto in docs/STORIA.md, 
   e in quello della casa; scartato leggere i calendari dell'uno per l'altra dal server (1/11). Nessun «+ Evento» in alto
   nel Diario (2/11: tondo sopra il + e trasformazione della nota).
 - Niente ricerca libera dell'agente su tutto il Drive (27/10).
+- Backup: export settimanale (8 settimane) **più** ripristino a un momento passato (PITR, 7 giorni), scelto il 14/11.
 - Icona: due palline, giallo e verdolino (26/10). Nome: «Debiti e Doveri» (25/10).
 
 ## Da verificare
 
 Dal telefono o con i dati veri (dettagli in docs/STORIA.md alla data):
-- **Backup** (14/11): il primo backup di lunedì 16/11 (Diagnosi con `backup`); gli avvisi del deploy sui permessi; un
-  Ripristino di prova.
+- **Backup** (14/11): **prima Mattia** dà in console il ruolo di export ai due service account (docs/ARCHITETTURA.md,
+  Backup, «Da fare una volta in console»: oggi il backup prende 403); poi Diagnosi con `backup` e `backupora`, un Ripristino
+  di prova, il PITR attivo (Diagnosi), il primo backup del lunedì.
 - **Più AI** (14/11): una domanda in Chiedi (tempi, fonti; `fallbacks` in beta); una nota con uno scontrino fotografato; un
   task che la nota dice fatto; un PDF collegato a un progetto; la trascrizione a pezzi su una lezione vera e con lo schermo
   bloccato; la prima revisione della domenica; condivisione e scorciatoie dopo l'aggiornamento del WebAPK.
@@ -229,7 +231,6 @@ Dal telefono o con i dati veri (dettagli in docs/STORIA.md alla data):
 
 ## Aperti
 
-- Ripristino a un momento passato (PITR) di Firestore: valutato il 14/11 (docs/ARCHITETTURA.md, Backup), da decidere.
 - Bozze confermate: finiscono in `notes`, che nessuna pagina mostra: una pagina, togliere la conferma o bozze vere in Gmail.
 - Riga di contesto per pagina, stile Leghe Fantacalcio (Task «2 in ritardo · 3 oggi», Spese «Ottobre · X ti deve…»).
 - Identità visiva definitiva (resto dell'app): da decidere con Mattia.

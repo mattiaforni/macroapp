@@ -160,14 +160,24 @@ jobs:
               echo "Lavoro di Cloud Scheduler della funzione backupSettimanale non trovato (deploy non ancora fatto?)" | ann error "Backup adesso"
             else
               PRIMA=$(gcloud storage ls "gs://$B/*/*.overall_export_metadata" 2>/dev/null | sort | tail -1)
+              T0=$(date -u +%Y-%m-%dT%H:%M:%SZ)
               gcloud scheduler jobs run "$J" --location "$R" --project "$P" --quiet
-              # La funzione aspetta l'export fino a 7 minuti; qui si guarda il bucket fino a 9.
+              # La funzione aspetta l'export fino a 7 minuti; qui si guarda il bucket fino a 9, e ci si ferma prima se la
+              # funzione scrive un errore (permessi, bucket).
+              ERR=""
               for i in $(seq 1 36); do
                 sleep 15
                 DOPO=$(gcloud storage ls "gs://$B/*/*.overall_export_metadata" 2>/dev/null | sort | tail -1)
                 [ -n "$DOPO" ] && [ "$DOPO" != "$PRIMA" ] && break
+                ERR=$(gcloud logging read "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"backupsettimanale\" AND severity>=ERROR AND timestamp>=\"$T0\"" \
+                  --project "$P" --limit 1 --format='value(textPayload)' 2>/dev/null | grep -i backup | head -c 600)
+                [ -n "$ERR" ] && break
               done
               if [ -n "$DOPO" ] && [ "$DOPO" != "$PRIMA" ]; then echo "Backup nuovo: $DOPO" | ann notice "Backup adesso"
+              elif [ -n "$ERR" ]; then
+                { echo "$ERR"; echo
+                  echo "Se dice «does not have permission»: dalla console IAM e amministrazione → IAM → Concedi l'accesso →"
+                  echo "$(gcloud projects describe "$P" --format='value(projectNumber)')-compute@developer.gserviceaccount.com → ruolo «Amministratore importazione/esportazione Cloud Datastore»"; } | ann error "Backup adesso non riuscito"
               else echo "Nessun backup nuovo dopo 9 minuti: vedi gli errori di backupSettimanale qui sotto (funzione=backupSettimanale)" | ann error "Backup adesso"; fi
             fi
           fi

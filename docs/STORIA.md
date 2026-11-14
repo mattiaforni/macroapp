@@ -535,3 +535,12 @@ a percentuale.
       mappa breve e tre sezioni nuove: «Decisioni in vigore», «Da verificare», «Aperti». Nuova regola 7: le cronache si
       scrivono qui. CLAUDE.md è passata a ~22 KB.
 
+- [x] **Backup, primo giro** (14/11, dopo il deploy del backup). Il deploy ha creato `gs://macroapp-b9bd0-backup` in
+      europe-west1 (stessa zona del database) con la regola dei 56 giorni e i permessi sul bucket; non ha potuto dare
+      `roles/datastore.importExportAdmin` sul progetto (`github-deploy` non può cambiare l'IAM del progetto: avviso nel deploy,
+      come previsto). La Diagnosi con `backupora` ha lanciato la funzione: «backup non avviato (HTTP 403): The caller does not
+      have permission», cioè la catena Scheduler → funzione → errore nella Diagnosi funziona e manca solo il ruolo, da dare in
+      console (docs/ARCHITETTURA.md, Backup). La Diagnosi ora si ferma appena la funzione scrive un errore, invece di aspettare
+      9 minuti, e dice il passo da fare. Mattia ha scelto di attivare anche il PITR (7 giorni, pochi centesimi al mese): lo fa
+      il deploy.
+

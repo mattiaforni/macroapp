@@ -96,7 +96,8 @@ jobs:
       # Backup settimanale (14/11, funzione backupSettimanale): il bucket <progetto>-backup nello stesso progetto e nella
       # zona del database, senza accesso pubblico, con la regola che cancella i backup dopo 8 settimane (56 giorni);
       # il permesso di esportare (roles/datastore.importExportAdmin) al service account delle functions e a quello del
-      # deploy (serve al flusso Ripristino), e la scrittura nel bucket a loro e all'agente di servizio di Firestore.
+      # deploy (serve al flusso Ripristino), e la scrittura nel bucket a loro e all'agente di servizio di Firestore; il
+      # ripristino a un momento passato (PITR) del database.
       # Ripeterlo è innocuo. Se un permesso non si può dare da qui, un avviso dice cosa fare dalla console; il deploy va
       # avanti (l'app non dipende dal backup). Ripristino: docs/ARCHITETTURA.md, Backup.
       - name: Backup (bucket, permessi, conservazione)
@@ -130,6 +131,13 @@ jobs:
           # stesso, sul solo bucket). Se l'agente non esiste ancora, Firestore lo crea al primo export.
           gcloud storage buckets add-iam-policy-binding "gs://$B" --member="serviceAccount:service-$N@gcp-sa-firestore.iam.gserviceaccount.com" \
             --role=roles/storage.admin --quiet > /dev/null 2>&1 || echo "Agente di servizio di Firestore non ancora presente: nessun permesso sul bucket"
+          # Ripristino a un momento passato (PITR, scelta di Mattia del 14/11): 7 giorni di versioni al minuto, oltre al backup.
+          PITR=$(gcloud firestore databases describe --database='(default)' --project "$P" --format='value(pointInTimeRecoveryEnablement)' 2>/dev/null)
+          if [ "$PITR" != "POINT_IN_TIME_RECOVERY_ENABLED" ]; then
+            gcloud firestore databases update --database='(default)' --project "$P" --enable-pitr --quiet > /dev/null 2> pitr.err \
+              && echo "::notice title=Backup::Ripristino a un momento passato (PITR) attivato: 7 giorni" \
+              || avviso "PITR non attivato ($(head -c 160 pitr.err | tr '\n' ' ')). Dalla console: Firestore → Ripristino di emergenza (Disaster recovery) → Modifica → attiva il recupero point-in-time"
+          fi
 
       - name: Numero di versione nell'app
         run: echo "export const VERSION = \"${GITHUB_SHA::7}\";" > public/js/version.js
