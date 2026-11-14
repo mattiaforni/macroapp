@@ -18,7 +18,7 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
   conclusione del consenso, scollega, lettura a richiesta; `src/banking/enable.js`), `google` (account
   Google: collegamento una tantum con le spunte Contatti, Calendario e Drive, permessi di un'ora, `src/google/account.js`), `avvisa` (notifiche push,
   `src/avvisi.js`), `prodotto` (scheda di un prodotto da Open Food Facts con l'indice, cache in `prodotti/{ean}`;
-  `src/prodotti/`, i cosmetici da Open Beauty Facts con `cosmetici.js`; con `scansione: true` anche la cronologia `scansioni`), `chiedi` (14/11: domande sui propri dati, Claude con strumenti di sola lettura, `src/chiedi.js`; stato e risposta su `domande/{id}`), `revisioneSettimana` (domenica 18:47, `src/settimana.js`), `contribuisci` (1/11: «Completa» su Open Food Facts / Open Beauty Facts: `leggi` le foto con Claude, `invia` i soli campi mancanti e le foto con l'account OFF dell'utente in `off_account/{uid}`, solo server; `src/prodotti/contributo.js`), `syncBank` (lettura quotidiana alle 7:15, poi le notifiche della banca a chi non riceve il riepilogo), `giroAvvisi` (ogni 5 minuti: eventi nuovi nel calendario della casa, promemoria degli eventi, riepilogo del mattino alle 7:30; `src/avvisi-calendario.js`). firebase-admin, agente e banca si importano dentro i gestori, non all'avvio.
+  `src/prodotti/`, i cosmetici da Open Beauty Facts con `cosmetici.js`; con `scansione: true` anche la cronologia `scansioni`), `chiedi` (14/11: domande sui propri dati, Claude con strumenti di sola lettura, `src/chiedi.js`; stato e risposta su `domande/{id}`), `revisioneSettimana` (domenica 18:47, `src/settimana.js`), `contribuisci` (1/11: «Completa» su Open Food Facts / Open Beauty Facts: `leggi` le foto con Claude, `invia` i soli campi mancanti e le foto con l'account OFF dell'utente in `off_account/{uid}`, solo server; `src/prodotti/contributo.js`), `syncBank` (lettura quotidiana alle 7:15, poi le notifiche della banca a chi non riceve il riepilogo), `giroAvvisi` (ogni 5 minuti: eventi nuovi nel calendario della casa, promemoria degli eventi, riepilogo del mattino alle 7:30; `src/avvisi-calendario.js`), `backupSettimanale` (lunedì 3:17: export di Firestore nel bucket `macroapp-b9bd0-backup`, `src/backup.js`; ripristino con il flusso Ripristino, docs/ARCHITETTURA.md, Backup). firebase-admin, agente e banca si importano dentro i gestori, non all'avvio.
 - **Pubblicazione**: push su `main` → `.github/workflows/deploy.yml` fa girare le prove (`prove.yml`: functions,
   regole di Firestore sull'emulatore, flusso dell'app in Chromium) e, solo se passano, pubblica hosting, regole, indici e
   functions (secret `FIREBASE_SERVICE_ACCOUNT`). Prove non passate → niente pubblicazione, schermate nell'artifact
@@ -139,6 +139,10 @@ ciascuno e lo stato degli indici di `journal_entries` (niente testi, nomi né ui
 Primo uso, 7/11 sera: la nota della compagna nel progetto condiviso, scritta prima dell'aggiornamento, era ancora privata
 (il suo telefono non aveva ancora aperto la versione nuova); allineata dal server con il consenso di Mattia.
 
+Con `-f 'inputs[backup]=true'` (14/11) la data dell'ultimo backup riuscito, i backup nel bucket, la conservazione e le ultime
+operazioni di export e import; con anche `inputs[backupora]=true` fa un backup subito. Il ripristino è un flusso a parte,
+`.github/workflows/ripristino.yml` (prova su un database temporaneo, o sui dati veri con `conferma` = RIPRISTINA).
+
 Se l'app riceve «internal» da una funzione chiamata con `httpsCallable`, la prima cosa da
 guardare sono gli invocatori: senza `allUsers` il preflight CORS prende 403. Il deploy lo reimposta
 per le funzioni elencate nell'ultimo passo di `deploy.yml`: una nuova funzione onCall va aggiunta lì.
@@ -156,6 +160,8 @@ node functions/strumenti/prova-banca.mjs   # quali movimenti bancari diventano p
 node functions/strumenti/prova-avvisi.mjs  # cosa dicono le notifiche e a chi (anche giro del calendario con Google finto e riepilogo)
 node functions/strumenti/prova-prodotti.mjs # indice dei prodotti su schede OFF costruite a mano
 node functions/strumenti/prova-chiedi.mjs   # Chiedi senza rete: strumenti, privacy, fonti, giro con un Claude finto; revisione e costi
+node functions/strumenti/prova-contributo.mjs # «Completa» su Open Food Facts senza rete
+node functions/strumenti/prova-backup.mjs   # backup settimanale con l'API di export finta
 python3 prove/additivi.py                   # rigenera la tabella degli additivi dalla tassonomia OFF
 ```
 Il Firebase finto di `prova.py` non applica le regole: per quelle c'è `prove/regole/prova-regole.mjs` (emulatore vero, due
@@ -164,6 +170,13 @@ aggiorna `prove/finto/firebase.js`. In questa sessione Python Playwright si inst
 `pip install --break-system-packages playwright==1.63.0` (stessa versione del Chromium in /opt/pw-browsers).
 
 ## Stato (14 novembre 2026) e prossimi passi
+
+- [x] **Backup** (14/11, richiesta di Mattia): `backupSettimanale` ogni lunedì alle 3:17 esporta tutte le collezioni (nominate,
+      fotografia coerente di un minuto prima) in `gs://macroapp-b9bd0-backup/AAAA-MM-GG-HHMM`; il deploy crea bucket (zona del
+      database, niente accesso pubblico), regola dei 56 giorni e permessi, o lascia un avviso col passo da fare in console.
+      Ripristino: flusso Ripristino (prova su un database temporaneo con i conteggi, o sui dati veri dopo aver salvato lo stato
+      attuale; tutte o alcune collezioni; anche «com'era alle 21:00»). Diagnosi con `backup` (ultimo riuscito, oltre 8 giorni
+      è un errore) e `backupora`. PITR valutato e non attivato (docs/ARCHITETTURA.md, Backup): decide Mattia.
 
 - [x] **Prove prima della pubblicazione** (14/11, richiesta di Mattia). Il deploy aspetta il job `prove` (`prove.yml`, chiamato
       da deploy.yml): le cinque prove delle functions, le regole di Firestore sull'emulatore (`prove/regole`, nuove: 34 casi —

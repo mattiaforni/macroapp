@@ -93,6 +93,44 @@ jobs:
           gcloud services enable fcm.googleapis.com fcmregistrations.googleapis.com --project macroapp-b9bd0 --quiet \
             || echo "::warning title=Notifiche::API di Cloud Messaging non attivate dal deploy: vanno attivate dalla console"
 
+      # Backup settimanale (14/11, funzione backupSettimanale): il bucket <progetto>-backup nello stesso progetto e nella
+      # zona del database, senza accesso pubblico, con la regola che cancella i backup dopo 8 settimane (56 giorni);
+      # il permesso di esportare (roles/datastore.importExportAdmin) al service account delle functions e a quello del
+      # deploy (serve al flusso Ripristino), e la scrittura nel bucket a loro e all'agente di servizio di Firestore.
+      # Ripeterlo è innocuo. Se un permesso non si può dare da qui, un avviso dice cosa fare dalla console; il deploy va
+      # avanti (l'app non dipende dal backup). Ripristino: docs/ARCHITETTURA.md, Backup.
+      - name: Backup (bucket, permessi, conservazione)
+        run: |
+          P=macroapp-b9bd0
+          B="$P-backup"
+          avviso() { echo "::warning title=Backup::$1"; }
+          N=$(gcloud projects describe "$P" --format='value(projectNumber)')
+          LOC=$(gcloud firestore databases describe --database='(default)' --project "$P" --format='value(locationId)')
+          case "$LOC" in eur3) BL=EU ;; nam5) BL=US ;; *) BL="$LOC" ;; esac
+          if ! gcloud storage buckets describe "gs://$B" --project "$P" > /dev/null 2>&1; then
+            gcloud storage buckets create "gs://$B" --project "$P" --location "$BL" --default-storage-class=STANDARD \
+              --uniform-bucket-level-access --public-access-prevention --quiet \
+              && echo "::notice title=Backup::Bucket $B creato in $BL (database in $LOC)" \
+              || { avviso "Bucket $B non creato: crealo dalla console (Cloud Storage → Crea, zona $BL, accesso uniforme, niente accesso pubblico)"; exit 0; }
+          fi
+          printf '%s' '{"rule":[{"action":{"type":"Delete"},"condition":{"age":56}}]}' > conservazione.json
+          gcloud storage buckets update "gs://$B" --lifecycle-file=conservazione.json --public-access-prevention --quiet > /dev/null \
+            || avviso "Regola di conservazione non impostata su $B: Cloud Storage → $B → Ciclo di vita → Elimina oggetto, età 56 giorni"
+          FUNZIONI="$N-compute@developer.gserviceaccount.com"
+          DEPLOY=$(gcloud config get-value account 2>/dev/null)
+          for SA in "$FUNZIONI" "$DEPLOY"; do
+            [ -n "$SA" ] || continue
+            gcloud projects add-iam-policy-binding "$P" --member="serviceAccount:$SA" --role=roles/datastore.importExportAdmin \
+              --condition=None --quiet > /dev/null 2> iam.err \
+              || avviso "Permesso di export non dato a $SA ($(head -c 160 iam.err | tr '\n' ' ')). Dalla console: IAM e amministrazione → IAM → Concedi l'accesso → $SA → ruolo «Amministratore importazione/esportazione Cloud Datastore»"
+            gcloud storage buckets add-iam-policy-binding "gs://$B" --member="serviceAccount:$SA" --role=roles/storage.admin --quiet > /dev/null \
+              || avviso "Scrittura nel bucket non data a $SA: Cloud Storage → $B → Autorizzazioni → Concedi l'accesso → ruolo «Amministratore Storage»"
+          done
+          # L'export lo scrive l'agente di servizio di Firestore (nello stesso progetto di solito ha già accesso: lo si dà lo
+          # stesso, sul solo bucket). Se l'agente non esiste ancora, Firestore lo crea al primo export.
+          gcloud storage buckets add-iam-policy-binding "gs://$B" --member="serviceAccount:service-$N@gcp-sa-firestore.iam.gserviceaccount.com" \
+            --role=roles/storage.admin --quiet > /dev/null 2>&1 || echo "Agente di servizio di Firestore non ancora presente: nessun permesso sul bucket"
+
       - name: Numero di versione nell'app
         run: echo "export const VERSION = \"${GITHUB_SHA::7}\";" > public/js/version.js
 

@@ -68,6 +68,10 @@ Condividi → Aggiungi alla schermata Home), aperta da lì.
    Il deploy attiva anche la People API e tiene aggiornato il segreto GOOGLE_OAUTH_CLIENT con ID e secret del client
    OAuth web configurato in Firebase Authentication (provider Google).
 
+Il deploy prepara anche il backup settimanale di Firestore (bucket `macroapp-b9bd0-backup`, permessi, conservazione di 8
+settimane): se un permesso non si può dare da GitHub lascia un avviso nell'esecuzione con il passo da fare nella console.
+Ripristino: Actions → Ripristino (vedi docs/ARCHITETTURA.md, Backup).
+
 La chiave dà accesso quasi completo al progetto: deve stare solo nei secret di GitHub, mai nel repository o in una chat.
 
 ## Segreti senza terminale

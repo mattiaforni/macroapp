@@ -31,7 +31,7 @@ jobs:
 
       - name: Prove delle functions
         run: |
-          for t in prova-banca prova-avvisi prova-prodotti prova-chiedi prova-contributo; do
+          for t in prova-banca prova-avvisi prova-prodotti prova-chiedi prova-contributo prova-backup; do
             echo "::group::$t"
             node functions/strumenti/$t.mjs || { echo "::error title=Prove delle functions::$t non passa"; exit 1; }
             echo "::endgroup::"

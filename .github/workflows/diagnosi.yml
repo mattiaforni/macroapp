@@ -39,6 +39,14 @@ on:
         description: "Con «note»: porta le note (e le foto) alla visibilità del loro progetto, sul server"
         type: boolean
         default: false
+      backup:
+        description: "Backup: data dell'ultimo backup riuscito, backup nel bucket, conservazione, ultime operazioni"
+        type: boolean
+        default: false
+      backupora:
+        description: "Con «backup»: fai un backup adesso (lancia la funzione backupSettimanale) e aspettane la fine"
+        type: boolean
+        default: false
 
 jobs:
   diagnosi:
@@ -134,6 +142,87 @@ jobs:
           gcloud firestore indexes composite list --project macroapp-b9bd0 --format=json 2>&1 \
             | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{for(const i of JSON.parse(s)){if(!/journal_entries/.test(i.name))continue;console.log(i.state, i.fields.map(f=>f.fieldPath+(f.order==="DESCENDING"?"↓":"")).join(" + "))}}catch(e){console.log(s.slice(0,2000))}})' \
             | ann "Indici composti di journal_entries"
+
+      # Backup settimanale (14/11): l'ultimo riuscito è la cartella più recente con il file .overall_export_metadata, che
+      # Firestore scrive solo a export concluso. Oltre 8 giorni (o nessuno) è un errore.
+      - name: Backup
+        if: ${{ inputs.backup || inputs.backupora }}
+        env:
+          ORA: ${{ inputs.backupora && '1' || '' }}
+        run: |
+          P=macroapp-b9bd0
+          B="$P-backup"
+          R=europe-west1
+          ann() { echo "::$1 title=$2::$(sed -e 's/%/%25/g' -e 's/\r//g' | head -c 12000 | awk '{printf "%s%%0A", $0}')"; }
+          if [ -n "$ORA" ]; then
+            J=$(gcloud scheduler jobs list --location "$R" --project "$P" --format='value(name)' 2>/dev/null | grep -i backupsettimanale | head -1)
+            if [ -z "$J" ]; then
+              echo "Lavoro di Cloud Scheduler della funzione backupSettimanale non trovato (deploy non ancora fatto?)" | ann error "Backup adesso"
+            else
+              PRIMA=$(gcloud storage ls "gs://$B/*/*.overall_export_metadata" 2>/dev/null | sort | tail -1)
+              gcloud scheduler jobs run "$J" --location "$R" --project "$P" --quiet
+              # La funzione aspetta l'export fino a 7 minuti; qui si guarda il bucket fino a 9.
+              for i in $(seq 1 36); do
+                sleep 15
+                DOPO=$(gcloud storage ls "gs://$B/*/*.overall_export_metadata" 2>/dev/null | sort | tail -1)
+                [ -n "$DOPO" ] && [ "$DOPO" != "$PRIMA" ] && break
+              done
+              if [ -n "$DOPO" ] && [ "$DOPO" != "$PRIMA" ]; then echo "Backup nuovo: $DOPO" | ann notice "Backup adesso"
+              else echo "Nessun backup nuovo dopo 9 minuti: vedi gli errori di backupSettimanale qui sotto (funzione=backupSettimanale)" | ann error "Backup adesso"; fi
+            fi
+          fi
+          gcloud storage ls -l "gs://$B/*/*.overall_export_metadata" > fatti.txt 2> err.txt || true
+          gcloud firestore operations list --project "$P" --format=json > operazioni.json 2>/dev/null || echo "[]" > operazioni.json
+          {
+            echo "Spazio occupato: $(gcloud storage du -s "gs://$B" --readable-sizes 2>/dev/null | awk '{print $1, $2}')"
+            echo "Conservazione: $(gcloud storage buckets describe "gs://$B" --format='value(lifecycle_config)' 2>/dev/null | head -c 300)"
+            echo "Zona del bucket: $(gcloud storage buckets describe "gs://$B" --format='value(location)' 2>/dev/null); database: $(gcloud firestore databases describe --database='(default)' --project "$P" --format='value(locationId)' 2>/dev/null), ripristino a un momento passato: $(gcloud firestore databases describe --database='(default)' --project "$P" --format='value(pointInTimeRecoveryEnablement)' 2>/dev/null)"
+            [ -s err.txt ] && grep -v "matched no objects" err.txt | head -c 400
+          } > altro.txt
+          python3 - "$B" > backup.txt <<'PY'
+          import json, re, sys, datetime as dt
+          from zoneinfo import ZoneInfo
+          b = sys.argv[1]
+          righe = [r.split() for r in open("fatti.txt") if r.strip()[:1].isdigit() and "gs://" in r]
+          tutti = sorted(((r[2].split("/")[3], r[1]) for r in righe if len(r) >= 3), key=lambda x: x[1])
+          # I backup settimanali (lunedì notte) hanno il nome AAAA-MM-GG-HHMM; le altre copie (prima-del-ripristino-…, momento-…)
+          # le fa il flusso Ripristino.
+          fatti = [f for f in tutti if re.fullmatch(r"\d{4}-\d{2}-\d{2}-\d{4}", f[0])]
+          altre = [c for c, _ in tutti if (c, _) not in fatti]
+          if fatti:
+              cartella, quando = fatti[-1]
+              t = dt.datetime.fromisoformat(quando.replace("Z", "+00:00"))
+              giorni = (dt.datetime.now(dt.timezone.utc) - t).total_seconds() / 86400
+              print("OK" if giorni <= 8 else "VECCHIO")
+              print(f"Ultimo backup riuscito: {cartella}, finito il {t.astimezone(ZoneInfo('Europe/Rome')):%d/%m/%Y alle %H:%M} ({giorni:.1f} giorni fa)")
+              print(f"Backup riusciti nel bucket gs://{b}: {len(fatti)} ({', '.join(c for c, _ in fatti)})")
+          else:
+              print("NESSUNO")
+              print(f"Nessun backup riuscito in gs://{b}")
+          if altre:
+              print(f"Altre copie (dal flusso Ripristino): {', '.join(altre)}")
+          print(open("altro.txt").read().rstrip())
+          print()
+          print("Ultime operazioni di export e import:")
+          try:
+              ops = json.load(open("operazioni.json"))
+          except Exception:
+              ops = []
+          ops = [o for o in ops if any(k in o.get("metadata", {}).get("@type", "") for k in ("Export", "Import"))]
+          ops.sort(key=lambda o: o.get("metadata", {}).get("startTime", ""), reverse=True)
+          for o in ops[:6]:
+              m = o.get("metadata", {})
+              tipo = "export" if "Export" in m.get("@type", "") else "import"
+              dove = m.get("outputUriPrefix") or m.get("inputUriPrefix") or ""
+              doc = m.get("progressDocuments", {}).get("completedWork", "?")
+              err = (o.get("error") or {}).get("message", "")
+              print(f"  {tipo} {m.get('startTime', '')[:16]} {m.get('operationState', '?')} {dove} documenti {doc} {err}".rstrip())
+          if not ops:
+              print("  nessuna (Firestore le tiene per qualche settimana)")
+          PY
+          ESITO=$(head -1 backup.txt)
+          tail -n +2 backup.txt > testo.txt
+          if [ "$ESITO" = OK ]; then ann notice "Backup" < testo.txt; else ann error "Backup: nessun backup recente" < testo.txt; fi
 
       - name: Raccolta
         env:

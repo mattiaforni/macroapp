@@ -318,7 +318,7 @@ Notifiche push con Firebase Cloud Messaging, senza chiave VAPID propria (quella 
 - **Preferenze**: `users/{uid}.notifiche.<spese|task|lista|calendario|promemoria|riepilogo|diario|banca>`, `anticipo`, `silenzio`,
   per persona (pagina Notifiche: «Dall'altra persona» e «Per te»). Prova senza rete (anche Google Calendar finto):
   `node functions/strumenti/prova-avvisi.mjs`.
-- **Costi**: due lavori di Cloud Scheduler in tutto (`syncBank`, `giroAvvisi`: nel gratuito, tre per account di fatturazione);
+- **Costi**: lavori di Cloud Scheduler `syncBank` e `giroAvvisi` (con `revisioneSettimana` e, dal 14/11, `backupSettimanale` sono quattro: tre gratuiti per account di fatturazione, il quarto 0,10 $ al mese);
   ogni giro legge il documento della casa, i due profili e lo stato (~1.200 letture al giorno), qualche chiamata a Calendar.
 
 ## Prove e pubblicazione
@@ -341,3 +341,76 @@ Se una prova non passa, le schermate di `prove/_schermate` vanno nell'artifact `
 repository è pubblico, ma le schermate mostrano solo i dati finti delle prove). In emergenza il deploy si lancia a mano con
 «Emergenza: pubblica senza prove» (`senza_prove`): il job delle prove risulta saltato e il deploy lo segnala con un avviso.
 Sugli altri rami `prove.yml` gira da solo a ogni push: una modifica si prova su GitHub prima di portarla su `main`.
+
+## Backup
+
+**Cosa** (14/11). La funzione programmata `backupSettimanale` (functions/src/backup.js), il lunedì alle 3:17 ora di Roma, fa un
+export gestito di Firestore (`exportDocuments`) di tutte le collezioni nel bucket `gs://macroapp-b9bd0-backup`, una cartella
+per volta con data e ora (`2026-11-16-0317`). Dettagli:
+- le collezioni si nominano una per una (`collectionIds`, lette con `listCollections()`: sono tutte al primo livello): solo così
+  dal backup se ne può ripristinare una sola;
+- l'export è una fotografia coerente di un minuto prima (`snapshotTime`: Firestore tiene un'ora di versioni anche senza PITR);
+- la funzione aspetta la fine (fino a 7 minuti) e scrive nel registro «backup riuscito: N documenti, X byte» o l'errore;
+- dentro c'è tutto il database, compresi i permessi di Google (`google_tokens`), l'account di Open Food Facts e i collegamenti
+  della banca: il bucket non è pubblico (accesso uniforme, prevenzione dell'accesso pubblico) e lo leggono solo i proprietari
+  del progetto e i service account a cui il deploy lo dà. I dati non escono dal progetto.
+
+**Preparazione** (deploy.yml, passo «Backup», ripetuto a ogni deploy e innocuo): crea il bucket nella zona del database
+(`eur3` → `EU`, `nam5` → `US`, altrimenti la stessa regione), con la regola di ciclo di vita che cancella gli oggetti dopo 56
+giorni (8 settimane: restano circa otto backup; Cloud Storage tiene poi per 7 giorni gli oggetti cancellati, «eliminazione
+temporanea» predefinita); dà `roles/datastore.importExportAdmin` sul progetto al service account delle functions
+(`<numero>-compute@developer.gserviceaccount.com`) e a quello del deploy (per il flusso Ripristino), e `roles/storage.admin`
+sul solo bucket a loro e all'agente di servizio di Firestore (`service-<numero>@gcp-sa-firestore.iam.gserviceaccount.com`).
+Se un permesso non si può dare da GitHub (il service account del deploy non può cambiare l'IAM del progetto), il deploy
+lascia un avviso con il passo da fare nella console e va avanti.
+
+**Costi**: l'export si paga come una lettura per documento (qualche migliaio: frazioni di centesimo); il bucket costa circa
+2 centesimi di dollaro al GB al mese, per otto copie; il lavoro di Cloud Scheduler è il quarto (`syncBank`, `giroAvvisi`,
+`revisioneSettimana`, `backupSettimanale`) e i gratuiti sono tre per account di fatturazione: 0,10 $ al mese.
+
+**Controllo**: Diagnosi con `backup` (`-f 'inputs[backup]=true'`): data dell'ultimo backup riuscito (la cartella più recente
+con il file `.overall_export_metadata`, che Firestore scrive solo a export finito; oltre 8 giorni è un errore), backup nel
+bucket, spazio, conservazione, zona, stato del PITR, ultime operazioni di export e import. Con anche `backupora` fa un backup
+subito (lancia il lavoro di Cloud Scheduler) e ne aspetta la fine.
+
+### Ripristino
+
+Tutto da GitHub, senza terminale: **Actions → Ripristino → Run workflow** (`.github/workflows/ripristino.yml`).
+
+1. **Scegli il backup**: quello dell'ultimo lunedì prima del guaio. I nomi stanno nella Diagnosi con `backup` (o in Cloud
+   Storage → `macroapp-b9bd0-backup`). Campo `backup`: la cartella, o `ultimo`. In alternativa `momento`, «com'era il database
+   alle 21:00 di ieri» (ora di Roma): il flusso esporta lì per lì il database a quel minuto e usa quella copia
+   (`momento-…`); senza PITR funziona solo per l'ultima ora.
+2. **Scegli cosa**: `collezioni` vuoto = tutte quelle del backup; altrimenti i nomi separati da virgole, per esempio
+   `journal_entries,journal_photos` (le note e le loro foto vanno insieme), `expenses,recurring_expenses`, `tasks,projects`.
+3. **Prova prima** (`destinazione` = `prova`, predefinita): il backup va in un database temporaneo `ripristino-<numero>`
+   dello stesso progetto, il flusso conta i documenti per collezione accanto a quelli del database vero (annotazione
+   «Ripristino di prova riuscito», solo nomi e numeri) ed elimina il database temporaneo. I dati veri non si toccano.
+   Le differenze nei numeri sono le modifiche fatte dopo il backup.
+4. **Ripristina** (`destinazione` = `produzione`, `conferma` = `RIPRISTINA`), meglio con l'app chiusa sui due telefoni:
+   il flusso salva prima lo stato attuale in `prima-del-ripristino-AAAA-MM-GG-HHMM`, poi importa. Un documento del backup
+   sostituisce quello con lo stesso id; un documento nato dopo il backup **resta** (l'import non cancella). Per tornare
+   a com'era prima del ripristino: stesso flusso con `backup` = `prima-del-ripristino-…`.
+5. **Dopo**: aprire l'app sui due telefoni (le cache locali si riallineano da sole) e controllare la sezione ripristinata.
+
+Dalla console, se GitHub non c'è: Firestore → Importa/Esporta → Importa → sfoglia `macroapp-b9bd0-backup`, la cartella, il
+file `….overall_export_metadata` → database `(default)` (o uno nuovo, per provare) → Importa. Così si importa tutto il backup.
+
+Non è nel backup (e non serve): gli eventi (stanno su Google Calendar), i documenti di Drive, il codice (GitHub), i segreti
+(Secret Manager), gli account di accesso (Firebase Authentication: se un account venisse eliminato, rientrando con Google
+avrebbe un uid nuovo e non vedrebbe più i suoi dati; il caso non è coperto).
+
+Permessi che il flusso usa (service account del deploy): import ed export (`roles/datastore.importExportAdmin`, dato dal
+deploy), creazione ed eliminazione di un database (se manca, l'annotazione dice di dare «Proprietario Cloud Datastore» a
+github-deploy dalla console).
+
+### Ripristino a un momento passato (PITR): valutato, non attivo
+
+Firestore può tenere per 7 giorni una versione al minuto di ogni documento (`gcloud firestore databases update
+--database='(default)' --enable-pitr`). Vantaggi: il backup settimanale può perdere fino a 7 giorni di modifiche, il PITR
+nessuna (si torna al minuto prima del guaio, con il campo `momento` del flusso Ripristino); si recupera una sola nota
+cancellata leggendola com'era, senza ripristinare altro. Costo: si paga lo spazio delle versioni (per un database che cambia
+poco, circa quanto il database stesso) al prezzo dello spazio di Firestore, senza la quota gratuita: per un database di
+qualche decina di MB, uno o due centesimi di dollaro al mese; le letture delle versioni passate si pagano come letture.
+Limiti: 7 giorni soltanto e dentro lo stesso database (non sostituisce il backup nel bucket). Si spegne quando si vuole.
+Decisione a Mattia (14/11).

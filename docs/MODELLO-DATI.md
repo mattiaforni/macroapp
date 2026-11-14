@@ -200,3 +200,8 @@ in che giorno è partito l'ultimo riepilogo del mattino.
 Gli eventi restano su Google. L'app vi scrive solo `extendedProperties.shared.ddProgetto` = id del progetto dell'evento (7/11;
 "" = nessuno), letto come `progetto` da `core/calendario.js`. Le proposte `event` dell'agente per una nota di un progetto portano
 `payload.projectId`, che la conferma scrive nell'evento.
+
+## Backup (fuori da Firestore)
+Ogni lunedì una copia di tutte le collezioni in Cloud Storage, `gs://macroapp-b9bd0-backup/<AAAA-MM-GG-HHMM>/` (formato
+dell'export gestito: `all_namespaces/kind_<collezione>/…` più il file `<cartella>.overall_export_metadata`), tenuta 56 giorni.
+Una collezione nuova entra da sola nel backup (la funzione elenca le collezioni a ogni giro). docs/ARCHITETTURA.md, Backup.

@@ -6,7 +6,7 @@
 // Contatti, Calendario, Drive),
 // avvisa (notifiche push sulle cose condivise), trascrivi (nota vocale → testo, con Gemini), prodotto (scheda di un
 // prodotto da Open Food Facts), syncBank (lettura quotidiana), giroAvvisi (ogni 5 minuti: calendario, promemoria,
-// riepilogo del mattino).
+// riepilogo del mattino), backupSettimanale (export di Firestore nel bucket del progetto, il lunedì).
 // All'avvio del container si caricano solo le dichiarazioni delle funzioni.
 // firebase-admin, l'agente e il client bancario vengono importati alla prima richiesta (import dinamico):
 // avvio più rapido e nessun lavoro a livello di modulo che possa bloccare il container.
@@ -620,5 +620,27 @@ export const revisioneSettimana = onSchedule(
     const db = await getDb();
     const { revisioni } = await import("./src/settimana.js");
     await revisioni(db, { key: ANTHROPIC_API_KEY.value().trim(), clientGoogle: clientGoogle() });
+  },
+);
+
+// ───────────── Backup (14/11) ─────────────
+
+/**
+ * Backup settimanale di Firestore, il lunedì alle 3:17: export gestito di tutte le collezioni nel bucket
+ * `<progetto>-backup` (stesso progetto; bucket, permessi e conservazione di 8 settimane li prepara il deploy).
+ * Aspetta la fine dell'export e scrive nel registro «backup riuscito» o l'errore. Vedi src/backup.js e
+ * docs/ARCHITETTURA.md (Backup) per il ripristino.
+ */
+export const backupSettimanale = onSchedule(
+  { schedule: "17 3 * * 1", timeZone: "Europe/Rome", timeoutSeconds: 540, memory: "256MiB", retryCount: 0 },
+  async () => {
+    const db = await getDb();
+    const { applicationDefault } = await import("firebase-admin/app");
+    const { backup } = await import("./src/backup.js");
+    const credenziale = applicationDefault();
+    await backup(db, {
+      progetto: process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || "macroapp-b9bd0",
+      token: async () => (await credenziale.getAccessToken()).access_token,
+    });
   },
 );
