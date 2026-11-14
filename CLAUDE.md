@@ -158,8 +158,7 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
 
 - [x] **Più AI e trascrizione a pezzi** (14/11, dopo un'analisi dell'app chiesta da Mattia; scelte sue: tutte le proposte tranne
       la banca che impara, che gli interessa meno; Gmail da spiegare meglio; più la trascrizione: «non vedo quello che sto
-      trascrivendo via via» e «se blocco lo schermo la trascrizione non registra quello che ho detto»). Fatto sul ramo, non ancora
-      su `main`:
+      trascrivendo via via» e «se blocco lo schermo la trascrizione non registra quello che ho detto»). Pubblicato il 14/11:
       1. **Trascrizione a pezzi** (`components/registratore.js`, `trascrivi` con `prima`): il testo arriva nel campo a ogni pausa
          mentre parli; audio e testo restano sul telefono (IndexedDB) finché la nota non è salvata; un pezzo che non arriva si
          riprova da solo; app o foglio chiusi → «Nota vocale da salvare» in cima al Diario. Causa probabile del problema: prima
@@ -184,7 +183,8 @@ Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggior
       bloccato** (se Android ferma il microfono, l'app ora lo dice al ritorno: quanto manca), la prima revisione della domenica.
       Condivisione e scorciatoie arrivano quando Chrome aggiorna il WebAPK (vedi Icona: in carica, Wi-Fi, app chiusa).
       Gmail: proposto di trasformare le bozze dell'agente (oggi in `notes`, che nessuna pagina mostra) in bozze vere di Gmail e, più
-      avanti, leggere bollette e ordini; Mattia non aveva capito la proposta, spiegata il 14/11: in attesa della sua risposta.
+      avanti, leggere bollette e ordini. Mattia (14/11): **niente lettura delle mail**, non riproporla. Le bozze in Gmail restano
+      una possibilità non decisa (servirebbe il permesso Gmail e un nuovo collegamento a Google).
 
 - [x] **Analisi e telefono bloccato** (7/11, notte, Mattia: «spesso dice non analizzata dopo aver bloccato il telefono e rilancio
       l'analisi… poi l'analisi dopo un po' compare»). Causa: bloccando il telefono la richiesta ad `analyzeEntry` cadeva, l'app
