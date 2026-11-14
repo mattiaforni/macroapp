@@ -203,7 +203,7 @@ export function httpsCallable(_f, name) {
   if (name === "prodotto") return prodottoFinto;
   if (name === "contribuisci") return contribuisciFinto;
   // Trascrizione finta: segna cosa ha ricevuto (formato, dimensione, progetto) per le asserzioni della prova.
-  // Dal 14/11 a pezzi: il primo pezzo dà la frase della lezione, i successivi un seguito numerato. Per le prove:
+  // La prima registrazione di un foglio dà la frase della lezione, le successive (`pezzo` > 0) un seguito numerato. Per le prove:
   // `finto.trascrivi.cade` = quante chiamate perdono la risposta (telefono bloccato, rete), poi riescono;
   // `finto.trascrivi.ritardo` (ms).
   if (name === "trascrivi") return async (data) => {

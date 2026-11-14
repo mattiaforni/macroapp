@@ -1899,26 +1899,36 @@ with sync_playwright() as p:
         pg.wait_for_timeout(5600)
         assert pg.evaluate(ARCHIVIO) == [0, 0], f"buttata: niente resta sul telefono {pg.evaluate(ARCHIVIO)}"
 
-        # ── Nota vocale a pezzi (14/11, Mattia: «non vedo quello che sto trascrivendo via via»): il testo arriva a ogni
-        #    pausa mentre parli; un pezzo la cui risposta si perde si riprova da solo; una pausa lunga va a capo ──
-        step[0] = "nota vocale a pezzi"
+        # ── Nota vocale lunga, con le pause: una trascrizione sola a «Ferma», come il 27/10 (14/11 sera, Mattia: a pezzi
+        #    «ci mette molto di più»); una risposta persa si riprova da sola; una seconda registrazione nello stesso
+        #    foglio va a capo, con la fine del testo di prima come contesto ──
+        step[0] = "nota vocale, una trascrizione alla fine"
         pg.evaluate(MICROFONO, [[[7, 1.2], [3, 2.5]]])
+        trascrizioni = lambda: pg.evaluate("JSON.parse(sessionStorage.getItem('finto.trascrizioni') || '[]')")
+        gia = len(trascrizioni())
         pg.click("button.fab")
         pg.locator("#foglio button[aria-label='Registra una nota vocale']").click()
         ferma.wait_for(timeout=4000)
-        pg.wait_for_function("document.querySelector('#foglio textarea').value.includes('Lezione di oggi')", timeout=15000)
-        assert pg.locator("#foglio button[aria-label='Ferma la registrazione']").count() == 1, "il primo pezzo arriva mentre registri"
-        assert "Ti ascolto" in pg.locator("#foglio p.meta").first.inner_text()
-        shot(pg, "18c-nota-vocale-dal-vivo")
-        pg.evaluate("sessionStorage.setItem('finto.trascrivi.cade', '1')")  # la risposta del secondo pezzo si perde
-        pg.wait_for_function("document.querySelector('#foglio textarea').value.includes('pezzo 1')", timeout=25000)
+        assert "Ti ascolto: quando fermi, trascrivo" in pg.locator("#foglio p.meta").first.inner_text(), pg.locator("#foglio p.meta").first.inner_text()
+        pg.wait_for_timeout(12000)  # due pause comprese: niente si trascrive mentre parli
+        assert pg.locator("#foglio textarea").input_value() == "", "niente testo prima di Ferma"
+        assert len(trascrizioni()) == gia, "nessuna trascrizione mentre registri"
+        shot(pg, "18c-nota-vocale-lunga")
+        pg.evaluate("sessionStorage.setItem('finto.trascrivi.cade', '1')")  # la risposta si perde: si riprova da sola
         ferma.click()
-        pg.locator("#foglio button[aria-label='Registra una nota vocale']").wait_for(timeout=15000)
+        pg.wait_for_function("document.querySelector('#foglio textarea').value.includes('Lezione di oggi')", timeout=15000)
+        viste = trascrizioni()[gia:]
+        assert len(viste) == 1 and viste[0]["pezzo"] == 0 and viste[0]["prima"] == "", f"una richiesta sola, con tutto l'audio: {viste}"
+        assert viste[0]["kb"] > 15, f"i 12 secondi interi: {viste}"
+        pg.locator("#foglio button[aria-label='Registra una nota vocale']").click()
+        ferma.wait_for(timeout=4000)
+        pg.wait_for_timeout(2500)
+        ferma.click()
+        pg.wait_for_function("document.querySelector('#foglio textarea').value.includes('pezzo 1')", timeout=15000)
         valore = pg.locator("#foglio textarea").input_value()
-        assert valore == "Lezione di oggi con Marco: rovescio a due mani e split step prima della risposta al servizio. poi il pezzo 1 della dettatura.\n\npoi il pezzo 2 della dettatura.", repr(valore)
-        viste = pg.evaluate("JSON.parse(sessionStorage.getItem('finto.trascrizioni') || '[]')")[-3:]
-        assert [v["pezzo"] for v in viste] == [0, 1, 2], viste
-        assert viste[0]["prima"] == "" and viste[2]["prima"].endswith("pezzo 1 della dettatura."), "ogni pezzo con la fine del testo di prima"
+        assert valore == "Lezione di oggi con Marco: rovescio a due mani e split step prima della risposta al servizio.\n\npoi il pezzo 1 della dettatura.", repr(valore)
+        assert trascrizioni()[-1]["prima"].endswith("risposta al servizio."), "la seconda con la fine del testo di prima"
+        pg.locator("#foglio button[aria-label='Registra una nota vocale']").wait_for(timeout=4000)
         assert pg.evaluate(liberi), "microfono liberato dopo Ferma"
         pg.click("#foglio button[aria-label='Indietro']")  # niente salvato: resta da salvare
         pg.wait_for_selector(".vocali__riga")

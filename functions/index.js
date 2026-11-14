@@ -413,12 +413,12 @@ const MAX_AUDIO_BASE64 = 12_000_000; // ~9 MB di audio: a 32 kbit/s più di mezz
 /**
  * Nota vocale → testo. data = { audio (base64), mimeType, projectId?, prima?, pezzo? }. Ritorna { testo }.
  * Con projectId il prompt riceve nome, istruzioni e temi del progetto; sempre i nomi della rubrica
- * (src/trascrizione.js). Dal 14/11 l'app manda la registrazione a pezzi, tagliati nelle pause, mentre si parla:
- * `prima` è la fine del testo già trascritto (per continuare la frase), `pezzo` il numero, solo per il registro.
- * Un pezzo senza parole torna vuoto. L'audio non viene salvato da nessuna parte.
+ * (src/trascrizione.js). L'app manda ogni registrazione intera, a «Ferma» (come il 27/10; dal 14/11 al 14/11 sera a
+ * pezzi tagliati nelle pause, più lenta): `prima` è la fine del testo già trascritto quando nello stesso foglio si
+ * registra una seconda volta, `pezzo` il numero della registrazione, solo per il registro. Un audio senza parole torna
+ * vuoto. L'audio non viene salvato da nessuna parte. 300 s: una lezione intera di mezz'ora in una volta.
  */
-// Il contesto (rubrica, progetto) si rilegge al più ogni due minuti per persona e progetto: i pezzi di una nota
-// arrivano ogni pochi secondi.
+// Il contesto (rubrica, progetto) si rilegge al più ogni due minuti per persona e progetto.
 const contestiTrascrizione = new Map();
 async function contestoPer(db, uid, projectId) {
   const chiave = `${uid}|${projectId || ""}`;
@@ -432,7 +432,7 @@ async function contestoPer(db, uid, projectId) {
 }
 
 export const trascrivi = onCall(
-  { secrets: [GEMINI_API_KEY], timeoutSeconds: 120 },
+  { secrets: [GEMINI_API_KEY], timeoutSeconds: 300 },
   async (req) => {
     if (!req.auth) throw new HttpsError("unauthenticated", "Accesso richiesto");
     const { audio, mimeType, projectId } = req.data || {};
@@ -452,7 +452,7 @@ export const trascrivi = onCall(
       try {
         ({ testo, uso } = await transcribe({ audioBase64: audio, mimeType: tipo, keys: { gemini: GEMINI_API_KEY.value().trim() }, contesto, prima }));
       } catch (err) {
-        // Un pezzo senza parole (una pausa lunga): niente testo, non un errore.
+        // Un audio senza parole: niente testo, non un errore.
         if (!/trascrizione vuota/i.test(String(err.message))) throw err;
       }
       if (/^\[silenzio\]$/i.test(testo.trim())) testo = "";

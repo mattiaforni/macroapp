@@ -40,7 +40,7 @@ export async function reason({ system, user, schema, key }) {
 // 3,75 $/M in uscita, cioè circa 0,2 centesimi di dollaro al minuto; raddoppiano dal 1° gennaio 2027.
 // https://ai.google.dev/gemini-api/docs/pricing — https://ai.google.dev/gemini-api/docs/audio
 export const MODELLO_TRASCRIZIONE = "gemini-3.8-flash";
-const ATTESA_TRASCRIZIONE = 100_000; // ms: sotto il tempo massimo della funzione (120 s)
+const ATTESA_TRASCRIZIONE = 270_000; // ms: sotto il tempo massimo della funzione (300 s); una lezione intera in una volta
 
 /** Il prompt della trascrizione, con il vocabolario della persona e del progetto (src/trascrizione.js). */
 export function promptTrascrizione(contesto = {}, { prima = "" } = {}) {
@@ -50,9 +50,10 @@ export function promptTrascrizione(contesto = {}, { prima = "" } = {}) {
     "le esitazioni (ehm, mmm) e le parole ripetute per errore. Se un punto non si capisce, scrivi [incomprensibile].",
     "Restituisci solo il testo della trascrizione, senza commenti.",
   ];
-  // A pezzi (14/11): l'app taglia la registrazione nelle pause e manda ogni pezzo con la fine del testo già trascritto.
+  // Una seconda registrazione nello stesso foglio arriva con la fine del testo già trascritto (dal 14/11 sera l'app manda
+  // ogni registrazione intera, non più a pezzi tagliati nelle pause).
   if (prima) {
-    righe.push("", "Questo audio è il seguito di una nota più lunga, tagliata in una pausa. La parte già trascritta finisce così:",
+    righe.push("", "Questo audio è il seguito di una nota già iniziata. La parte già trascritta finisce così:",
       "<prima>", prima, "</prima>",
       "Trascrivi solo il nuovo audio, senza ripetere quella parte: se comincia a metà frase, continua la frase (minuscola",
       "e punteggiatura di conseguenza).");

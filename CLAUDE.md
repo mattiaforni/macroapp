@@ -21,8 +21,8 @@ Documenti: `docs/ARCHITETTURA.md` (come funziona e perché), `docs/MODELLO-DATI.
   - `analyzeEntry`: agente del diario (`src/agent.js`, provider in `src/ai/`): legge la nota, le foto, i documenti di Drive
     del progetto (anche i PDF, `src/google/drive.js`) e ciò che c'è già (task aperti, lista, eventi); scrive proposte;
     modello scelto dall'utente (`modelloPer`), 300 s; costi in `consumi` (`src/consumi.js`);
-  - `trascrivi`: nota vocale → testo con Gemini Flash e il vocabolario del progetto, a pezzi (`src/trascrizione.js`);
-    l'audio non si salva;
+  - `trascrivi`: nota vocale → testo con Gemini Flash e il vocabolario del progetto, la registrazione intera a «Ferma»
+    (`src/trascrizione.js`, 300 s); l'audio non si salva sul server;
   - `chiedi`: domande sui propri dati, Claude con strumenti di sola lettura più `proponi` (azioni da confermare sotto la
     risposta, in `proposals` con `domandaId`; `src/chiedi.js`, stato su `domande/{id}`); `revisioneSettimana` (domenica
     18:47, `src/settimana.js`, senza azioni);
@@ -76,7 +76,7 @@ Una riga per file, per orientarsi; i dettagli di ciascuno sono in `docs/MAPPA.md
 | `components/contributo.js` | «Completa» la scheda su Open Food Facts: foto, lettura con Claude, invio dei campi mancanti |
 | `components/documenti.js` | documenti di Drive collegati a progetti e voci del manuale |
 | `components/foto.js` | foto delle note: scelta, riduzione, striscia, visore (`journal_photos`) |
-| `components/registratore.js` | nota vocale a pezzi: taglia nelle pause, trascrive ogni pezzo, tiene tutto sul telefono fino al salvataggio |
+| `components/registratore.js` | nota vocale: registra, trascrive tutto a «Ferma», tiene l'audio sul telefono fino al salvataggio (ripresa, ritentativi) |
 | `components/persone.js` | scelta delle persone (rubrica e Google Contatti) |
 | `modules/*/index.js` | un modulo = `{ id, title, nav, icon, mount(container) → smonta }`, in `modules/registry.js` |
 | `modules/diario` | Diario: note che vedi, riga, foglio di lettura e di scrittura, filtri per progetto e persona, ricerca (lente in testata), prossimi giorni, analisi |
@@ -197,6 +197,8 @@ Scelte di Mattia da non riproporre (il perché e il contesto in docs/STORIA.md, 
 - **Idee scartate il 27/10** (riferite da Mattia il 14/11): faccende, scadenze, menu, dispensa.
 - Crediti API: inclusi nel piano Max, 100 $ al mese: non proporre di comprarne.
 - Trascrizione con Gemini Flash (27/10; scartato `gemini-3.5-transcribe`); non parola per parola col riconoscimento del telefono.
+  Una trascrizione sola a «Ferma» (14/11 sera: la trascrizione a pezzi mentre si parla, provata lo stesso giorno, era più
+  lenta e non gli piace, «a costo di non vedere quello che scrivo»); resta la rete di sicurezza sul telefono.
 - Lista a 4 colonne (25/10, confermato il 29/10: si è cambiato l'accesso alla scheda, non le colonne).
 - Foto delle note su Firestore (`journal_photos`), non su Cloud Storage (4/11), finché non sono centinaia.
 - Sintesi del progetto: passa dalla conferma (26/10), si propone da sola a ogni nota, senza pulsante «Aggiorna» (29/10).
@@ -217,8 +219,8 @@ Dal telefono o con i dati veri (dettagli in docs/STORIA.md alla data):
   Backup, «Da fare una volta in console»: oggi il backup prende 403); poi Diagnosi con `backup` e `backupora`, un Ripristino
   di prova, il PITR attivo (Diagnosi), il primo backup del lunedì.
 - **Più AI** (14/11): una domanda in Chiedi (tempi, fonti; `fallbacks` in beta); una nota con uno scontrino fotografato; un
-  task che la nota dice fatto; un PDF collegato a un progetto; la trascrizione a pezzi su una lezione vera e con lo schermo
-  bloccato; la prima revisione della domenica; condivisione e scorciatoie dopo l'aggiornamento del WebAPK.
+  task che la nota dice fatto; un PDF collegato a un progetto; la trascrizione di una lezione vera (tempi, di nuovo in una
+  volta) e con lo schermo bloccato; la prima revisione della domenica; condivisione e scorciatoie dopo l'aggiornamento del WebAPK.
 - **Chiedi che agisce** (14/11): una domanda che chiede di fare qualcosa («sposta la cena a sabato», «segna pagata la
   bolletta», «mettimi in lista il latte»): le azioni sotto la risposta, la conferma, l'evento spostato su Google con la sua
   durata; che Claude non proponga niente a una semplice domanda.

@@ -181,7 +181,7 @@ export function apriProgetto(esistente = null, onCreato) {
       el("div.segmenti", { style: "margin-top:-10px;padding-top:0" }, pulsanteRegistra({
         cosa: "le istruzioni",
         progetto: () => esistente?.id || null,
-        // A pezzi, mentre parli (14/11): il primo staccato da ciò che c'era, gli altri di seguito.
+        // Il testo di una registrazione, a «Ferma»: staccato da ciò che c'era.
         inserisci: (testo, { primo = true, aCapo = true } = {}) => {
           const prima = istruzioni.value.trimEnd();
           istruzioni.value = !prima ? testo : `${prima}${primo || aCapo ? "\n\n" : " "}${testo}`;

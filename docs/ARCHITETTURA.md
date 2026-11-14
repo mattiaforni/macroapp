@@ -269,8 +269,11 @@ il segreto GOOGLE_OAUTH_CLIENT.
 - **Note vocali** del diario (27/10): il telefono registra (components/registratore.js), la function `trascrivi` manda l'audio
   a Gemini con il vocabolario del progetto e della rubrica (src/trascrizione.js) e restituisce il testo, che entra nel campo
   della nota; poi tutto come una nota scritta. Claude non accetta audio. Sul server l'audio non viene salvato.
-  **A pezzi, dal 14/11** (Mattia: «non vedo quello che sto trascrivendo» e «se blocco lo schermo non registra»): il registratore
-  ascolta il livello della voce (AudioContext) e taglia nelle pause (al primo silenzio di 0,6 s dopo 6 s, al più tardi a 30 s
+  **A pezzi, solo il 14/11** (Mattia: «non vedo quello che sto trascrivendo» e «se blocco lo schermo non registra»; la sera
+  stessa: «ci mette molto di più della trascrizione di prima… così non mi piace». Dal 14/11 sera di nuovo una trascrizione sola
+  della registrazione intera a «Ferma», funzione a 300 s e registrazioni fino a 30 minuti; della versione a pezzi restano
+  l'archivio sul telefono, i ritentativi, la ripresa e l'avviso della traccia muta). Com'era a pezzi: il registratore
+  ascoltava il livello della voce (AudioContext) e tagliava nelle pause (al primo silenzio di 0,6 s dopo 6 s, al più tardi a 30 s
   appena la voce cala, comunque a 45 s; in secondo piano solo a tempo), con il registratore del pezzo nuovo avviato prima di
   fermare il vecchio. Ogni pezzo va a `trascrivi` subito, in ordine, con la fine del testo già trascritto (`prima`), e il testo
   entra nel campo a ogni pausa; una pausa lunga (oltre 2,2 s) va a capo. Audio (un blob al secondo) e testo stanno nell'archivio

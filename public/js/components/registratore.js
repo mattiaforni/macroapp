@@ -2,20 +2,20 @@
 // Si parla quanto serve, senza le interruzioni del microfono della tastiera, con il vocabolario del progetto (nome,
 // istruzioni, temi della sintesi) e i nomi della rubrica.
 //
-// A pezzi, mentre parli (14/11, richiesta di Mattia: «non vedo quello che sto trascrivendo via via» e «se blocco lo
-// schermo la trascrizione non registra quello che ho detto»). La registrazione si taglia nelle pause (al primo
-// silenzio dopo PEZZO_MIN_S, al più tardi dopo PEZZO_MAX_S) e ogni pezzo si trascrive subito, in ordine, con la fine
-// del testo già trascritto come contesto: il testo compare nel campo una frase alla volta. Ferma trascrive solo
-// l'ultimo pezzo. Non parola per parola: il riconoscimento dal vivo del telefono (Web Speech) si contende il
-// microfono con la registrazione su Android, e Gemini sul pezzo intero scrive meglio nomi e termini.
+// Una sola trascrizione alla fine, come il 27/10: Registra → Ferma → «Trascrivo…» → il testo intero nel campo. Dal 14/11
+// al 14/11 sera la registrazione si tagliava nelle pause e ogni pezzo si trascriveva mentre parlavi (il testo compariva
+// a ogni pausa); Mattia l'ha provata: «ci mette molto di più della trascrizione di prima», e preferisce non vedere il
+// testo mentre parla. Del 14/11 resta la rete di sicurezza qui sotto. Il codice ragiona ancora per «pezzi», ma ogni
+// registrazione (Registra → Ferma) è un pezzo solo; una seconda registrazione nello stesso foglio è il pezzo dopo, e
+// si trascrive con la fine del testo di prima come contesto.
 //
-// Niente si perde. Ogni secondo di audio va nell'archivio del telefono (core/archivio.js, IndexedDB) insieme al testo
+// Niente si perde (14/11, Mattia: «se blocco lo schermo la trascrizione non registra quello che ho detto»). Ogni secondo di audio va nell'archivio del telefono (core/archivio.js, IndexedDB) insieme al testo
 // già trascritto, e ci resta finché la nota non è salvata (`conclusa()`). Un pezzo la cui trascrizione non arriva
 // (telefono bloccato, rete) si riprova da solo, anche tornando nell'app; se l'app si chiude o il foglio si chiude
 // senza salvare, la registrazione resta e il Diario la offre in cima («Note vocali da salvare», `sospese()`), con il
 // testo già trascritto e il resto da trascrivere. Se il telefono smette di dare audio (schermo spento, una chiamata),
 // lo si dice tornando nell'app. Solo le note del diario (`archivia: true`) si tengono; le istruzioni di un progetto
-// si trascrivono a pezzi allo stesso modo, ma in memoria.
+// si trascrivono allo stesso modo, ma in memoria.
 //
 // sessioni/{id} = { id, inizio, durataMs, mimeType, projectId, stato: "registra" | "ferma", pezzi: { n: { stato:
 //   "attesa" | "fatto" | "vuoto", testo, aCapo } }, aggiornata }
@@ -25,15 +25,10 @@ import { functions } from "../core/firebase.js";
 import { el, icon, toast } from "../core/ui.js";
 import * as archivio from "../core/archivio.js";
 
-const trascrivi = httpsCallable(functions, "trascrivi", { timeout: 70000 }); // la function ha 120 s; un pezzo è corto
-const MASSIMO_S = 45 * 60;   // oltre si ferma da sola
+const trascrivi = httpsCallable(functions, "trascrivi", { timeout: 310000 }); // la function ha 300 s: una lezione intera
+const MASSIMO_S = 30 * 60;   // oltre si ferma da sola (30 minuti a 32 kbit/s stanno nel limite della function)
 const BITRATE = 32000;       // voce: 32 kbit/s bastano, ~240 KB al minuto
-const PEZZO_MIN_S = 6;       // un pezzo si chiude al primo silenzio dopo questi secondi…
-const PEZZO_MAX_S = 30;      // …o dopo questi, appena la voce si abbassa…
-const PEZZO_DURO_S = 45;     // …o comunque dopo questi
-const PAUSA_MS = 600;        // quanto silenzio è una pausa
-const A_CAPO_MS = 2200;      // una pausa più lunga di così, tra due pezzi, va a capo
-const CONTESTO = 400;        // caratteri del testo precedente mandati con ogni pezzo
+const CONTESTO = 400;        // caratteri del testo precedente mandati con una seconda registrazione nello stesso foglio
 const BUCO_MS = 3000;        // il telefono non ha dato audio per più di così: lo si dice
 
 export const registrazionePossibile = () => !!(navigator.mediaDevices?.getUserMedia && window.MediaRecorder);
@@ -108,8 +103,8 @@ export async function elimina(id) {
 // ───────────── Pulsante ─────────────
 
 /**
- * Pulsante «Registra». `inserisci(testo, { primo, aCapo })` riceve ogni pezzo trascritto: `primo` per il primo pezzo
- * di una registrazione (va staccato da ciò che c'era), `aCapo` dopo una pausa lunga. `progetto()` dice il progetto
+ * Pulsante «Registra». `inserisci(testo, { primo, aCapo })` riceve il testo di una registrazione appena trascritta:
+ * `primo` per la prima del foglio, `aCapo` per le altre (staccate da ciò che c'era). `progetto()` dice il progetto
  * scelto nel foglio in quel momento (per il vocabolario); `cosa` completa l'etichetta per chi legge lo schermo.
  * `archivia`: la registrazione resta sul telefono finché non chiami `conclusa()` (nota del diario salvata).
  * `riprendi`: id di una registrazione non salvata (sospese()) di cui finire la trascrizione in questo foglio; il testo
@@ -125,7 +120,7 @@ export function pulsanteRegistra({ inserisci, progetto = () => null, cosa = "una
   let corrente = null;         // il registratore del pezzo in corso: { rec, n, pezzi, voce, inizio, aCapo, conta }
   let numero = 0;              // prossimo numero di pezzo
   let inizio = 0;              // inizio della registrazione (ms)
-  let silenzioDa = 0, fondo = 0.01, livello = 0, mutoDa = 0;
+  let fondo = 0.01, livello = 0, mutoDa = 0;
   const coda = [];             // pezzi da trascrivere: { sid, n, blob?, aCapo, mimeType, projectId }
   let lavorando = false, tentativi = 0, fermoPerErrore = false;
   const mie = new Set();       // sessioni nate o riprese qui: conclusa() le toglie
@@ -184,7 +179,7 @@ export function pulsanteRegistra({ inserisci, progetto = () => null, cosa = "una
       misura.fftSize = 1024;
       sorgente.connect(misura);
       contesto.resume?.().catch(() => {});
-    } catch (e) { contesto = null; misura = null; } // senza livello: pezzi tagliati a tempo
+    } catch (e) { contesto = null; misura = null; } // senza livello: il pallino non si muove, tutto conta come voce
   }
   const campioni = new Float32Array(1024);
   /** RMS dell'ultimo istante, e se c'è voce: sopra il fondo del rumore, che si adatta piano. */
@@ -214,13 +209,6 @@ export function pulsanteRegistra({ inserisci, progetto = () => null, cosa = "una
     rec.onstop = () => chiudiPezzo(p);
     rec.start(1000); // un pezzo al secondo: se la registrazione si interrompe, quello che c'è resta
     return p;
-  }
-
-  /** Taglia nella pausa: il pezzo nuovo parte prima che il vecchio si fermi, così non manca nulla. */
-  function taglia() {
-    const vecchio = corrente;
-    corrente = nuovoPezzo(false);
-    setTimeout(() => { if (vecchio.rec.state !== "inactive") vecchio.rec.stop(); }, 250);
   }
 
   function chiudiPezzo(p) {
@@ -342,7 +330,7 @@ export function pulsanteRegistra({ inserisci, progetto = () => null, cosa = "una
     }
     inizio = Date.now();
     // Una seconda registrazione nello stesso foglio (o in quello di una registrazione ripresa) continua la stessa
-    // sessione: una sola «nota vocale da salvare» per foglio. Il suo primo pezzo va a capo.
+    // sessione: una sola «nota vocale da salvare» per foglio. Il suo testo va a capo.
     if (sessione) {
       sessione.stato = "registra";
       sessione.projectId = progetto() || sessione.projectId || null;
@@ -353,7 +341,7 @@ export function pulsanteRegistra({ inserisci, progetto = () => null, cosa = "una
     }
     salvaSessione();
     ascolta();
-    silenzioDa = 0; mutoDa = 0;
+    mutoDa = 0;
     corrente = nuovoPezzo(true);
     const traccia = flusso.getAudioTracks()[0];
     // Il telefono smette di dare audio (schermo spento, una chiamata): lo si dice al ritorno. Se la traccia finisce, si ferma.
@@ -366,7 +354,6 @@ export function pulsanteRegistra({ inserisci, progetto = () => null, cosa = "una
     // Schermo acceso mentre si parla; si richiede tornando nell'app.
     prendiVeglia();
     document.addEventListener("visibilitychange", suVisibilita);
-    let ultimo = Date.now();
     tic = setInterval(() => {
       const ora = Date.now();
       if (archivia && !vivo() && stato === "registra") { // foglio chiuso: si ferma e si tiene tutto
@@ -375,20 +362,10 @@ export function pulsanteRegistra({ inserisci, progetto = () => null, cosa = "una
       }
       if (!archivia && !vivo()) { scarta(); return; }
       if ((ora - inizio) / 1000 >= MASSIMO_S) { toast(`Registrazione al limite di ${MASSIMO_S / 60} minuti: la fermo`); ferma(); return; }
+      // Il livello della voce muove il pallino; una registrazione in cui non si è sentita voce non si trascrive.
       const { voce, rms } = senti();
       livello = rms;
-      // In secondo piano i timer rallentano (un giro al secondo o meno): si taglia solo a tempo, nel primo momento quieto.
-      const fuori = document.visibilityState === "hidden" || ora - ultimo > 900;
-      ultimo = ora;
-      if (voce) {
-        if (!corrente.voce) corrente.aCapo = corrente.aCapo || (silenzioDa && ora - silenzioDa >= A_CAPO_MS && corrente.n > 0);
-        corrente.voce = true;
-        silenzioDa = 0;
-      } else if (!silenzioDa) silenzioDa = ora;
-      const eta = (ora - corrente.inizio) / 1000;
-      const pausa = silenzioDa ? ora - silenzioDa : 0;
-      const quieto = !voce;
-      if (corrente.voce && ((!fuori && eta >= PEZZO_MIN_S && pausa >= PAUSA_MS) || (eta >= PEZZO_MAX_S && quieto) || eta >= PEZZO_DURO_S)) taglia();
+      if (voce) corrente.voce = true;
       disegna();
     }, 100);
   }
@@ -426,7 +403,7 @@ export function pulsanteRegistra({ inserisci, progetto = () => null, cosa = "una
   }
 
   /** Prima di salvare: ferma la registrazione e aspetta gli ultimi pezzi, al più `ms` (true se sono arrivati tutti). */
-  btn.attendi = (ms = 20000) => {
+  btn.attendi = (ms = 90000) => {
     if (stato === "registra") ferma();
     if (!coda.length && !corrente) return Promise.resolve(true);
     if (fermoPerErrore) return Promise.resolve(false);

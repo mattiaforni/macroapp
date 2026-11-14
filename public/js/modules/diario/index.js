@@ -174,10 +174,10 @@ export function apriNota({ esistente = null, testo = "", progetti = [], projectI
     }
   }
 
-  // Nota vocale (14/11): il testo arriva a pezzi mentre parli, uno a ogni pausa, e si aggiunge a quello che c'è già
-  // nel campo; la registrazione resta sul telefono finché la nota non è salvata (components/registratore.js).
+  // Nota vocale: si parla, «Ferma», e il testo intero si aggiunge a quello che c'è già nel campo (14/11 sera: di nuovo una
+  // trascrizione sola alla fine); la registrazione resta sul telefono finché la nota non è salvata (components/registratore.js).
   const suggerimento = el("p.meta", { style: "margin-top:6px", hidden: !!esistente && !ripresa },
-    ripresa ? "Registrazione ripresa: finisco di trascriverla, poi salva." : "Per la voce tocca «Registra» in basso: parla quanto vuoi, il testo arriva qui a ogni pausa. Poi «Ferma».");
+    ripresa ? "Registrazione ripresa: finisco di trascriverla, poi salva." : "Per la voce tocca «Registra» in basso: parla quanto vuoi, poi «Ferma».");
   const registra = pulsanteRegistra({
     archivia: true, riprendi: ripresa,
     progetto: () => progetto.valore(),
@@ -189,11 +189,11 @@ export function apriNota({ esistente = null, testo = "", progetti = [], projectI
       if (document.activeElement !== titolo) area.scrollIntoView({ block: "end", behavior: "instant" });
     },
     onStato: ({ stato, inAttesa }) => {
-      if (stato === "fermo") { suggerimento.hidden = !!esistente; suggerimento.textContent = "Per la voce tocca «Registra» in basso: parla quanto vuoi, il testo arriva qui a ogni pausa. Poi «Ferma»."; return; }
+      if (stato === "fermo") { suggerimento.hidden = !!esistente; suggerimento.textContent = "Per la voce tocca «Registra» in basso: parla quanto vuoi, poi «Ferma»."; return; }
       suggerimento.hidden = false;
       suggerimento.textContent = stato === "registra"
-        ? "Ti ascolto: il testo arriva qui a ogni pausa. Se blocchi il telefono, quello che hai detto resta."
-        : inAttesa > 1 ? `Trascrivo gli ultimi ${inAttesa} pezzi…` : "Trascrivo l'ultimo pezzo…";
+        ? "Ti ascolto: quando fermi, trascrivo. Se blocchi il telefono, quello che hai detto resta."
+        : inAttesa > 1 ? `Trascrivo ${inAttesa} registrazioni…` : "Trascrivo…";
     },
   });
 
@@ -222,8 +222,8 @@ export function apriNota({ esistente = null, testo = "", progetti = [], projectI
     ],
     azioni: [registra],
     onConfirm: async () => {
-      // Salvando mentre registri o trascrivi: si ferma e si aspetta l'ultimo pezzo (se non arriva, resta sul telefono).
-      if (!(await registra.attendi())) toast("L'ultimo pezzo non è ancora trascritto: lo trovi in cima al Diario quando arriva.", { ms: 6000 });
+      // Salvando mentre registri o trascrivi: si ferma e si aspetta la trascrizione (se non arriva, resta sul telefono).
+      if (!(await registra.attendi())) toast("La registrazione non è ancora trascritta: la trovi in cima al Diario quando arriva.", { ms: 6000 });
       const text = area.value.trim();
       // Una nota può essere di sole foto (uno scontrino, un biglietto da visita): l'agente legge quelle (14/11).
       const fotoScelte = foto.valore();

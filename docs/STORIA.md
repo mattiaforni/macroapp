@@ -577,3 +577,15 @@ a percentuale.
       prova.py (nota d'agosto oltre le ultime 100, accenti e maiuscole, estratto, progetto, nessun risultato, persona dal
       foglio di lettura, scheda in rubrica col conteggio, «Note con …» da un'altra pagina).
 
+- [x] **Nota vocale: di nuovo una trascrizione sola alla fine** (14/11 sera, Mattia, dopo averla provata: «la trascrizione a
+      pezzetti ci mette molto di più della trascrizione che ci metteva prima… riportarlo a come era in precedenza, a costo
+      di non vedere quello che scrivo»). Scelta sua tra due: come prima **con** la rete di sicurezza del 14/11 (scartato il
+      ripristino tale e quale del 27/10, che perdeva la registrazione se la richiesta cadeva). Registra → Ferma →
+      «Trascrivo…» → il testo intero nel campo: niente più tagli nelle pause né testo mentre si parla; ogni registrazione è
+      un pezzo solo, mandato intero a `trascrivi` (funzione a 300 s, Gemini a 270 s, app a 310 s, registrazioni fino a 30
+      minuti). Restano: l'audio sul telefono finché la nota non è salvata, il ritentativo da solo se la risposta si perde,
+      «Nota vocale da salvare» in cima al Diario, l'avviso se il telefono smette di dare audio. Una seconda registrazione
+      nello stesso foglio va a capo e porta la fine del testo di prima. Prova: «nota vocale, una trascrizione alla fine» (12
+      secondi con due pause: niente testo né richieste prima di Ferma, una richiesta sola con tutto l'audio, risposta persa
+      riprovata, seconda registrazione a capo).
+
