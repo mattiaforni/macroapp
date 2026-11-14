@@ -222,7 +222,8 @@ export function httpsCallable(_f, name) {
   };
   // Chiedi (14/11), come il server (functions/src/chiedi.js): «in corso» con i passi sul documento, poi la risposta con le
   // fonti (la prima nota del diario e la prima spesa che trova). `finto.chiedi.persa` = "1": la risposta si perde (telefono
-  // bloccato) ma il documento si completa lo stesso; `finto.chiedi.ritardo` (ms).
+  // bloccato) ma il documento si completa lo stesso; `finto.chiedi.ritardo` (ms). `finto.chiedi.azioni` = JSON di
+  // [{ kind, summary, payload }]: le azioni che il server propone per questo turno (14/11), private e con domandaId e turno.
   if (name === "chiedi") return async (data) => {
     const D = coll("domande");
     const d = D.get(data.id);
@@ -248,7 +249,12 @@ export function httpsCallable(_f, name) {
       const risposta = n === 1
         ? "Nell'ultima lezione avete lavorato su **rovescio a due mani** e split step.\n\n- Piedi più larghi sul rovescio\n- Split step prima della risposta al servizio"
         : `Seguito ${n}: sì, la correzione sulla spalla torna anche lì.`;
-      d.turni = [...d.turni.slice(0, -1), { ...d.turni[n - 1], risposta, fonti, modello: "sonnet", at: new Date() }];
+      const azioni = JSON.parse(sessionStorage.getItem("finto.chiedi.azioni") || "[]");
+      sessionStorage.removeItem("finto.chiedi.azioni");
+      const hid = coll("users").get(UID)?.householdId || null;
+      for (const a of azioni) coll("proposals").set("p" + (++seq), { ownerUid: UID, householdId: hid, visibility: "private", source: "chiedi", status: "pending",
+        sourceEntryId: null, domandaId: data.id, turno: n - 1, createdAt: new Date(), ...a });
+      d.turni = [...d.turni.slice(0, -1), { ...d.turni[n - 1], risposta: azioni.length ? `${risposta}\n\nTe lo propongo qui sotto.` : risposta, fonti, azioni: azioni.length, modello: "sonnet", at: new Date() }];
       d.stato = "fatta"; notify();
       consumoFinto(d.tipo === "settimana" ? "settimana" : "chiedi", 0.03); notify();
       return { data: { fatta: true } };

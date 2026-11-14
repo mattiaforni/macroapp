@@ -666,7 +666,9 @@ with sync_playwright() as p:
             assert parti[1] == "events", url
             eventi = cal["eventi"][cid]
             eid = unquote(parti[2]) if len(parti) > 2 else None
-            if req.method == "GET":
+            if req.method == "GET" and eid:  # un evento solo (le modifiche proposte da Chiedi lo rileggono)
+                r.fulfill(status=200, content_type="application/json", body=json.dumps(eventi[eid])) if eid in eventi else r.fulfill(status=404, body="{}")
+            elif req.method == "GET":
                 cal["letti"].append(cid)
                 r.fulfill(status=200, content_type="application/json", body=json.dumps({"items": list(eventi.values())}))
             elif req.method == "POST" and len(parti) > 3 and parti[3] == "move":
@@ -2188,6 +2190,64 @@ with sync_playwright() as p:
         assert "2 domande" in riga.inner_text(), riga.inner_text()
         pg.wait_for_timeout(300)
         shot(pg, "26c-chiedi-pagina")
+
+        # ── Chiedi che agisce (14/11): le azioni proposte compaiono sotto la risposta, si confermano una per una e
+        #    l'effetto è nel modulo (il task nei Task, l'evento spostato su Google Calendar, con la sua durata) ──
+        step[0] = "chiedi che agisce"
+        menu(pg, "Google")
+        pg.click("button.fab >> text=Collega")
+        pg.wait_for_selector(".blocco h3 >> text=mattia@example.com", timeout=8000)
+        dopodomani = (_dt.date.today() + _dt.timedelta(days=2)).isoformat()
+        tra3 = (_dt.date.today() + _dt.timedelta(days=3)).isoformat()
+        cal["eventi"][CAL_CASA]["cenaR"] = {"id": "cenaR", "summary": "Cena dai Rossi", "iCalUID": "cenaR@g", "location": "Via Roma 3", "description": "Portare il dolce",
+            "start": {"dateTime": f"{domani}T19:00:00Z"}, "end": {"dateTime": f"{domani}T21:00:00Z"}, "organizer": {"email": CAL_CASA, "self": True},
+            "htmlLink": "https://calendar.google.com/event?eid=cenaR", "status": "confirmed"}
+        azioni = [
+            {"kind": "task", "summary": "Prenotare il campo da tennis", "payload": {"text": "Prenotare il campo da tennis", "due": tra3, "project": "", "people": "", "note": "", "visibilita": "private"}},
+            {"kind": "event_update", "summary": "Spostare la cena dai Rossi a dopodomani alle 21", "payload": {"eventId": "cenaR", "calId": CAL_CASA, "serie": "", "calendario": "casa",
+                "prima": {"titolo": "Cena dai Rossi", "giorno": domani, "ora": "19:00", "luogo": "Via Roma 3", "tuttoIlGiorno": False}, "nuovo": {"giorno": dopodomani, "ora": "21:00"}}},
+        ]
+        pg.evaluate("(a) => sessionStorage.setItem('finto.chiedi.azioni', a)", json.dumps(azioni))
+        menu(pg, "Chiedi")
+        pg.wait_for_selector("#page-title >> text=Chiedi")
+        pg.click("button.fab")
+        pg.wait_for_selector("#foglio h2 >> text=Chiedi")
+        assert "niente cambia senza la tua spunta" in pg.locator("#foglio").inner_text()
+        pg.locator("#foglio textarea").fill("Ricordami di prenotare il campo e sposta la cena dai Rossi a dopodomani alle 21")
+        pg.locator("#foglio textarea").press("Enter")
+        righe_az = pg.locator("#foglio .domanda__azioni .azione")
+        righe_az.first.wait_for(timeout=8000)
+        assert righe_az.count() == 2, pg.locator("#foglio .domanda__azioni").inner_text()
+        ordine = pg.evaluate("[...document.querySelector('#foglio .domanda__turno').children].map((x) => x.className.split(' ').find((c) => c.startsWith('domanda__')))")
+        assert ordine.index("domanda__azioni") == ordine.index("domanda__risposta") + 1, f"le azioni subito sotto la risposta: {ordine}"
+        ev_az = pg.locator("#foglio .domanda__azioni .azione", has_text="Cena dai Rossi")
+        t = ev_az.inner_text().lower()
+        assert "evento spostato" in t and "21:00" in t and "era il" in t and "alle 19:00" in t, t
+        assert ev_az.locator(".riga__giorno, .lezione__giorno, b").count() >= 1
+        shot(pg, "26d-chiedi-azioni")
+        pg.click("#foglio button[aria-label='Indietro']")
+        riga = pg.locator(".voce-nota", has=pg.locator(".lezione__titolo", has_text="Ricordami di prenotare il campo"))
+        riga.wait_for(timeout=6000)
+        assert "2 azioni da confermare" in riga.inner_text(), riga.inner_text()
+        riga.locator("button.lezione").click()
+        righe_az.first.wait_for(timeout=6000)
+        pg.locator("#foglio .domanda__azioni .azione", has_text="Prenotare il campo da tennis").locator("button[aria-label='Conferma']").click()
+        pg.wait_for_selector("#toast >> text=Task aggiunto", timeout=6000)
+        pg.wait_for_function("document.querySelectorAll('#foglio .domanda__azioni .azione').length === 1", timeout=4000)
+        nuovo_task = pg.evaluate("[...window.__finto.coll('tasks').values()].find((t) => t.text === 'Prenotare il campo da tennis')")
+        assert nuovo_task and nuovo_task["due"] == tra3 and nuovo_task["visibility"] == "private" and not nuovo_task["done"], nuovo_task
+        ev_az.locator("button[aria-label='Conferma']").click()
+        pg.wait_for_selector("#toast >> text=Evento spostato", timeout=6000)
+        pg.wait_for_selector("#foglio .domanda__azioni", state="detached", timeout=4000)
+        cena = cal["eventi"][CAL_CASA]["cenaR"]
+        assert cena["start"]["dateTime"] == f"{dopodomani}T21:00:00" and cena["end"]["dateTime"] == f"{dopodomani}T23:00:00", f"spostata con le sue due ore: {cena}"
+        assert cena["location"] == "Via Roma 3" and cena["description"] == "Portare il dolce" and cena["summary"] == "Cena dai Rossi", f"il resto non cambia: {cena}"
+        props = pg.evaluate("[...window.__finto.coll('proposals').values()].filter((p) => p.source === 'chiedi').map((p) => [p.status, p.visibility, p.turno])")
+        assert props == [["accepted", "private", 0], ["accepted", "private", 0]], props
+        pg.click("#foglio button[aria-label='Indietro']")
+        pg.click(".schede a[href='#/task']")
+        pg.click("#view .segmenti .pillola >> text=Tutti")  # la pagina Task ricorda il filtro (era su Tennis)
+        pg.wait_for_selector(".riga >> text=Prenotare il campo da tennis", timeout=6000)
 
         # ── Scorciatoie dell'icona (14/11, manifest.json → shortcuts) ──
         step[0] = "scorciatoie"

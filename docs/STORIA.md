@@ -544,3 +544,21 @@ a percentuale.
       9 minuti, e dice il passo da fare. Mattia ha scelto di attivare anche il PITR (7 giorni, pochi centesimi al mese): lo fa
       il deploy.
 
+- [x] **Chiedi che agisce** (14/11, richiesta di Mattia: oggi Chiedi aveva solo strumenti di sola lettura). Nuovo strumento
+      `proponi` in `functions/src/chiedi.js`: Claude propone un'azione per volta (task nuovo, task fatto, scadenza nuova,
+      lista, spesa, voce del manuale, evento nuovo, modifica o spostamento di un evento che c'è). Il server controlla tutto
+      prima di tenerla e rimanda l'errore al modello: task ed eventi da cambiare solo tra quelli che gli strumenti hanno
+      appena mostrato (dal codice, tradotto in id dal server), eventi solo nei calendari in cui l'app scrive e non inviti,
+      progetti solo tra quelli visibili, lista/spesa/evento solo con una casa; al più 8, senza doppioni. Le proposte vanno in
+      `proposals` con `source: "chiedi"`, `domandaId`, `turno`, sempre private come la domanda (la cosa creata ha la sua
+      visibilità in `payload.visibilita`). Nell'app compaiono sotto la risposta del loro turno con `renderAzione` («Da
+      confermare») e si applicano con `APPLICA`, come quelle del Diario; nuovo tipo `event_update`, applicato rileggendo
+      l'evento da Google e tenendo la durata (`leggiEvento` + `aggiornaEvento`). La revisione della settimana resta senza
+      azioni. Il prompt dice di proporre solo ciò che è chiesto e di non dire mai «fatto». Prove: `prova-chiedi.mjs` (task e
+      eventi visibili e modificabili, codici inventati, calendario in sola lettura, invito, senza casa, limite, doppioni,
+      giro con un Claude finto che propone anche una cosa sbagliata, revisione senza strumento, proposte scritte private col
+      turno e quelle in attesa di un turno rifatto sostituite) e `prova.py` (passo «chiedi che agisce»: due azioni sotto la
+      risposta, «2 azioni da confermare» nella pagina, conferma del task che compare nei Task, conferma dello spostamento
+      della cena con le sue due ore su Google Calendar finto, luogo e descrizione intatti). Trovato per strada: aprendo una
+      persona già in rubrica senza Google collegato il foglio mostrava «null» (`replaceChildren(null)`), corretto.
+

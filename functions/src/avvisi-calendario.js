@@ -98,6 +98,10 @@ function evento(e, c) {
     giornoFine: tuttoIlGiorno ? dopo(e.end?.date || dopo(e.start.date), -1) : oraRoma(fine).giorno,
     rifiutato: io?.responseStatus === "declined", ricorrente: !!(e.recurrence?.length || e.recurringEventId),
     promemoria: e.reminders || null, calId: c.id, calNome: c.nome, casa: !!c.casa,
+    // Come `modificabile` nell'app (core/calendario.js): un calendario in cui l'app scrive, un evento non bloccato e di
+    // quel calendario (un invito no, salvo che l'organizzatore lo permetta). Serve a Chiedi per proporre modifiche.
+    modificabile: !!c.modificabile && !e.locked && (!e.organizer || e.organizer.self === true || !!e.guestsCanModify),
+    serie: e.recurringEventId || "",
   };
 }
 
@@ -120,9 +124,9 @@ export async function eventiTra(token, calendari, da, a) {
 
 /** I calendari che questa persona vede nell'app: quello della casa, poi i suoi (come calendariVisti nell'app). */
 export function calendariDi(h, u) {
-  const lista = h.calendario?.id ? [{ id: h.calendario.id, nome: h.calendario.nome || "Casa", casa: true }] : [];
+  const lista = h.calendario?.id ? [{ id: h.calendario.id, nome: h.calendario.nome || "Casa", casa: true, modificabile: true }] : [];
   for (const c of Array.isArray(u?.calendari) ? u.calendari : []) {
-    if (c?.id && !lista.some((x) => x.id === c.id)) lista.push({ id: c.id, nome: c.nome || "", casa: false });
+    if (c?.id && !lista.some((x) => x.id === c.id)) lista.push({ id: c.id, nome: c.nome || "", casa: false, modificabile: !!c.modificabile });
   }
   return lista;
 }

@@ -293,6 +293,13 @@ async function doveScrivere(calId) {
   return c;
 }
 
+/** Un evento com'è adesso su Google (`calId` tra i calendari visti), come lo usa l'app: per applicare una modifica proposta. */
+export async function leggiEvento(calId, id) {
+  const c = (await calendariVisti()).find((x) => x.id === calId);
+  if (!c) throw Object.assign(new Error("Il calendario dell'evento non è più tra quelli scelti"), { motivo: "nessun-calendario" });
+  return daGoogle(await chiamaGoogle(`${cal(c.id)}/${encodeURIComponent(id)}`), c);
+}
+
 /** Crea un evento in `calId`, o nel calendario della casa. Ritorna l'evento come lo usa l'app. */
 export async function creaEvento(d, calId = "") {
   const c = await doveScrivere(calId);

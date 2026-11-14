@@ -121,9 +121,10 @@ export async function apriVoceManuale(esistente = null, prefill = {}) {
     }
     if (!contattiCollegati()) {
       suggeriti.hidden = true;
-      legame.replaceChildren(esistente ? null : el("div.nota-campo", {}, icon("contatto"),
+      // (Niente per una persona già in rubrica: replaceChildren(null) scriverebbe «null».)
+      legame.replaceChildren(...(esistente ? [] : [el("div.nota-campo", {}, icon("contatto"),
         el("button", { type: "button", onclick: () => vaiA("google") }, "Collega Google"),
-        el("span", {}, "per cercare tra i tuoi contatti")));
+        el("span", {}, "per cercare tra i tuoi contatti"))]));
       return;
     }
     if (!cercaGoogle) {

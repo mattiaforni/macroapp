@@ -924,6 +924,7 @@ button.tessera__indice:active, .tessera .altro:active { background: rgba(255,255
 .domanda__testo { font-family: var(--display); font-weight: 400; font-size: 24px; line-height: 1.15; margin: 0 0 10px; }
 .domanda__risposta { margin-top: 4px; }
 .domanda__fonti { margin-top: 14px; }
+.domanda__azioni { margin-top: 14px; }
 .domanda__modello { margin-top: 8px; }
 .fonte { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 0; background: none; border: 0; border-bottom: 1px solid var(--linea); color: inherit; font: inherit; text-align: left; }
 .fonte:last-child { border-bottom: none; }

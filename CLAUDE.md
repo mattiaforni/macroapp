@@ -23,8 +23,9 @@ Documenti: `docs/ARCHITETTURA.md` (come funziona e perché), `docs/MODELLO-DATI.
     modello scelto dall'utente (`modelloPer`), 300 s; costi in `consumi` (`src/consumi.js`);
   - `trascrivi`: nota vocale → testo con Gemini Flash e il vocabolario del progetto, a pezzi (`src/trascrizione.js`);
     l'audio non si salva;
-  - `chiedi`: domande sui propri dati, Claude con strumenti di sola lettura (`src/chiedi.js`, stato su `domande/{id}`);
-    `revisioneSettimana` (domenica 18:47, `src/settimana.js`);
+  - `chiedi`: domande sui propri dati, Claude con strumenti di sola lettura più `proponi` (azioni da confermare sotto la
+    risposta, in `proposals` con `domandaId`; `src/chiedi.js`, stato su `domande/{id}`); `revisioneSettimana` (domenica
+    18:47, `src/settimana.js`, senza azioni);
   - `bank` (consenso, letture, `src/banking/enable.js`) e `syncBank` (ogni giorno alle 7:15);
   - `google`: collegamento una tantum con Contatti, Calendario e Drive, permessi di un'ora (`src/google/account.js`);
   - `avvisa` (notifiche push, `src/avvisi.js`) e `giroAvvisi` (ogni 5 minuti: eventi nuovi, promemoria, riepilogo delle
@@ -68,7 +69,7 @@ Una riga per file, per orientarsi; i dettagli di ciascuno sono in `docs/MAPPA.md
 | `core/drive.js` · `core/archivio.js` | ricerca in Drive · archivio sul telefono (IndexedDB) delle note vocali |
 | `components/sheet.js` | foglio a tutta altezza: azioni in basso, tastiera solo su campo vuoto, `scriviDa` |
 | `components/menu.js` · `components/onboarding.js` | menu a sinistra a gruppi · primo accesso (crea casa o entra col codice) |
-| `components/proposals.js` | azioni proposte: `APPLICA` per tipo, `renderAzione`, `segnaAccettata` |
+| `components/proposals.js` | azioni proposte (Diario, banca, Chiedi): `APPLICA` per tipo, `renderAzione`, `segnaAccettata` |
 | `components/sintesi.js` | sintesi di un progetto per temi, foglio per correggerla, storico |
 | `components/prodotto.js` | scanner del codice a barre e scheda del prodotto come in Yuka (alimenti e cosmetici) |
 | `components/contributo.js` | «Completa» la scheda su Open Food Facts: foto, lettura con Claude, invio dei campi mancanti |
@@ -79,7 +80,7 @@ Una riga per file, per orientarsi; i dettagli di ciascuno sono in `docs/MAPPA.md
 | `modules/*/index.js` | un modulo = `{ id, title, nav, icon, mount(container) → smonta }`, in `modules/registry.js` |
 | `modules/diario` | Diario: note che vedi, riga, foglio di lettura e di scrittura, filtro per progetto, prossimi giorni, analisi |
 | `modules/progetto` | pagina di un progetto: Sintesi, Note, Da fare |
-| `modules/chiedi` | Chiedi: domande sui propri dati, risposta con fonti toccabili |
+| `modules/chiedi` | Chiedi: domande sui propri dati, risposta con fonti toccabili e azioni da confermare |
 | `modules/lista` · `modules/scansioni` | lista della spesa a tessere e reparti, scansione · prodotti scansionati |
 | `modules/task` | task per progetti a fasce, giorno a sinistra, foglio del progetto |
 | `modules/calendario` | agenda, foglio dell'evento come in Google Calendar, scelta dei calendari |
@@ -125,7 +126,8 @@ Una riga per file, per orientarsi; i dettagli di ciascuno sono in `docs/MAPPA.md
    (servono per `householdId+visibility+ordine` e `ownerUid+ordine`) + casi in `prove/regole/prova-regole.mjs`.
    Gli ordinamenti fini si fanno nel modulo, per non moltiplicare gli indici.
 5. Niente entra nei moduli dall'AI senza conferma: l'agente scrive solo `proposals` (anche gli eventi
-   del calendario: proposta `event`, scritta su Google solo con la spunta). Eccezioni, perché sono la nota
+   del calendario: proposta `event`, scritta su Google solo con la spunta; Chiedi lo stesso, dal 14/11, anche per
+   modificare o spostare un evento, `event_update`). Eccezioni, perché sono la nota
    stessa e si correggono dal suo foglio: il riepilogo di una nota di un progetto con istruzioni
    (`journal_entries.riepilogo`, deciso da Mattia il 23/10), il titolo e le persone nominate di ogni nota
    (`titolo`, `persone`, richiesta di Mattia del 29/10; una persona taggata non entra in rubrica).
@@ -214,6 +216,9 @@ Dal telefono o con i dati veri (dettagli in docs/STORIA.md alla data):
 - **Più AI** (14/11): una domanda in Chiedi (tempi, fonti; `fallbacks` in beta); una nota con uno scontrino fotografato; un
   task che la nota dice fatto; un PDF collegato a un progetto; la trascrizione a pezzi su una lezione vera e con lo schermo
   bloccato; la prima revisione della domenica; condivisione e scorciatoie dopo l'aggiornamento del WebAPK.
+- **Chiedi che agisce** (14/11): una domanda che chiede di fare qualcosa («sposta la cena a sabato», «segna pagata la
+  bolletta», «mettimi in lista il latte»): le azioni sotto la risposta, la conferma, l'evento spostato su Google con la sua
+  durata; che Claude non proponga niente a una semplice domanda.
 - **Foto** (4/11): «Scatta» torna alla nota col testo già scritto; tempi con foto da 12 MP; foto senza rete.
 - **Barra** (3/11): nome di un progetto in barra alla prima apertura su un telefono nuovo; scorrimento verso un progetto.
 - **Notifiche** (25/10, 1/11): attivazione su entrambi i telefoni; `silent` di notte; il riepilogo delle 7:30; un evento

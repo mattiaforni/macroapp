@@ -9,8 +9,12 @@
 // se il telefono si blocca la risposta arriva lo stesso. La domenica sera lì compare anche la revisione della
 // settimana (tipo «settimana», functions/src/settimana.js), che la notifica apre (#/chiedi/<id>).
 //
+// Azioni (14/11): se la domanda chiede di fare qualcosa («sposta la cena a sabato», «segna pagata la bolletta»), il server
+// le propone in `proposals` (domandaId, turno) e qui compaiono sotto la risposta del loro turno, come sotto le note del
+// Diario: conferma e scarta (components/proposals.js). Niente cambia senza la spunta.
+//
 // domande/{id} = { tipo: "domanda" | "settimana", turni: [{ domanda, risposta?, fonti?: [{ tipo, id, titolo, sotto,
-//   calId? }], modello?, at }], stato: "nuova" | "in_corso" | "fatta" | "errore", inizio?, passi: [string], errore? }
+//   calId? }], azioni?: n, modello?, at }], stato: "nuova" | "in_corso" | "fatta" | "errore", inizio?, passi: [string], errore? }
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-functions.js";
 import { functions } from "../../core/firebase.js";
 import { el, icon, toast, fascia, vuoto, attesa, toDate, meseLungo, isoGiorno, stessoGiorno, fab, testoRicco } from "../../core/ui.js";
@@ -20,6 +24,7 @@ import { vaiA, richiestaPer } from "../../core/router.js";
 import { apriPaginaProgetto } from "../../core/barra.js";
 import { nomeModello } from "../../core/modelli.js";
 import { pulsanteRegistra } from "../../components/registratore.js";
+import { watchPending, renderAzione } from "../../components/proposals.js";
 
 export const id = "chiedi";
 export const title = "Chiedi";
@@ -36,6 +41,7 @@ const ESEMPI = [
   "Quanto abbiamo speso al supermercato questo mese?",
   "Cosa ho da fare questa settimana?",
   "Quando è venuto l'idraulico l'ultima volta?",
+  "Sposta la cena di venerdì a sabato alle 20",
 ];
 
 /** La risposta dell'ultimo turno è in arrivo (dal server, da qualunque telefono). */
@@ -82,7 +88,7 @@ export function nuovaDomanda(testo = "") {
     title: "Chiedi",
     body: [
       el("div.taccuino", {}, campo),
-      el("p.meta", { style: "margin-top:6px" }, "Cerco nelle note del diario, nelle spese, nei task, nel calendario, nei progetti e nel manuale. Non cambio niente: per fare qualcosa scrivi una nota."),
+      el("p.meta", { style: "margin-top:6px" }, "Cerco nelle note del diario, nelle spese, nei task, nel calendario, nei progetti e nel manuale. Se mi chiedi di fare qualcosa te lo propongo sotto la risposta: niente cambia senza la tua spunta."),
       el("div", { style: "margin-top:16px" }, el("div.etichetta-campo", {}, "Per esempio"), esempi),
     ],
     azioni: [pulsanteRegistra({ cosa: "la domanda", inserisci: (t, { primo = true } = {}) => {
@@ -121,13 +127,14 @@ function rigaFonte(f) {
     icon("freccia"));
 }
 
-/** Un turno: la domanda in serif, poi la risposta con le fonti, o la ricerca in corso, o l'errore. */
-function turno(t, d, ultimoTurno, { onRiprova }) {
+/** Un turno: la domanda in serif, poi la risposta, le azioni da confermare e le fonti, o la ricerca in corso, o l'errore. */
+function turno(t, d, ultimoTurno, { onRiprova, azioni = [] }) {
   const attende = ultimoTurno && !t.risposta && inCorso(d);
   const sbagliata = ultimoTurno && !t.risposta && !attende && (d.stato === "errore" || morta(d));
   return el("div.domanda__turno", {},
     el("h3.domanda__testo", {}, t.domanda),
     t.risposta ? el("div.sintesi-testo.domanda__risposta", {}, ...testoRicco(t.risposta)) : null,
+    t.risposta && azioni.length ? el("div.domanda__azioni", {}, el("div.etichetta-campo", {}, "Da confermare"), el("div.azioni-ai", {}, ...azioni.map(renderAzione))) : null,
     t.risposta && t.fonti?.length ? el("div.domanda__fonti", {}, el("div.etichetta-campo", {}, "Fonti"), ...t.fonti.map(rigaFonte)) : null,
     t.risposta && t.modello ? el("p.meta.domanda__modello", {}, `Risposta di ${nomeModello(t.modello) || "Claude"}`) : null,
     attende ? el("div.domanda__attesa", { role: "status" },
@@ -145,6 +152,7 @@ function turno(t, d, ultimoTurno, { onRiprova }) {
  */
 export function apriDomanda(idDomanda, { stessoFoglio = false } = {}) {
   let d = null;
+  let proposte = []; // le azioni in attesa di questa domanda
   const turni = el("div.domanda__turni");
   const segui = el("textarea", { placeholder: "Chiedi ancora…", rows: 1, enterkeyhint: "send", "aria-label": "Altra domanda" });
   segui.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sheet.confirm(); } });
@@ -153,7 +161,7 @@ export function apriDomanda(idDomanda, { stessoFoglio = false } = {}) {
   function disegna() {
     if (!d) return;
     const lista = d.turni || [];
-    turni.replaceChildren(...lista.map((t, i) => turno(t, d, i === lista.length - 1, { onRiprova: riprova })));
+    turni.replaceChildren(...lista.map((t, i) => turno(t, d, i === lista.length - 1, { onRiprova: riprova, azioni: proposte.filter((p) => (p.turno ?? 0) === i) })));
     campoSegui.hidden = inCorso(d);
   }
   const sheet = openSheet({
@@ -161,7 +169,7 @@ export function apriDomanda(idDomanda, { stessoFoglio = false } = {}) {
     stessoFoglio,
     body: [turni, campoSegui,
       el("div.foglio__piede", {},
-        el("button.btn.btn--pericolo", { "aria-label": "Elimina la domanda", onclick: () => { stop(); sheet.close(); remove(COLL, idDomanda); toast("Domanda eliminata"); } }, icon("cestino")))],
+        el("button.btn.btn--pericolo", { "aria-label": "Elimina la domanda", onclick: () => { stop(); stopAzioni(); sheet.close(); remove(COLL, idDomanda); toast("Domanda eliminata"); } }, icon("cestino")))],
     confirmLabel: "Chiedi",
     onConfirm: () => {
       const t = segui.value.trim();
@@ -176,8 +184,13 @@ export function apriDomanda(idDomanda, { stessoFoglio = false } = {}) {
     },
   });
   let primo = true;
+  const stopAzioni = watchPending((docs) => {
+    if (!sheet.aperto()) { stopAzioni(); return; }
+    proposte = docs.filter((p) => p.domandaId === idDomanda);
+    disegna();
+  });
   const stop = seguiUno(COLL, idDomanda, (x) => {
-    if (!sheet.aperto()) { stop(); return; }
+    if (!sheet.aperto()) { stop(); stopAzioni(); return; }
     if (!x) { if (!primo) { sheet.close(); } return; }
     d = x; primo = false;
     disegna();
@@ -186,7 +199,7 @@ export function apriDomanda(idDomanda, { stessoFoglio = false } = {}) {
 }
 
 /** Riga di una domanda, come le note del Diario: giorno a sinistra, la domanda, l'inizio della risposta. */
-function riga(d, conGiorno) {
+function riga(d, conGiorno, daConfermare = 0) {
   const giorno = toDate(d.createdAt) || new Date();
   const primoTurno = (d.turni || [])[0] || {};
   const u = ultimo(d);
@@ -195,6 +208,7 @@ function riga(d, conGiorno) {
     d.tipo === "settimana" ? el("span.etichetta", {}, "revisione della settimana") : null,
     (d.turni || []).length > 1 ? el("span.lezione__ora", {}, `${d.turni.length} domande`) : null,
     inCorso(d) ? el("span.lezione__stato", {}, "Cerco…") : null,
+    daConfermare ? el("span.etichetta", {}, daConfermare === 1 ? "1 azione da confermare" : `${daConfermare} azioni da confermare`) : null,
     !inCorso(d) && !u?.risposta && (d.stato === "errore" || morta(d)) ? el("span.lezione__stato.lezione__stato--errore", {}, "non riuscita") : null,
   ].filter(Boolean);
   return el("div.voce-nota", { "data-id": d.id },
@@ -211,6 +225,7 @@ function riga(d, conGiorno) {
 
 export function mount(container) {
   let domande = [];
+  let inAttesa = new Map(); // domandaId → azioni da confermare
   const dati = attesa(["domande"], () => render());
   const elenco = el("div");
   const piu = fab("Nuova domanda", () => nuovaDomanda());
@@ -233,7 +248,7 @@ export function mount(container) {
       const m = meseLungo(quando);
       if (m !== mese) { nodi.push(fascia(m.charAt(0).toUpperCase() + m.slice(1))); mese = m; giorno = null; }
       const g = isoGiorno(quando);
-      nodi.push(riga(d, g !== giorno));
+      nodi.push(riga(d, g !== giorno, inAttesa.get(d.id) || 0));
       giorno = g;
     }
     elenco.replaceChildren(...nodi);
@@ -241,6 +256,11 @@ export function mount(container) {
 
   container.append(elenco, piu);
   const stop = watchMine(COLL, { order: ["createdAt", "desc"], max: 100 }, (docs) => { domande = docs; dati.arriva("domande"); render(); });
+  const stopAzioni = watchPending((docs) => {
+    inAttesa = new Map();
+    for (const p of docs) if (p.domandaId) inAttesa.set(p.domandaId, (inAttesa.get(p.domandaId) || 0) + 1);
+    render();
+  });
 
   // Dalla notifica della revisione (#/chiedi/<id>) o dal punto di domanda del Diario (vaiA("chiedi", "nuova")).
   const daLink = location.hash.match(/^#\/chiedi\/([A-Za-z0-9]+)/)?.[1];
@@ -249,5 +269,5 @@ export function mount(container) {
   if (daLink === "nuova" || chiesta === "nuova") setTimeout(() => nuovaDomanda(), 0); // anche la scorciatoia dell'icona
   else if (daLink) setTimeout(() => apriDomanda(daLink), 0);
 
-  return () => { clearTimeout(timer); stop(); dati.ferma(); piu.remove(); };
+  return () => { clearTimeout(timer); stop(); stopAzioni(); dati.ferma(); piu.remove(); };
 }

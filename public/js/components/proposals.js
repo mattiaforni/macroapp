@@ -6,14 +6,17 @@
 //               | "task_done" | "task_due" (14/11: un task aperto che la nota dice fatto o di cui sposta la scadenza;
 //               payload { taskId, text, prima (scadenza di adesso), due (la nuova) })
 //               ("note", l'appunto, non viene più proposto dall'agente; la conferma resta per quelle vecchie)
-//   source      "agent" | "bank" | "share"
+//               | "event_update" (14/11, da Chiedi: payload { eventId, calId, serie, calendario, prima: { titolo, giorno,
+//               ora, luogo, tuttoIlGiorno }, nuovo: { titolo?, giorno?, ora?, luogo? } }: modifica o sposta un evento che c'è)
+//   source      "agent" | "bank" | "share" | "chiedi" (14/11: dalla risposta a una domanda, con domandaId e turno;
+//               sempre private come la domanda; payload.visibilita = visibilità della cosa da creare, task e manuale)
 //   status      "pending" | "accepted" | "rejected"
 //   payload     i dati dell'azione (diversi per tipo, vedi APPLICA)
 //   summary     una riga che descrive l'azione
 //   sourceEntryId  la nota del diario da cui nasce (se viene dall'agente)
 //   visibility  "shared" se riguarda la casa/coppia, "private" se è solo tua
 
-import { el, icon, toast, toDate, testoRicco, colonnaGiorno, fmtMoney, fmtDate } from "../core/ui.js";
+import { el, icon, toast, toDate, testoRicco, colonnaGiorno, fmtMoney, fmtDate, isoGiorno } from "../core/ui.js";
 import { create, update, watchVisible, readVisible, VIS, where } from "../core/db.js";
 import { session } from "../core/auth.js";
 import { aggiungiVoci } from "../modules/lista/index.js";
@@ -22,7 +25,7 @@ import { categoria } from "../modules/spese/index.js";
 import { separaNomi, risolviPersone, nomiDa, trovaPersona, numeroInternazionale, datiDaContatto, personaDaGoogle } from "../core/rubrica.js";
 import { caricaContatti, contattoUnico } from "../core/contatti-google.js";
 import { salvaSintesi } from "./sintesi.js";
-import { creaEvento } from "../core/calendario.js";
+import { creaEvento, leggiEvento, aggiornaEvento, oraDi } from "../core/calendario.js";
 
 const COLL = "proposals";
 
@@ -37,7 +40,11 @@ export const TIPI = {
   project_summary: { nome: "Sintesi del progetto", icona: "diario" },
   task_done: { nome: "Task fatto", icona: "spunta" },
   task_due: { nome: "Nuova scadenza", icona: "calendario" },
+  event_update: { nome: "Evento modificato", icona: "calendario" },
 };
+
+/** Una proposta di Chiedi porta in `payload.visibilita` la visibilità della cosa da creare (la proposta è privata). */
+const visibilitaDi = (p, predefinita) => (p.payload?.visibilita === VIS.SHARED || p.payload?.visibilita === VIS.PRIVATE ? p.payload.visibilita : p.visibility || predefinita);
 
 /** Cosa succede quando confermi, tipo per tipo. Ritorna il messaggio di conferma. */
 const APPLICA = {
@@ -47,7 +54,7 @@ const APPLICA = {
     return "Aggiunto alla lista";
   },
   async task(p) {
-    const v = p.visibility || VIS.PRIVATE;
+    const v = visibilitaDi(p, VIS.PRIVATE);
     const projectId = await risolviProgetto(p.payload.project, v);
     // Le persone nominate diventano voci della rubrica (o si collegano a quelle che ci sono già).
     // Un nome nuovo che corrisponde a un solo contatto Google entra in rubrica già collegato.
@@ -71,7 +78,7 @@ const APPLICA = {
       type: tipo, name, category: x.category && x.category !== "Altro" ? x.category : "",
       notes: x.notes || "", address: x.address || "", phone: x.phone || "", email: x.email || "", url: x.url || "",
       ...(google && !personaDaGoogle(google.googleId) ? datiDaContatto(google) : {}),
-    }, tipo === "person" ? VIS.PRIVATE : p.visibility || VIS.SHARED);
+    }, tipo === "person" ? VIS.PRIVATE : visibilitaDi(p, VIS.SHARED));
     return tipo === "person" ? "Aggiunto alla rubrica" : "Aggiunto al manuale";
   },
   async note(p) {
@@ -114,6 +121,32 @@ const APPLICA = {
     await update("tasks", x.taskId, { due: x.due });
     return "Scadenza spostata";
   },
+  // Un evento che c'è, modificato o spostato (14/11, da Chiedi): si rilegge da Google com'è adesso e si cambia solo ciò
+  // che la proposta dice, tenendo la durata; solo nei calendari in cui l'app scrive (aggiornaEvento lo controlla).
+  async event_update(p) {
+    const x = p.payload || {};
+    if (!x.eventId || !x.calId) throw new Error("evento mancante");
+    const ev = await leggiEvento(x.calId, x.eventId);
+    if (!ev.modificabile) throw Object.assign(new Error(`«${ev.titolo}» si modifica da Google Calendar`), { motivo: "sola-lettura" });
+    const n = x.nuovo || {};
+    const giorno = /^\d{4}-\d{2}-\d{2}$/.test(n.giorno || "") ? n.giorno : ev.giornoInizio;
+    const base = { titolo: n.titolo || ev.titolo, luogo: n.luogo ?? ev.luogo, note: ev.note, giorno };
+    let d;
+    if (n.ora || !ev.tuttoIlGiorno) {
+      // Con orario: stessa durata (un evento di tutto il giorno a cui si dà un'ora dura un'ora).
+      const ora = /^\d{2}:\d{2}$/.test(n.ora || "") ? n.ora : oraDi(ev.inizio);
+      const durata = ev.tuttoIlGiorno ? 3600e3 : Math.max(0, ev.fine - ev.inizio);
+      const fine = new Date(new Date(`${giorno}T${ora}:00`).getTime() + durata);
+      d = { ...base, ora, giornoFine: isoGiorno(fine), oraFine: oraDi(fine) };
+    } else {
+      // Di tutto il giorno: si sposta con i suoi giorni.
+      const giorni = Math.round((new Date(`${ev.giornoFine}T12:00:00`) - new Date(`${ev.giornoInizio}T12:00:00`)) / 86400e3);
+      const fine = new Date(`${giorno}T12:00:00`); fine.setDate(fine.getDate() + giorni);
+      d = { ...base, giornoFine: isoGiorno(fine) };
+    }
+    await aggiornaEvento(ev, d);
+    return n.giorno || n.ora ? "Evento spostato" : "Evento aggiornato";
+  },
   // La sintesi proposta sostituisce quella del progetto (si legge e si corregge dal progetto).
   async project_summary(p) {
     const x = p.payload || {};
@@ -130,7 +163,7 @@ export async function accept(p) {
   try { toast(await fn(p)); }
   catch (e) {
     if (!e.motivo) console.error(e); // con `motivo` è uno stato noto (Google non collegato, calendario non scelto), detto nel toast
-    toast(e.motivo === "nessun-calendario" ? e.message : /scaduto|non-collegato/.test(e.motivo || "") ? "Google non è collegato: collegalo dal menu" : "Non sono riuscito ad applicarla", { ms: 5000 });
+    toast(/^(nessun-calendario|sola-lettura)$/.test(e.motivo || "") ? e.message : /scaduto|non-collegato/.test(e.motivo || "") ? "Google non è collegato: collegalo dal menu" : "Non sono riuscito ad applicarla", { ms: 5000 });
     update(COLL, p.id, { status: "pending" });
   }
 }
@@ -197,6 +230,8 @@ export function giornoDi(p) {
   const x = p.payload || {};
   if (p.kind === "expense") return toDate(x.date);
   if ((p.kind === "event" || p.kind === "task" || p.kind === "task_due") && /^\d{4}-\d{2}-\d{2}$/.test(x.due || "")) return new Date(`${x.due}T12:00:00`);
+  const g = p.kind === "event_update" ? x.nuovo?.giorno || x.prima?.giorno : "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(g || "")) return new Date(`${g}T12:00:00`);
   return null;
 }
 
@@ -205,6 +240,7 @@ export function titoloDi(p) {
   const x = p.payload || {};
   if (p.kind === "expense") return x.description || x.text || String(p.summary || "").replace(/\s*·\s*[\d.,]+\s*€\s*$/, "") || "Spesa";
   if (p.kind === "event" || p.kind === "task" || p.kind === "task_done" || p.kind === "task_due") return x.text || p.summary || "";
+  if (p.kind === "event_update") return x.nuovo?.titolo || x.prima?.titolo || p.summary || "";
   return p.summary || x.text || x.name || "";
 }
 
@@ -215,14 +251,23 @@ export function titoloDi(p) {
  * poi conferma e scarta.
  */
 export function renderAzione(p) {
-  const tipo = TIPI[p.kind] || { nome: p.kind, icona: "scintilla" };
   const x = p.payload || {};
+  const sposta = p.kind === "event_update" && !!(x.nuovo?.giorno || x.nuovo?.ora);
+  const tipo = sposta ? { ...TIPI.event_update, nome: "Evento spostato" } : TIPI[p.kind] || { nome: p.kind, icona: "scintilla" };
   const giorno = giornoDi(p);
   let dettagli = [];
   if (p.kind === "task") dettagli = [x.project && `progetto ${x.project}`, x.people];
   if (p.kind === "event") dettagli = [x.time || "tutto il giorno", x.place];
   if (p.kind === "task_due") dettagli = [x.prima ? `era per il ${fmtDate(x.prima)}` : "era senza scadenza"];
-  if (p.kind === "task_done") dettagli = ["la nota dice che è fatto"];
+  if (p.kind === "task_done") dettagli = [p.source === "chiedi" ? "da segnare fatto" : "la nota dice che è fatto"];
+  if (p.kind === "event_update") {
+    // L'orario nuovo (o quello che resta), il luogo, poi com'era: «era il 20 novembre alle 20:00», «era «Cena»».
+    const pr = x.prima || {}, n = x.nuovo || {};
+    const ora = n.ora || pr.ora;
+    const era = [n.giorno && n.giorno !== pr.giorno ? `il ${fmtDate(pr.giorno)}` : "", (n.giorno || n.ora) && pr.ora ? `alle ${pr.ora}` : "",
+      n.titolo ? `«${pr.titolo}»` : "", n.luogo && pr.luogo ? `a ${pr.luogo}` : ""].filter(Boolean).join(" ");
+    dettagli = [ora || "tutto il giorno", n.luogo || pr.luogo, x.calendario && x.calendario !== "casa" ? x.calendario : "", era ? `era ${era}` : ""];
+  }
   // Una spesa confermata è pagata da te e divisa a metà (si cambia poi dal suo foglio): lo dice la riga.
   if (p.kind === "expense") dettagli = [x.account, "da dividere a metà"];
   dettagli = dettagli.filter(Boolean);

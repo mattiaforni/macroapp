@@ -42,6 +42,20 @@ Scelte: nessun framework né bundler (coerente con i progetti precedenti, deploy
   della casa di cui la persona è membro). La risposta cita i codici delle fonti ([n3], [s12]): il server li toglie dal testo e
   scrive le fonti accanto. Stato, passi e risposta sul documento, come l'analisi delle note. Modello da `users.modelli.domande`
   (Sonnet); ripiego dei rifiuti lato server (`fallbacks: "default"`, beta), tolto da solo se l'API non lo accetta.
+  **Azioni** (14/11, «Chiedi che agisce»): in più lo strumento `proponi` (uno per azione: `task`, `task_fatto`,
+  `task_scadenza`, `lista`, `spesa`, `manuale`, `evento`, `evento_modifica`). Il server controlla ogni proposta prima di
+  tenerla e, se non va, risponde al modello con l'errore perché la corregga o lo dica: un task da chiudere o spostare deve
+  essere uno di quelli che lo strumento `task` ha appena mostrato (dal codice [t3], tradotto nell'id dal server: il modello
+  non scrive mai id), aperto; un evento da cambiare uno di quelli che `eventi` ha mostrato, in un calendario in cui l'app
+  scrive (la casa o il principale della persona), non bloccato e non un invito; un progetto uno di quelli che la persona
+  vede; lista, spesa ed evento nuovo solo con una casa (e il suo calendario); al più 8 per risposta, senza doppioni. Le
+  proposte vanno in `proposals` con `source: "chiedi"`, `domandaId`, `turno`, **sempre private** come la domanda (la cosa
+  creata confermando ha la visibilità in `payload.visibilita`: del progetto per un task, condivisa per il manuale salvo le
+  persone); un turno rifatto sostituisce le sue proposte ancora in attesa. L'app le mostra sotto la risposta del loro turno
+  con `renderAzione` e le applica con `APPLICA` come quelle del Diario (regola 5: niente senza la spunta). La modifica di un
+  evento (`event_update`) si applica rileggendo l'evento da Google e cambiando solo giorno, ora, titolo o luogo, con la
+  stessa durata (`aggiornaEvento`, che di nuovo scrive solo nei calendari modificabili). La revisione della settimana non
+  ha lo strumento. Prova senza rete: `node functions/strumenti/prova-chiedi.mjs`.
 - `revisioneSettimana` (schedulata, domenica 18:47): per chi ha un telefono con le notifiche e non ha spento «settimana», una
   domanda di tipo `settimana` scritta con gli stessi strumenti (`src/settimana.js`) e una notifica che la apre in Chiedi.
 - `bank` (callable, `{ azione }`): `banche` (elenco per paese), `avvia` (`POST /auth` → url del consenso, `state` salvato in `bank_connections/{uid}.pending`), `concludi` (`POST /sessions` col `code`, controlla lo `state`, chiude la sessione precedente, salva conti e scadenza), `scollega` (`DELETE /sessions/{id}`), `sincronizza` (la lettura di `syncBank`, a richiesta). Scrive solo nel documento del chiamante.

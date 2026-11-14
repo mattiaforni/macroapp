@@ -142,7 +142,7 @@ parte): se diventano tante, la strada è Storage con gli stessi campi.
 confermati prima del 26/10, quando l'agente proponeva ancora il tipo `note`). Nessuna pagina li mostra.
 
 ## `proposals`
-`kind: "task"|"shopping_item"|"expense"|"manual_entry"|"event"|"draft"|"project_summary"|"task_done"|"task_due"|"note", source: "agent"|"bank"|"share", status: "pending"|"accepted"|"rejected"|"discarded", payload, summary, decidedBy, sourceEntryId`
+`kind: "task"|"shopping_item"|"expense"|"manual_entry"|"event"|"event_update"|"draft"|"project_summary"|"task_done"|"task_due"|"note", source: "agent"|"bank"|"share"|"chiedi", status: "pending"|"accepted"|"rejected"|"discarded", payload, summary, decidedBy, sourceEntryId, domandaId?, turno?`
 Cosa fa la conferma, tipo per tipo: `APPLICA` in `public/js/components/proposals.js`. Le proposte dell'agente compaiono sotto la nota del diario da cui nascono; rianalizzare una nota sostituisce quelle ancora in attesa.
 `project_summary` (payload `projectId, projectName, sintesi, prima`): confermata scrive `projects.sintesi`; una nuova proposta di sintesi dello stesso progetto sostituisce quella in attesa. `note` non viene più proposto.
 `event` (payload `text, due "AAAA-MM-GG", time "HH:MM" o vuoto = tutto il giorno, place`): confermata crea l'evento nel
@@ -151,15 +151,22 @@ scelto; altrimenti la conferma non passa e la proposta resta). Sempre `shared`.
 `task_done`, `task_due` (14/11; payload `taskId, text, prima` = la scadenza di adesso, e per `task_due` `due` = la nuova): un
 task aperto che la nota dice fatto, o di cui sposta la scadenza. L'agente vede i task aperti con un codice ([t3]) e il server lo
 traduce nell'id: il modello non scrive mai id. Confermata segna fatto il task o ne cambia `due`; visibilità come il task.
+Da Chiedi (14/11, `source: "chiedi"`): `domandaId` (la domanda in `domande`) e `turno` (indice del turno), sempre `private` come
+la domanda, con `sourceEntryId: null`; per task e voci del manuale `payload.visibilita` è la visibilità della cosa da creare
+(la proposta resta privata). Compaiono sotto la risposta del loro turno. In più `event_update` (payload `eventId, calId, serie,
+calendario` = "casa" o il nome, `prima: { titolo, giorno, ora, luogo, tuttoIlGiorno }` = com'era quando è stata proposta, `nuovo:
+{ titolo?, giorno?, ora?, luogo? }` = solo ciò che cambia): confermata rilegge l'evento da Google e lo cambia con la stessa
+durata, solo nei calendari in cui l'app scrive.
 
 ## `domande` (14/11)
-`tipo: "domanda"|"settimana", turni: [{ domanda, risposta?, fonti?: [{ tipo: "nota"|"spesa"|"task"|"evento"|"voce"|"progetto", id, titolo, sotto, codice, calId? }], modello?, at }], stato: "nuova"|"in_corso"|"fatta"|"errore", inizio?, fine?, passi: [string], errore?`
+`tipo: "domanda"|"settimana", turni: [{ domanda, risposta?, fonti?: [{ tipo: "nota"|"spesa"|"task"|"evento"|"voce"|"progetto", id, titolo, sotto, codice, calId? }], azioni?, modello?, at }], stato: "nuova"|"in_corso"|"fatta"|"errore", inizio?, fine?, passi: [string], errore?`
 — sempre `private`, solo di chi le fa (regole: lettura, modifica ed eliminazione del proprietario; nessuno cambia proprietario,
 casa o visibilità). Chiedi: l'app crea la domanda (`stato: "nuova"`) o aggiunge un turno, poi chiama la function `chiedi`,
 che segna `in_corso` (in una transazione: una seconda richiesta mentre una è in corso da meno di 300 s non riparte), scrive
 i `passi` mentre cerca («Cerco nelle note: rovescio»), poi la risposta e le fonti nell'ultimo turno e `stato: "fatta"` (o
 `"errore"` con `errore`). Una «nuova» più vecchia di 90 s o un «in corso» più vecchio di 300 s è da riprovare. Le revisioni
-della domenica sono domande di tipo `settimana` create dal server. Indice `ownerUid+createdAt`.
+della domenica sono domande di tipo `settimana` create dal server. Indice `ownerUid+createdAt`. `azioni` (14/11): quante azioni
+il server ha proposto con quella risposta (le proposte stanno in `proposals`, con `domandaId` e `turno`).
 
 ## `consumi/{uid}_{AAAAMM}` (14/11)
 `ownerUid, mese: "AAAA-MM", claude: { usd, chiamate }, gemini: { usd, chiamate }, voci: { note|progetti|chiedi|settimana|pdf|trascrizione: { usd, chiamate, ingresso, uscita } }, aggiornato`

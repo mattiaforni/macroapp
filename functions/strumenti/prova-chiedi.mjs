@@ -3,7 +3,7 @@
 // private dell'altra persona, mai un'altra casa), che i codici citati diventino le fonti e spariscano dal testo, e il
 // riepilogo dei costi. Uso: node strumenti/prova-chiedi.mjs (servono le dipendenze di functions).
 import assert from "node:assert/strict";
-import { rispondi, strumentiDi, separaFonti } from "../src/chiedi.js";
+import { rispondi, strumentiDi, separaFonti, chiedi } from "../src/chiedi.js";
 import { sezioneEsistenti } from "../src/agent.js";
 import { periodo, anteprima } from "../src/settimana.js";
 import { costo } from "../src/consumi.js";
@@ -24,7 +24,14 @@ const DATI = {
     s4: { ownerUid: "altro", householdId: "altracasa", visibility: "shared", description: "Esselunga altrui", amount: 999, paidBy: "altro", date: ts("2026-10-05T10:00:00Z") },
   },
   projects: { tennis: { ownerUid: "io", householdId: "casa", visibility: "shared", name: "Tennis", istruzioni: "…", sintesi: "## Rovescio\nStato: migliora", createdAt: ts("2026-10-01T00:00:00Z") } },
-  tasks: {}, manual_entries: {}, shopping_items: {},
+  tasks: {
+    t1: { ownerUid: "io", householdId: "casa", visibility: "private", text: "Chiamare l'idraulico", done: false, due: "2026-11-20", createdAt: ts("2026-11-01T00:00:00Z") },
+    t2: { ownerUid: "lei", householdId: "casa", visibility: "shared", text: "Pagare la bolletta", done: false, due: "", createdAt: ts("2026-11-02T00:00:00Z") },
+    t3: { ownerUid: "lei", householdId: "casa", visibility: "private", text: "Regalo per Mattia", done: false, due: "2026-11-30", createdAt: ts("2026-11-03T00:00:00Z") },
+    t4: { ownerUid: "altro", householdId: "altracasa", visibility: "shared", text: "Task di un'altra casa", done: false, createdAt: ts("2026-11-04T00:00:00Z") },
+    t5: { ownerUid: "io", householdId: "casa", visibility: "private", text: "Già fatto", done: true, doneAt: ts("2026-11-05T00:00:00Z"), createdAt: ts("2026-11-04T00:00:00Z") },
+  },
+  manual_entries: {}, shopping_items: {},
 };
 function query(nome, filtri = [], ordine = null, quanti = Infinity) {
   return {
@@ -105,5 +112,183 @@ assert.equal(periodo(new Date("2026-11-01T17:47:00Z")), "dal 26 ottobre al 1 nov
 assert.equal(anteprima("## Note e progetti\n- Tre lezioni di **tennis**: il rovescio migliora."), "Tre lezioni di tennis: il rovescio migliora.");
 assert.equal(Math.round(costo("claude-sonnet-5-5", { input_tokens: 1e6, output_tokens: 1e5 }) * 100) / 100, 3);
 assert.equal(Math.round(costo("gemini-3.8-flash", { promptTokenCount: 1920, candidatesTokenCount: 200 }, Date.UTC(2026, 10, 14)) * 1e6), 2190);
+
+// ── Azioni proposte (14/11, «Chiedi che agisce»): solo su ciò che la persona vede e può modificare ──
+{
+  // Google Calendar finto: la casa (un evento e un invito), il personale (modificabile), la band (sola lettura).
+  const EVENTI = {
+    "casa@g": [
+      { id: "cena", summary: "Cena dai Rossi", start: { dateTime: "2026-11-20T19:00:00Z" }, end: { dateTime: "2026-11-20T21:00:00Z" }, organizer: { email: "casa@g", self: true }, status: "confirmed" },
+      { id: "invito", summary: "Festa di Anna", start: { dateTime: "2026-11-21T19:00:00Z" }, end: { dateTime: "2026-11-21T23:00:00Z" }, organizer: { email: "anna@example.com" }, status: "confirmed" },
+    ],
+    "mio@g": [{ id: "dentista", summary: "Dentista", start: { dateTime: "2026-11-18T08:30:00Z" }, end: { dateTime: "2026-11-18T09:30:00Z" }, organizer: { email: "mio@g", self: true }, status: "confirmed" }],
+    "band@g": [{ id: "prove", summary: "Prove con la band", start: { dateTime: "2026-11-19T18:00:00Z" }, end: { dateTime: "2026-11-19T20:00:00Z" }, organizer: { email: "band@g", self: true }, status: "confirmed" }],
+  };
+  const fetchVero = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const m = String(url).match(/calendars\/([^/]+)\/events/);
+    return { ok: true, status: 200, json: async () => ({ items: EVENTI[decodeURIComponent(m[1])] || [] }) };
+  };
+  const casa = { calendario: { id: "casa@g", nome: "Casa" } };
+  const utente = { calendari: [{ id: "mio@g", nome: "Personale", modificabile: true }, { id: "band@g", nome: "Band", modificabile: false }] };
+  const tokenGoogle = async () => ({ accessToken: "tok", permessi: { calendario: true } });
+  const { esegui: es, proposte } = strumentiDi(db, { uid: "io", hid: "casa", nomi: { io: "Mattia", lei: "Giulia" }, tokenGoogle, casa, utente });
+  const ok = (r) => { assert.ok(r.ok, JSON.stringify(r)); };
+  const no = (r, re) => { assert.ok(r.errore && re.test(r.errore), JSON.stringify(r)); };
+
+  // Task: solo quelli che la persona vede (i suoi e quelli condivisi della casa), con i codici dati dallo strumento.
+  const aperti = await es.task({ stato: "aperti" });
+  const perTesto = Object.fromEntries(aperti.task.map((t) => [t.testo, t.codice]));
+  assert.deepEqual(Object.keys(perTesto).sort(), ["Chiamare l'idraulico", "Pagare la bolletta"], "né il task privato di lei né quello di un'altra casa");
+  ok(await es.proponi({ tipo: "task_fatto", riassunto: "Bolletta pagata", codice: perTesto["Pagare la bolletta"] }));
+  ok(await es.proponi({ tipo: "task_scadenza", riassunto: "Idraulico a venerdì", codice: `[${perTesto["Chiamare l'idraulico"]}]`, giorno: "2026-11-27" }));
+  no(await es.proponi({ tipo: "task_fatto", riassunto: "x", codice: "t3" }), /sconosciuto/);      // il codice t3 non è stato dato
+  no(await es.proponi({ tipo: "task_fatto", riassunto: "x", codice: "n1" }), /sconosciuto/);      // il codice di una nota non è un task
+  no(await es.proponi({ tipo: "task_scadenza", riassunto: "x", codice: perTesto["Chiamare l'idraulico"], giorno: "2026-11-20" }), /già quella/);
+  no(await es.proponi({ tipo: "task_scadenza", riassunto: "x", codice: perTesto["Chiamare l'idraulico"], giorno: "2026-02-30" }), /giorno/);
+  const fatti = await es.task({ stato: "fatti" });
+  no(await es.proponi({ tipo: "task_fatto", riassunto: "x", codice: fatti.task[0].codice }), /già fatto/);
+
+  // Task nuovo: con la visibilità del progetto (Tennis è condiviso); un progetto che non c'è no.
+  ok(await es.proponi({ tipo: "task", riassunto: "Prenotare il campo", testo: "Prenotare il campo", progetto: "tennis", giorno: "2026-11-22" }));
+  assert.equal(proposte.at(-1).payload.visibilita, "shared");
+  assert.equal(proposte.at(-1).payload.project, "Tennis");
+  no(await es.proponi({ tipo: "task", riassunto: "x", testo: "x", progetto: "Giardinaggio" }), /Nessun progetto/);
+  ok(await es.proponi({ tipo: "task", riassunto: "Chiamare Marco", testo: "Chiamare Marco" }));
+  assert.equal(proposte.at(-1).payload.visibilita, "private", "senza progetto e senza «condivisa»: privato");
+
+  // Eventi: si modificano solo quelli dei calendari in cui l'app scrive, e non gli inviti.
+  const ev = await es.eventi({ da: "2026-11-15", a: "2026-11-30" });
+  const cod = Object.fromEntries(ev.eventi.map((e) => [e.titolo, e.codice]));
+  assert.equal(ev.eventi.find((e) => e.titolo === "Prove con la band").si_modifica, "solo da Google Calendar");
+  ok(await es.proponi({ tipo: "evento_modifica", riassunto: "Cena a sabato", codice: cod["Cena dai Rossi"], giorno: "2026-11-21", ora: "20:30" }));
+  const sposta = proposte.at(-1);
+  assert.equal(sposta.kind, "event_update");
+  assert.deepEqual(sposta.payload.prima, { titolo: "Cena dai Rossi", giorno: "2026-11-20", ora: "20:00", luogo: "", tuttoIlGiorno: false });
+  assert.deepEqual(sposta.payload.nuovo, { giorno: "2026-11-21", ora: "20:30" });
+  assert.equal(sposta.payload.calId, "casa@g");
+  ok(await es.proponi({ tipo: "evento_modifica", riassunto: "Dentista alle 10", codice: cod["Dentista"], ora: "10:00" }));
+  no(await es.proponi({ tipo: "evento_modifica", riassunto: "x", codice: cod["Prove con la band"], ora: "19:00" }), /non si modifica/);
+  no(await es.proponi({ tipo: "evento_modifica", riassunto: "x", codice: cod["Festa di Anna"], ora: "21:00" }), /non si modifica/);
+  no(await es.proponi({ tipo: "evento_modifica", riassunto: "x", codice: cod["Dentista"], ora: "09:30" }), /Niente da cambiare/);
+  no(await es.proponi({ tipo: "evento_modifica", riassunto: "x", codice: "e99", ora: "10:00" }), /sconosciuto/);
+  ok(await es.proponi({ tipo: "evento", riassunto: "Pizza venerdì", testo: "Pizza", giorno: "2026-11-27", ora: "20:00" }));
+  assert.equal(proposte.length, 7);
+  no(await es.proponi({ tipo: "spesa", riassunto: "x", testo: "Pizza", importo: 0 }), /importo/);
+  ok(await es.proponi({ tipo: "spesa", riassunto: "Pizza 30 €", testo: "Pizza", importo: 30.004 }));
+  assert.equal(proposte.at(-1).payload.amount, 30);
+  no(await es.proponi({ tipo: "lista", riassunto: "Latte", testo: "Latte" }), /Al più 8/);
+  assert.equal(proposte.length, 8, "al più 8 azioni per risposta");
+
+  // Senza casa né calendario della casa: niente spese, lista né eventi nuovi. Una persona del manuale è privata.
+  const solo = strumentiDi(db, { uid: "io", hid: null, nomi: {}, casa: {}, utente: {} });
+  no(await solo.esegui.proponi({ tipo: "lista", riassunto: "x", testo: "Latte" }), /casa/);
+  no(await solo.esegui.proponi({ tipo: "spesa", riassunto: "x", testo: "Pizza", importo: 10 }), /casa/);
+  no(await solo.esegui.proponi({ tipo: "evento", riassunto: "x", testo: "Pizza", giorno: "2026-11-27" }), /calendario della casa/);
+  ok(await solo.esegui.proponi({ tipo: "manuale", riassunto: "Anna in rubrica", testo: "Anna Bianchi", voce: "persona", telefono: "333", condivisa: true }));
+  ok(await solo.esegui.proponi({ tipo: "manuale", riassunto: "Anna in rubrica", testo: "Anna Bianchi", voce: "persona", telefono: "333", condivisa: true }));
+  assert.equal(solo.proposte.length, 1, "un doppione non si aggiunge");
+  assert.equal(solo.proposte[0].payload.visibilita, "private");
+  assert.equal(solo.proposte[0].kind, "manual_entry");
+
+  // Il giro con un Claude finto che cerca, propone (anche una cosa sbagliata, che gli torna come errore) e risponde.
+  const giri = [];
+  globalThis.fetch = async (url, opts) => {
+    if (!String(url).includes("anthropic")) return { ok: true, status: 200, json: async () => ({ items: EVENTI[decodeURIComponent(String(url).match(/calendars\/([^/]+)\//)[1])] || [] }) };
+    const corpo = JSON.parse(opts.body);
+    giri.push(corpo);
+    const n = giri.length;
+    const r = n === 1
+      ? { stop_reason: "tool_use", content: [{ type: "tool_use", id: "a", name: "task", input: { stato: "aperti", testo: "bolletta" } }, { type: "tool_use", id: "b", name: "eventi", input: { da: "2026-11-15", a: "2026-11-30", testo: "cena" } }] }
+      : n === 2
+        ? { stop_reason: "tool_use", content: [
+          { type: "tool_use", id: "c", name: "proponi", input: { tipo: "task_fatto", riassunto: "Segnare pagata la bolletta", codice: "t1" } },
+          { type: "tool_use", id: "d", name: "proponi", input: { tipo: "evento_modifica", riassunto: "Spostare la cena a sabato", codice: "e1", giorno: "2026-11-21" } },
+          { type: "tool_use", id: "e", name: "proponi", input: { tipo: "task_fatto", riassunto: "Inventato", codice: "t7" } }] }
+        : { stop_reason: "end_turn", content: [{ type: "text", text: "Te lo propongo qui sotto: la bolletta [t1] fatta e la cena [e1] a sabato." }] };
+    return { ok: true, status: 200, json: async () => ({ model: corpo.model, usage: { input_tokens: 10, output_tokens: 5 }, ...r }) };
+  };
+  const contesto = { oggi: "sabato 14 novembre 2026 (2026-11-14)", io: "Mattia", altro: "Giulia", nomi: { io: "Mattia", lei: "Giulia" }, casa, utente };
+  const rr = await rispondi({ db, uid: "io", hid: "casa", key: "finta", domanda: "Ho pagato la bolletta, e sposta la cena a sabato", tokenGoogle, contesto });
+  assert.ok(giri[0].tools.some((t) => t.name === "proponi"), "Chiedi ha lo strumento proponi");
+  assert.match(giri[0].system, /strumento proponi/);
+  const errore = giri[2].messages.at(-1).content.find((x) => x.tool_use_id === "e");
+  assert.match(errore.content, /sconosciuto/, "il codice inventato torna al modello come errore");
+  assert.deepEqual(rr.proposte.map((x) => x.kind), ["task_done", "event_update"]);
+  assert.equal(rr.proposte[0].payload.taskId, "t2", "il codice diventa l'id vero, scritto dal server");
+  assert.equal(rr.risposta, "Te lo propongo qui sotto: la bolletta fatta e la cena a sabato.");
+
+  // La revisione della settimana non propone: niente strumento, e una chiamata a proponi non fa niente.
+  giri.length = 0;
+  globalThis.fetch = async (url, opts) => {
+    const corpo = JSON.parse(opts.body);
+    giri.push(corpo);
+    const r = giri.length === 1
+      ? { stop_reason: "tool_use", content: [{ type: "tool_use", id: "x", name: "proponi", input: { tipo: "lista", riassunto: "Latte", testo: "Latte" } }] }
+      : { stop_reason: "end_turn", content: [{ type: "text", text: "Settimana tranquilla." }] };
+    return { ok: true, status: 200, json: async () => ({ model: corpo.model, usage: {}, ...r }) };
+  };
+  const sett = await rispondi({ db, uid: "io", hid: "casa", key: "finta", domanda: "revisione", settimana: true, contesto });
+  assert.ok(!giri[0].tools.some((t) => t.name === "proponi"));
+  assert.match(giri[1].messages.at(-1).content[0].content, /sconosciuto/);
+  assert.deepEqual(sett.proposte, []);
+
+  // `chiedi` scrive le proposte in `proposals`: private, con domandaId e turno; un turno rifatto sostituisce le sue in attesa.
+  const SCRITTI = new Map();
+  const D = { "domande/q1": { ownerUid: "io", householdId: "casa", visibility: "private", tipo: "domanda", stato: "nuova", passi: [],
+    turni: [{ domanda: "Ho pagato la bolletta?", risposta: "Sì", at: new Date() }, { domanda: "Segnala fatta", at: new Date() }] },
+  "users/io": { householdId: "casa", displayName: "Mattia Rossi" }, "households/casa": { members: ["io", "lei"], memberNames: { io: "Mattia", lei: "Giulia" } },
+  "proposals/vecchia": { ownerUid: "io", domandaId: "q1", turno: 1, status: "pending", kind: "shopping_item" },
+  "proposals/confermata": { ownerUid: "io", domandaId: "q1", turno: 1, status: "accepted", kind: "shopping_item" },
+  "proposals/altroTurno": { ownerUid: "io", domandaId: "q1", turno: 0, status: "pending", kind: "shopping_item" } };
+  let auto = 0;
+  const rif = (path) => ({ id: path.split("/")[1], path,
+    get: async () => ({ id: path.split("/")[1], exists: path in D, data: () => D[path] }),
+    update: async (x) => { D[path] = { ...D[path], ...x }; }, set: async (x) => { D[path] = x; } });
+  const colle = (nome, filtri = []) => ({
+    doc: (id) => rif(`${nome}/${id || `auto${++auto}`}`),
+    where: (f, op, v) => colle(nome, [...filtri, [f, v]]),
+    orderBy: () => colle(nome, filtri), limit: () => colle(nome, filtri),
+    get: async () => {
+      const docs = Object.entries(D).filter(([k, d]) => k.startsWith(`${nome}/`) && filtri.every(([f, v]) => d[f] === v));
+      if (DATI[nome]) docs.push(...Object.entries(DATI[nome]).filter(([, d]) => filtri.every(([f, v]) => d[f] === v)).map(([id, d]) => [`${nome}/${id}`, d]));
+      return { docs: docs.map(([k, d]) => ({ id: k.split("/")[1], ref: rif(k), data: () => d })) };
+    },
+  });
+  const fdb = {
+    collection: (n) => colle(n),
+    runTransaction: async (fn) => fn({ get: (r) => r.get(), update: (r, x) => { D[r.path] = { ...D[r.path], ...x }; } }),
+    batch: () => { const op = []; return { set: (r, x) => op.push(() => { D[r.path] = x; SCRITTI.set(r.path, x); }), update: (r, x) => op.push(() => { D[r.path] = { ...D[r.path], ...x }; }),
+      delete: (r) => op.push(() => { delete D[r.path]; }), commit: async () => op.forEach((f) => f()) }; },
+  };
+  giri.length = 0;
+  globalThis.fetch = async (url, opts) => {
+    const corpo = JSON.parse(opts.body);
+    giri.push(corpo);
+    const r = giri.length === 1
+      ? { stop_reason: "tool_use", content: [{ type: "tool_use", id: "a", name: "task", input: { stato: "aperti" } }] }
+      : giri.length === 2
+        ? { stop_reason: "tool_use", content: [{ type: "tool_use", id: "b", name: "proponi", input: { tipo: "task_fatto", riassunto: "Bolletta pagata", codice: "t2" } }] }
+        : { stop_reason: "end_turn", content: [{ type: "text", text: "Te la propongo qui sotto [t2]." }] };
+    return { ok: true, status: 200, json: async () => ({ model: corpo.model, usage: {}, ...r }) };
+  };
+  const esito = await chiedi(fdb, "io", "q1", { key: "finta" });
+  assert.deepEqual(esito, { fatta: true, azioni: 1 });
+  const nuove = [...SCRITTI.entries()].filter(([k]) => k.startsWith("proposals/")).map(([, x]) => x);
+  assert.equal(nuove.length, 1);
+  assert.equal(nuove[0].visibility, "private", "privata come la domanda");
+  assert.equal(nuove[0].source, "chiedi");
+  assert.equal(nuove[0].domandaId, "q1");
+  assert.equal(nuove[0].turno, 1);
+  assert.equal(nuove[0].ownerUid, "io");
+  assert.equal(nuove[0].payload.taskId, "t2");
+  assert.ok(!("proposals/vecchia" in D), "la proposta in attesa del turno rifatto se ne va");
+  assert.ok("proposals/confermata" in D && "proposals/altroTurno" in D, "quelle confermate e degli altri turni restano");
+  assert.equal(D["domande/q1"].stato, "fatta");
+  assert.equal(D["domande/q1"].turni[1].azioni, 1);
+  assert.equal(D["domande/q1"].turni[1].risposta, "Te la propongo qui sotto.");
+  globalThis.fetch = fetchVero;
+  console.log("  ✓ azioni proposte: task e eventi solo visibili e modificabili, codici tradotti dal server, private e legate al turno");
+}
 
 console.log("Chiedi: strumenti, privacy, fonti e giro con gli strumenti a posto; revisione e costi pure.");
