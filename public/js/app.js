@@ -181,6 +181,8 @@ const params = new URLSearchParams(location.search);
 if (params.get("share")) {
   const text = [params.get("title"), params.get("text"), params.get("url")].filter(Boolean).join("\n");
   sessionStorage.setItem("macroapp.share", text);
+  // Con delle immagini (14/11): sw.js le ha messe nella cache «dd-condivisi», il Diario le prende da lì.
+  if (params.get("foto")) sessionStorage.setItem("macroapp.share.foto", "1");
   history.replaceState(null, "", "/#/diario");
 }
 

@@ -15,7 +15,7 @@
 // Nei registri solo codici d'errore, mai testi: il flusso Diagnosi li pubblica e il repository è pubblico.
 import { FieldValue } from "firebase-admin/firestore";
 
-export const CATEGORIE = ["spese", "task", "lista", "calendario", "promemoria", "riepilogo", "diario", "banca"];
+export const CATEGORIE = ["spese", "task", "lista", "calendario", "promemoria", "riepilogo", "diario", "banca", "settimana"];
 const COLLEZIONI = { expenses: "spese", tasks: "task", shopping_items: "lista" };
 const TOKEN_MORTO = /registration-token-not-registered|invalid-registration-token/;
 const RECENTI_MS = 30 * 60 * 1000; // la notifica della lista riassume le aggiunte dell'ultima mezz'ora

@@ -16,8 +16,15 @@
     { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "share_target": {
-    "action": "/?share=1",
-    "method": "GET",
-    "params": { "title": "title", "text": "text", "url": "url" }
-  }
+    "action": "/condividi",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": { "title": "title", "text": "text", "url": "url", "files": [{ "name": "foto", "accept": ["image/*"] }] }
+  },
+  "shortcuts": [
+    { "name": "Nota vocale", "short_name": "Nota vocale", "description": "Una nota nuova nel diario, registrando subito", "url": "/#/diario/vocale", "icons": [{ "src": "/icons/scorciatoia-voce.png", "sizes": "96x96", "type": "image/png" }] },
+    { "name": "Aggiungi alla lista", "short_name": "Lista", "description": "Aggiungi qualcosa alla lista della spesa", "url": "/#/lista/nuova", "icons": [{ "src": "/icons/scorciatoia-lista.png", "sizes": "96x96", "type": "image/png" }] },
+    { "name": "Scansiona un prodotto", "short_name": "Scansiona", "description": "Il codice a barre di un prodotto", "url": "/#/lista/scansiona", "icons": [{ "src": "/icons/scorciatoia-codice.png", "sizes": "96x96", "type": "image/png" }] },
+    { "name": "Chiedi", "short_name": "Chiedi", "description": "Una domanda su note, spese, task e calendario", "url": "/#/chiedi/nuova", "icons": [{ "src": "/icons/scorciatoia-chiedi.png", "sizes": "96x96", "type": "image/png" }] }
+  ]
 }

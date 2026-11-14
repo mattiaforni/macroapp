@@ -15,7 +15,11 @@ const URL = "https://api.anthropic.com/v1/messages";
 // lunga può metterci un paio di minuti.
 const ATTESA_MASSIMA = 280_000;
 
-export async function reason({ system, user, schema, key, maxTokens = 8000, model = MODELLO_PREDEFINITO }) {
+/**
+ * `user`: il testo, o i blocchi del messaggio (immagini e PDF prima del testo: foto delle note, PDF di Drive).
+ * `onUso(usage, idModello)`: i token usati, per i consumi (src/consumi.js).
+ */
+export async function reason({ system, user, schema, key, maxTokens = 8000, model = MODELLO_PREDEFINITO, onUso }) {
   const MODEL = MODELLI[model] || MODELLI[MODELLO_PREDEFINITO];
   const res = await fetch(URL, {
     method: "POST",
@@ -38,6 +42,7 @@ export async function reason({ system, user, schema, key, maxTokens = 8000, mode
   });
   if (!res.ok) throw new Error(`Claude ${res.status}: ${await res.text()}`);
   const data = await res.json();
+  try { onUso?.(data.usage || null, data.model || MODEL); } catch (e) { /* i consumi non fermano la risposta */ }
   if (data.stop_reason === "refusal") throw new Error("Claude: richiesta rifiutata");
   if (data.stop_reason === "max_tokens") throw new Error("Claude: output troncato");
   const text = data.content?.find((c) => c.type === "text")?.text;

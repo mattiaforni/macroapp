@@ -151,9 +151,10 @@ export function strisciaFoto(n) {
  * «Scatta» (la fotocamera del telefono, direttamente: `capture`) e «Galleria» (più foto insieme). Due campi
  * distinti perché su Android un campo con `multiple` apre il selettore delle foto, senza la fotocamera (4/11,
  * Mattia: «fammi anche scattare la foto, non solo caricare»). Ritorna { node, valore() } con
- * valore() = { nuove: [{ url, mini, w, h }], tolte: [id] }.
+ * valore() = { nuove: [{ url, mini, w, h }], tolte: [id] }. `iniziali`: file da aggiungere subito (immagini condivise
+ * da un'altra app, 14/11).
  */
-export function sceltaFoto({ esistente = null } = {}) {
+export function sceltaFoto({ esistente = null, iniziali = [] } = {}) {
   const salvate = (esistente?.foto || []).map((f) => ({ ...f, url: null, mini: null }));
   const nuove = [];
   const tolte = new Set();
@@ -186,6 +187,9 @@ export function sceltaFoto({ esistente = null } = {}) {
   const aggiungi = async (campo) => {
     const scelti = [...(campo.files || [])];
     campo.value = "";
+    await prepara(scelti);
+  };
+  const prepara = async (scelti) => {
     if (!scelti.length) return;
     stato.hidden = false; stato.textContent = scelti.length === 1 ? "Preparo la foto…" : "Preparo le foto…";
     for (const f of scelti) {
@@ -197,6 +201,7 @@ export function sceltaFoto({ esistente = null } = {}) {
   file.addEventListener("change", () => aggiungi(file));
   fotocamera.addEventListener("change", () => aggiungi(fotocamera));
   disegna();
+  if (iniziali.length) prepara(iniziali);
   const node = el("div", {}, striscia, el("div.segmenti", { style: "padding-top:4px;align-items:center" }, scatta, galleria, stato), file, fotocamera);
   return { node, valore: () => ({ nuove: [...nuove], tolte: [...tolte] }) };
 }

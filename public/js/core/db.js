@@ -210,4 +210,14 @@ export async function leggiDalServer(coll, ...vincoli) {
   return docsDi(await getDocsFromServer(query(collection(db, coll), ...vincoli)));
 }
 
+/** Un documento, una volta (null se non c'è o non si può leggere). */
+export async function leggiUno(coll, id) {
+  try { const d = await getDoc(doc(db, coll, id)); return d.exists() ? { id: d.id, ...d.data() } : null; } catch (e) { console.warn(`leggiUno(${coll})`, e); return null; }
+}
+
+/** Un documento in tempo reale: cb(dati | null). Ritorna chi smette. */
+export function seguiUno(coll, id, cb) {
+  return onSnapshot(doc(db, coll, id), (d) => cb(d.exists() ? { id: d.id, ...d.data() } : null), (e) => { console.warn(`seguiUno(${coll})`, e); cb(null); });
+}
+
 export { where, serverTimestamp };

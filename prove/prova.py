@@ -1,4 +1,4 @@
-import http.server, threading, functools, os, sys, json
+import http.server, threading, functools, os, sys, json, base64
 from playwright.sync_api import sync_playwright
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -61,6 +61,22 @@ def dentro(c, pezzo):
     """Il cursore sta dentro la prima volta che `pezzo` compare nel campo."""
     j = c["valore"].find(pezzo)
     return j >= 0 and j <= c["i"] <= j + len(pezzo)
+# Microfono sintetico (14/11): un tono per `voce` secondi, poi silenzio per `pausa`, a ripetizione, al posto del
+# microfono finto di Chromium (che fa un bip ogni mezzo secondo e non ha pause).
+MICROFONO = """([schema]) => {
+  navigator.mediaDevices.getUserMedia = async () => {
+    const c = new AudioContext(); const o = c.createOscillator(); const v = c.createGain(); o.frequency.value = 220;
+    o.connect(v); const d = c.createMediaStreamDestination(); v.connect(d); o.start();
+    let t = c.currentTime; v.gain.setValueAtTime(0, t);
+    for (let k = 0; k < 20; k++) for (const [voce, pausa] of schema) { v.gain.setValueAtTime(0.2, t); t += voce; v.gain.setValueAtTime(0, t); t += pausa; }
+    window.__flussi = (window.__flussi || []).concat([d.stream]);
+    return d.stream;
+  };
+}"""
+# Quante registrazioni e quanti pezzi d'audio restano sul telefono (IndexedDB, core/archivio.js).
+ARCHIVIO = """new Promise((ok) => { const r = indexedDB.open('dd-archivio'); r.onsuccess = () => { const t = r.result.transaction(['sessioni', 'audio']);
+  const a = t.objectStore('sessioni').count(), b = t.objectStore('audio').count(); t.oncomplete = () => ok([a.result, b.result]); }; })"""
+
 def menu(pg, voce):
     pg.click("button[aria-label='Menu']")
     pg.click(f".menu__voce >> text={voce}")
@@ -1408,7 +1424,8 @@ with sync_playwright() as p:
         assert pg.locator(".prossimi .evento", has_text="Cena con i Rossi").count() == 0, "oltre i due giorni non compare"
         # Anche gli altri calendari (scelta di Mattia, 1/11), con il nome del calendario
         assert pg.locator(".prossimi .evento", has_text="Prove con la band").locator(".progetto").inner_text().lower() == "band"
-        assert pg.locator("#view > *").first.evaluate("n => n.classList.contains('prossimi')"), "la striscia sta in cima"
+        # (sopra può stare solo «Note vocali da salvare», quando ce ne sono: qui è nascosta)
+        assert pg.evaluate("[...document.querySelectorAll('#view > *')].find((n) => !n.hidden).classList.contains('prossimi')"), "la striscia sta in cima"
         assert "null" not in pg.locator(".prossimi").inner_text(), pg.locator(".prossimi").inner_text()
         pg.evaluate("window.scrollTo(0, 0)")
         pg.wait_for_timeout(200)
@@ -1761,14 +1778,14 @@ with sync_playwright() as p:
         utente = pg.evaluate("(() => { const s = JSON.parse(sessionStorage.getItem('finto.firestore')); return new Map(s.store.find(([c]) => c === 'users')[1]).get('uid-test'); })()")
         disp = list((utente.get("dispositivi") or {}).values())
         assert len(disp) == 1 and disp[0]["token"] == "token-finto", f"token salvato: {utente.get('dispositivi')}"
-        assert pg.locator(".spunta.on").count() == 9, "otto categorie e il silenzio di notte, accesi all'inizio"
+        assert pg.locator(".spunta.on").count() == 10, "nove categorie (dal 14/11 anche la revisione della settimana) e il silenzio di notte, accesi all'inizio"
         titoli = pg.locator(".blocco h3").all_inner_texts()
         assert titoli[:4] == ["Questo telefono", "Dall'altra persona", "Per te", "Di notte"], f"gruppi: {titoli}"
-        assert pg.locator(".blocco:has(h3:text-is(\"Dall'altra persona\")) .riga").count() == 4 and pg.locator(".blocco:has(h3:text-is('Per te')) .riga").count() == 4
+        assert pg.locator(".blocco:has(h3:text-is(\"Dall'altra persona\")) .riga").count() == 4 and pg.locator(".blocco:has(h3:text-is('Per te')) .riga").count() == 5
         assert pg.locator(".riga:has-text('Promemoria degli eventi') .anticipo .pillola.on").inner_text() == "1 ora", "anticipo predefinito: un'ora"
         pg.click(".riga:has-text('Lista della spesa')")
         pg.wait_for_selector(".riga:has-text('Lista della spesa') .spunta:not(.on)")
-        assert pg.locator(".spunta.on").count() == 8
+        assert pg.locator(".spunta.on").count() == 9
         # Anticipo: la pillola cambia la scelta e non spegne la categoria
         pg.click(".anticipo .pillola >> text=30 min")
         pg.wait_for_selector(".anticipo .pillola.on >> text=30 min")
@@ -1805,11 +1822,16 @@ with sync_playwright() as p:
         blocchi = pg.locator(".blocco")
         assert blocchi.nth(0).locator(".riga:has-text('Sonnet') .spunta.on").count() == 1, "note semplici: Sonnet"
         assert blocchi.nth(1).locator(".riga:has-text('Opus') .spunta.on").count() == 1, "progetti: Opus"
-        assert pg.locator(".spunta.on").count() == 2, "una scelta per tipo"
+        assert blocchi.nth(2).locator(".riga:has-text('Sonnet') .spunta.on").count() == 1, "domande: Sonnet"
+        assert pg.locator(".spunta.on").count() == 3, "una scelta per tipo"
+        # Quanto è costata l'AI questo mese (14/11): Claude rispetto ai crediti del piano, per voce, e Gemini a parte
+        consumi = pg.locator(".blocco", has=pg.locator("h3 >> text=Questo mese"))
+        assert "dei 100 $ del piano" in consumi.inner_text(), consumi.inner_text()
+        assert consumi.locator(".riga", has_text="Note dei progetti").count() == 1 and consumi.locator(".riga", has_text="Trascrizione").count() == 1, consumi.inner_text()
         blocchi.nth(0).locator(".riga:has-text('Haiku')").click()
         pg.wait_for_selector("text=Note semplici: Haiku")
         assert blocchi.nth(0).locator(".riga:has-text('Haiku') .spunta.on").count() == 1
-        assert pg.locator(".spunta.on").count() == 2, "sempre una scelta per tipo"
+        assert pg.locator(".spunta.on").count() == 3, "sempre una scelta per tipo"
         utente = pg.evaluate("(() => { const s = JSON.parse(sessionStorage.getItem('finto.firestore')); return new Map(s.store.find(([c]) => c === 'users')[1]).get('uid-test'); })()")
         assert utente.get("modelli") == {"note": "haiku"}, f"scelta salvata: {utente.get('modelli')}"
         pg.wait_for_timeout(2700)  # il toast se ne va
@@ -1851,13 +1873,54 @@ with sync_playwright() as p:
         assert pg.evaluate(liberi), "microfono liberato dopo Ferma"
         pg.wait_for_timeout(500)
         shot(pg, "18-nota-vocale")
-        # Chiudendo il foglio durante la registrazione il microfono si libera e niente viene trascritto.
+        # Chiudendo il foglio durante la registrazione (14/11) il microfono si libera ma niente si perde: quello che hai
+        # detto si trascrive lo stesso e resta in cima al Diario, «Nota vocale da salvare»; la × la butta, con Annulla.
         pg.locator("#foglio button[aria-label='Registra una nota vocale']").click()
         ferma.wait_for(timeout=4000)
+        pg.wait_for_timeout(1600)
         pg.click("#foglio button[aria-label='Indietro']")
-        pg.wait_for_timeout(800)
-        assert len(pg.evaluate("JSON.parse(sessionStorage.getItem('finto.trascrizioni') || '[]')")) == 1, "chiuso: niente trascrizione"
+        pg.wait_for_selector(".vocali__riga", timeout=8000)
+        assert len(pg.evaluate("JSON.parse(sessionStorage.getItem('finto.trascrizioni') || '[]')")) == 2, "chiuso: trascritta lo stesso"
         assert pg.evaluate(liberi), "microfono liberato chiudendo il foglio"
+        # Una riga sola per foglio, anche con due registrazioni: il testo della prima e il resto
+        assert pg.locator(".vocali__riga").count() == 1, pg.locator(".vocali").inner_text()
+        assert "Lezione di oggi" in pg.locator(".vocali__riga").inner_text(), pg.locator(".vocali").inner_text()
+        pg.wait_for_timeout(300)
+        shot(pg, "18b-nota-vocale-da-salvare")
+        pg.click(".vocali__riga button[aria-label='Butta la registrazione']")
+        pg.wait_for_selector(".vocali", state="hidden")
+        pg.click("#toast button >> text=Annulla")
+        pg.wait_for_selector(".vocali__riga")
+        pg.click(".vocali__riga button[aria-label='Butta la registrazione']")
+        pg.wait_for_timeout(5600)
+        assert pg.evaluate(ARCHIVIO) == [0, 0], f"buttata: niente resta sul telefono {pg.evaluate(ARCHIVIO)}"
+
+        # ── Nota vocale a pezzi (14/11, Mattia: «non vedo quello che sto trascrivendo via via»): il testo arriva a ogni
+        #    pausa mentre parli; un pezzo la cui risposta si perde si riprova da solo; una pausa lunga va a capo ──
+        step[0] = "nota vocale a pezzi"
+        pg.evaluate(MICROFONO, [[[7, 1.2], [3, 2.5]]])
+        pg.click("button.fab")
+        pg.locator("#foglio button[aria-label='Registra una nota vocale']").click()
+        ferma.wait_for(timeout=4000)
+        pg.wait_for_function("document.querySelector('#foglio textarea').value.includes('Lezione di oggi')", timeout=15000)
+        assert pg.locator("#foglio button[aria-label='Ferma la registrazione']").count() == 1, "il primo pezzo arriva mentre registri"
+        assert "Ti ascolto" in pg.locator("#foglio p.meta").first.inner_text()
+        shot(pg, "18c-nota-vocale-dal-vivo")
+        pg.evaluate("sessionStorage.setItem('finto.trascrivi.cade', '1')")  # la risposta del secondo pezzo si perde
+        pg.wait_for_function("document.querySelector('#foglio textarea').value.includes('pezzo 1')", timeout=25000)
+        ferma.click()
+        pg.locator("#foglio button[aria-label='Registra una nota vocale']").wait_for(timeout=15000)
+        valore = pg.locator("#foglio textarea").input_value()
+        assert valore == "Lezione di oggi con Marco: rovescio a due mani e split step prima della risposta al servizio. poi il pezzo 1 della dettatura.\n\npoi il pezzo 2 della dettatura.", repr(valore)
+        viste = pg.evaluate("JSON.parse(sessionStorage.getItem('finto.trascrizioni') || '[]')")[-3:]
+        assert [v["pezzo"] for v in viste] == [0, 1, 2], viste
+        assert viste[0]["prima"] == "" and viste[2]["prima"].endswith("pezzo 1 della dettatura."), "ogni pezzo con la fine del testo di prima"
+        assert pg.evaluate(liberi), "microfono liberato dopo Ferma"
+        pg.click("#foglio button[aria-label='Indietro']")  # niente salvato: resta da salvare
+        pg.wait_for_selector(".vocali__riga")
+        pg.click(".vocali__riga button[aria-label='Butta la registrazione']")
+        pg.wait_for_timeout(5600)
+        assert pg.evaluate(ARCHIVIO) == [0, 0]
 
         # ── Nota lunga: riaperta si legge dall'inizio, tutta, scorrendo il foglio ──
         step[0] = "nota lunga"
@@ -2068,6 +2131,112 @@ with sync_playwright() as p:
         pg.wait_for_selector("#page-title >> text=Calendario")
         assert pg.locator(".schede a").count() == 5, "la barra scelta anche dopo la riapertura"
         shot(pg, "25b-barra-apertura")
+
+        # ── App chiusa durante la registrazione (14/11): riaprendo, la registrazione è in cima al Diario; toccandola si
+        #    trascrive quello che manca e si salva come nota ──
+        step[0] = "nota vocale ripresa"
+        pg.goto("http://127.0.0.1:8766/#/diario")
+        pg.wait_for_selector("#page-title >> text=Diario", timeout=8000)  # il Diario non è più in barra (prova della barra)
+        pg.evaluate(MICROFONO, [[[4, 1.2]]])
+        pg.click("button.fab")
+        pg.locator("#foglio button[aria-label='Registra una nota vocale']").click()
+        pg.locator("#foglio button[aria-label='Ferma la registrazione']").wait_for(timeout=4000)
+        pg.wait_for_timeout(2600)
+        pg.reload()
+        pg.wait_for_selector(".vocali__riga", timeout=8000)
+        assert "da trascrivere" in pg.locator(".vocali__riga").inner_text(), pg.locator(".vocali__riga").inner_text()
+        pg.click(".vocali__apri")
+        pg.wait_for_function("document.querySelector('#foglio textarea')?.value.includes('Lezione di oggi')", timeout=10000)
+        conferma(pg)
+        pg.wait_for_selector(".voce-nota .lezione__titolo >> text=Lezione di oggi con Marco")
+        pg.wait_for_selector(".vocali", state="hidden")
+        assert pg.evaluate(ARCHIVIO) == [0, 0], "salvata: niente resta sul telefono"
+
+        # ── Chiedi (14/11): dal punto di domanda in testata del Diario, Invio chiede; la ricerca si vede mentre avviene,
+        #    la risposta arriva con le fonti, si continua dal campo in fondo (anche se la risposta si perde), una fonte
+        #    apre la nota; la pagina Chiedi elenca le domande ──
+        step[0] = "chiedi"
+        pg.click("button[aria-label='Chiedi']")
+        pg.wait_for_selector("#foglio h2 >> text=Chiedi")
+        pg.wait_for_function("document.activeElement?.getAttribute('aria-label') === 'Domanda'", timeout=3000)
+        assert pg.locator("#foglio .btn--conferma").inner_text().strip() == "Chiedi"
+        shot(pg, "26-chiedi-nuova")
+        pg.locator("#foglio textarea").fill("Cosa ho imparato all'ultima lezione?")
+        pg.locator("#foglio textarea").press("Enter")
+        pg.wait_for_selector("#foglio .domanda__testo >> text=Cosa ho imparato all'ultima lezione?")
+        pg.wait_for_selector("#foglio .domanda__attesa small >> text=Cerco nelle note", timeout=4000)
+        shot(pg, "26a-chiedi-cerca")
+        pg.wait_for_selector("#foglio .domanda__risposta >> text=rovescio a due mani", timeout=8000)
+        assert pg.locator("#foglio .domanda__fonti .fonte").count() == 2, pg.locator("#foglio .domanda__fonti").inner_text()
+        assert pg.locator("#foglio .domanda__attesa").count() == 0, "finita: niente più «Cerco…»"
+        pg.wait_for_timeout(300)
+        shot(pg, "26b-chiedi-risposta")
+        pg.evaluate("sessionStorage.setItem('finto.chiedi.persa', '1')")  # la risposta della seconda domanda si perde
+        pg.locator("#foglio .domanda__segui textarea").fill("E la spalla?")
+        pg.locator("#foglio .domanda__segui textarea").press("Enter")
+        pg.wait_for_selector("#foglio .domanda__risposta >> text=Seguito 2", timeout=8000)
+        assert pg.locator("#foglio .domanda__turno").count() == 2
+        pg.locator("#foglio .domanda__turno").first.locator(".fonte").first.click()
+        pg.wait_for_selector("#page-title >> text=Diario", timeout=6000)
+        # Il foglio di lettura della nota (Modifica in basso a destra)
+        pg.wait_for_function("document.querySelector('#foglio .btn--conferma')?.textContent.trim() === 'Modifica'", timeout=6000)
+        pg.click("#foglio button[aria-label='Indietro']")
+        menu(pg, "Chiedi")
+        riga = pg.locator(".voce-nota", has=pg.locator(".lezione__titolo", has_text="Cosa ho imparato all'ultima lezione?"))
+        riga.wait_for(timeout=6000)
+        assert "2 domande" in riga.inner_text(), riga.inner_text()
+        pg.wait_for_timeout(300)
+        shot(pg, "26c-chiedi-pagina")
+
+        # ── Scorciatoie dell'icona (14/11, manifest.json → shortcuts) ──
+        step[0] = "scorciatoie"
+        pg.goto("http://127.0.0.1:8766/#/lista/nuova")
+        pg.wait_for_selector("#foglio h2 >> text=Mi serve", timeout=8000)
+        assert pg.evaluate("location.hash") == "#/lista"
+        pg.click("#foglio button[aria-label='Indietro']")
+        pg.goto("http://127.0.0.1:8766/#/chiedi/nuova")
+        pg.wait_for_selector("#foglio h2 >> text=Chiedi", timeout=8000)
+        pg.click("#foglio button[aria-label='Indietro']")
+        pg.evaluate(MICROFONO, [[[3, 1.2]]])
+        pg.goto("http://127.0.0.1:8766/#/diario/vocale")
+        pg.evaluate(MICROFONO, [[[3, 1.2]]])  # la pagina nuova ha il microfono finto di Chromium: lo si risostituisce
+        pg.wait_for_selector("#foglio button[aria-label='Ferma la registrazione']", timeout=8000)
+        pg.wait_for_timeout(1500)
+        pg.click("#foglio button[aria-label='Ferma la registrazione']")
+        pg.wait_for_function("document.querySelector('#foglio textarea').value.length > 10", timeout=10000)
+        conferma(pg)
+        pg.wait_for_selector(".vocali", state="hidden")
+
+        # ── Foto condivise da un'altra app (14/11): sw.js le mette in una cache, il Diario apre la nota con le foto ──
+        step[0] = "foto condivise"
+        jpg = base64.b64encode(open(os.path.join(HERE, "finto", "foto.jpg"), "rb").read()).decode()
+        pg.evaluate("""async (b64) => { const b = new Blob([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))], { type: 'image/jpeg' });
+          const c = await caches.open('dd-condivisi'); await c.put('/condivisi/0-scontrino.jpg', new Response(b, { headers: { 'content-type': 'image/jpeg' } })); }""", jpg)
+        pg.goto("http://127.0.0.1:8766/?share=1&text=Scontrino%20Esselunga&foto=1")
+        pg.wait_for_selector("#foglio h2 >> text=Nuova nota", timeout=8000)
+        pg.wait_for_selector("#foglio .foto-striscia--scelta .foto-striscia__foto img", timeout=8000)
+        assert pg.locator("#foglio .taccuino textarea").input_value() == "Scontrino Esselunga", pg.locator("#foglio .taccuino textarea").input_value()
+        assert pg.evaluate("caches.open('dd-condivisi').then((c) => c.keys()).then((k) => k.length)") == 0, "presa e tolta dalla cache"
+        shot(pg, "27-foto-condivisa")
+        conferma(pg)
+        pg.wait_for_selector(".voce-nota .lezione__foto", timeout=8000)
+
+        # ── L'agente sa cosa c'è già (14/11): una nota dice fatto un task aperto → «Task fatto», confermata lo chiude ──
+        step[0] = "task fatto dalla nota"
+        aperti = pg.evaluate("[...window.__finto.coll('tasks').entries()].filter(([, t]) => !t.done).map(([id, t]) => [id, t.text])")
+        assert aperti, "c'è un task aperto"
+        tid, testo_task = aperti[0]
+        pg.click("button.fab")
+        pg.fill("#foglio .taccuino textarea", f"Fatto: {testo_task.lower()}")
+        conferma(pg)
+        azione = pg.locator(".azione", has=pg.locator("small >> text=Task fatto"))
+        azione.wait_for(timeout=8000)
+        assert testo_task in azione.inner_text() and "la nota dice che è fatto" in azione.inner_text(), azione.inner_text()
+        pg.wait_for_timeout(2800)  # il foglio è svanito e il toast se n'è andato
+        shot(pg, "28-task-fatto")
+        azione.locator("button[aria-label='Conferma']").click()
+        pg.wait_for_selector("text=Task segnato fatto")
+        assert pg.evaluate(f"window.__finto.coll('tasks').get('{tid}').done") is True
         print("FLUSSO COMPLETO")
     except Exception as e:
         shot(pg, "errore")

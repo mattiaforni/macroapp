@@ -37,14 +37,14 @@ import { httpsCallable } from "https://www.gstatic.com/firebasejs/11.3.0/firebas
 import { functions } from "../../core/firebase.js";
 import { el, icon, toast, fascia, vuoto, attesa, toDate, meseLungo, fab, fabDoppio, testoRicco, isoGiorno, stessoGiorno, fmtDate, puntoToccato, pillolaProgetto } from "../../core/ui.js";
 import { openSheet, scriviDa } from "../../components/sheet.js";
-import { create, update, remove, watchVisible, readVisible, VIS, where, serverTimestamp } from "../../core/db.js";
+import { create, update, remove, watchVisible, readVisible, leggiUno, VIS, where, serverTimestamp } from "../../core/db.js";
 import { session } from "../../core/auth.js";
 import { seguiNote, visibilitaNota, notaMia } from "../../core/note.js";
 import { getHousehold, nomeDi } from "../../core/household.js";
 import { watchPending, renderAzione } from "../../components/proposals.js";
 import { aggiungiVoci } from "../lista/index.js";
 import { apriTask, apriProgetto } from "../task/index.js";
-import { vaiA } from "../../core/router.js";
+import { vaiA, richiestaPer } from "../../core/router.js";
 import { apriPaginaProgetto } from "../../core/barra.js";
 import { apriSpesa } from "../spese/index.js";
 import { apriVoceManuale } from "../manuale/index.js";
@@ -52,7 +52,7 @@ import { nomeModello } from "../../core/modelli.js";
 import { statoGoogle, suGoogle } from "../../core/google.js";
 import { calendariVisti, leggiEventi, eventiNoti, suEventi, suCalendari, scriviEventi } from "../../core/calendario.js";
 import { rigaEvento, inOrdine, apriEvento } from "../calendario/index.js";
-import { pulsanteRegistra } from "../../components/registratore.js";
+import { pulsanteRegistra, sospese, elimina as eliminaVocale, durata } from "../../components/registratore.js";
 import { sceltaPersone } from "../../components/persone.js";
 import { personaDaId, personaDaGoogle } from "../../core/rubrica.js";
 import { linkGoogle } from "../../core/contatti-google.js";
@@ -61,6 +61,9 @@ import { sceltaFoto, strisciaFoto, salvaFoto, eliminaFoto, eliminaFotoDi, visibi
 export const id = "diario";
 export const title = "Diario";
 export const nav = true;
+/** In testata, a destra: Chiedi (14/11), che apre subito il foglio per scrivere la domanda. */
+export const azioni = () => [el("button.tondo.tondo--piatto", { type: "button", "aria-label": "Chiedi", title: "Chiedi",
+  onclick: () => vaiA("chiedi", "nuova") }, icon("domanda"))];
 const navIcon = "diario";
 export { navIcon as icon };
 
@@ -102,7 +105,7 @@ const chiavePersone = (lista) => JSON.stringify((lista || []).map((p) => [p.nome
  * cursore lì e tastiera aperta. `onSalva(dati, foto)`: le foto scelte, { nuove, tolte } (components/foto.js), si
  * scrivono dopo la nota.
  */
-export function apriNota({ esistente = null, testo = "", progetti = [], projectId = null, fuoco = null, onSalva }) {
+export function apriNota({ esistente = null, testo = "", progetti = [], projectId = null, fuoco = null, ripresa = null, fotoIniziali = [], registraSubito = false, onSalva }) {
   // Una nota già scritta si apre per leggerla dall'inizio: niente tastiera finché non tocchi il testo.
   const area = el("textarea", { placeholder: "Scrivi o detta…", rows: 6, autofocus: !esistente });
   area.value = esistente?.text || testo;
@@ -110,7 +113,7 @@ export function apriNota({ esistente = null, testo = "", progetti = [], projectI
   titolo.value = esistente?.titolo || "";
   titolo.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); area.focus(); } });
   const persone = sceltaPersone({ perNota: esistente?.persone || [] });
-  const foto = sceltaFoto({ esistente });
+  const foto = sceltaFoto({ esistente, iniziali: fotoIniziali });
   // Una nota dell'altra persona si sposta solo tra i progetti condivisi: resta visibile a lei (e senza «Nessuno»).
   const altrui = esistente && !notaMia(esistente);
   const attivi = progetti.filter((p) => (!p.archived || p.id === esistente?.projectId) && (!altrui || p.visibility === VIS.SHARED))
@@ -158,6 +161,29 @@ export function apriNota({ esistente = null, testo = "", progetti = [], projectI
     }
   }
 
+  // Nota vocale (14/11): il testo arriva a pezzi mentre parli, uno a ogni pausa, e si aggiunge a quello che c'è già
+  // nel campo; la registrazione resta sul telefono finché la nota non è salvata (components/registratore.js).
+  const suggerimento = el("p.meta", { style: "margin-top:6px", hidden: !!esistente && !ripresa },
+    ripresa ? "Registrazione ripresa: finisco di trascriverla, poi salva." : "Per la voce tocca «Registra» in basso: parla quanto vuoi, il testo arriva qui a ogni pausa. Poi «Ferma».");
+  const registra = pulsanteRegistra({
+    archivia: true, riprendi: ripresa,
+    progetto: () => progetto.valore(),
+    inserisci: (testo, { primo = true, aCapo = true } = {}) => {
+      const prima = area.value.trimEnd();
+      area.value = !prima ? testo : `${prima}${primo || aCapo ? "\n\n" : " "}${testo}`;
+      area.dispatchEvent(new Event("input", { bubbles: true }));
+      // Si vede l'ultima riga arrivata, se non stai scrivendo altrove.
+      if (document.activeElement !== titolo) area.scrollIntoView({ block: "end", behavior: "instant" });
+    },
+    onStato: ({ stato, inAttesa }) => {
+      if (stato === "fermo") { suggerimento.hidden = !!esistente; suggerimento.textContent = "Per la voce tocca «Registra» in basso: parla quanto vuoi, il testo arriva qui a ogni pausa. Poi «Ferma»."; return; }
+      suggerimento.hidden = false;
+      suggerimento.textContent = stato === "registra"
+        ? "Ti ascolto: il testo arriva qui a ogni pausa. Se blocchi il telefono, quello che hai detto resta."
+        : inAttesa > 1 ? `Trascrivo gli ultimi ${inAttesa} pezzi…` : "Trascrivo l'ultimo pezzo…";
+    },
+  });
+
   const sheet = openSheet({
     title: esistente ? "Nota" : "Nuova nota",
     body: [
@@ -165,7 +191,7 @@ export function apriNota({ esistente = null, testo = "", progetti = [], projectI
       riepilogo ? el("div.campo", { style: "margin-top:14px" }, el("label", {}, "Riepilogo"), riepilogo) : null,
       riepilogo ? el("div.etichetta-campo", {}, "Trascrizione") : null,
       el("div.taccuino", { style: "padding-top:0" }, area),
-      esistente ? null : el("p.meta", { style: "margin-top:6px" }, "Per la voce tocca «Registra» in basso: parla quanto vuoi, poi «Ferma»."),
+      suggerimento,
       el("div", { style: "margin-top:16px" }, el("div.etichetta-campo", {}, "Foto"), foto.node),
       el("div.campo", { style: "margin-top:16px" }, el("label", {}, "Persone"), persone.node),
       attivi.length ? el("div", { style: "margin-top:16px" }, el("div.etichetta-campo", {}, "Progetto"), progetto.node) : null,
@@ -181,18 +207,15 @@ export function apriNota({ esistente = null, testo = "", progetti = [], projectI
         ),
       ),
     ],
-    // Nota vocale: la trascrizione si aggiunge a quello che c'è già nel campo.
-    azioni: [pulsanteRegistra({
-      progetto: () => progetto.valore(),
-      inserisci: (testo) => {
-        const prima = area.value.trimEnd();
-        area.value = prima ? `${prima}\n\n${testo}` : testo;
-        area.dispatchEvent(new Event("input", { bubbles: true }));
-      },
-    })],
-    onConfirm: () => {
+    azioni: [registra],
+    onConfirm: async () => {
+      // Salvando mentre registri o trascrivi: si ferma e si aspetta l'ultimo pezzo (se non arriva, resta sul telefono).
+      if (!(await registra.attendi())) toast("L'ultimo pezzo non è ancora trascritto: lo trovi in cima al Diario quando arriva.", { ms: 6000 });
       const text = area.value.trim();
-      if (!text) { area.focus(); return false; }
+      // Una nota può essere di sole foto (uno scontrino, un biglietto da visita): l'agente legge quelle (14/11).
+      const fotoScelte = foto.valore();
+      const conFoto = fotoScelte.nuove.length || (esistente?.foto || []).length > fotoScelte.tolte.length;
+      if (!text && !conFoto) { area.focus(); return false; }
       const dati = { text, projectId: progetto.valore() };
       const t = titolo.value.trim();
       if (t !== (esistente?.titolo || "")) { dati.titolo = t; dati.titoloAMano = !!t; }
@@ -200,10 +223,29 @@ export function apriNota({ esistente = null, testo = "", progetti = [], projectI
       if (chiavePersone(scelte) !== chiavePersone(esistente?.persone)) { dati.persone = scelte; dati.personeAMano = true; }
       if (riepilogo) dati.riepilogo = riepilogo.value.trim();
       if (quando.getTime() !== originale.getTime()) dati.createdAt = quando;
-      onSalva(dati, foto.valore());
+      onSalva(dati, fotoScelte);
+      registra.conclusa();
     },
   });
   if (fuoco) scriviDa({ titolo, testo: area, riepilogo }[fuoco.campo] || area, fuoco.pos);
+  // Scorciatoia «Nota vocale» dell'icona (14/11): si registra subito, senza tastiera.
+  if (registraSubito) { area.blur(); registra.click(); }
+}
+
+/** Le foto condivise da un'altra app, messe da parte da sw.js nella cache «dd-condivisi»: si leggono e si tolgono. */
+async function fotoCondivise() {
+  try {
+    const cache = await caches.open("dd-condivisi");
+    const chiavi = await cache.keys();
+    const foto = [];
+    for (const r of chiavi) {
+      const res = await cache.match(r);
+      const blob = await res.blob();
+      foto.push(new File([blob], decodeURIComponent(new URL(r.url).pathname.split("/").pop() || "foto"), { type: blob.type || "image/jpeg" }));
+      await cache.delete(r);
+    }
+    return foto;
+  } catch (e) { console.warn("foto condivise", e); return []; }
 }
 
 /** Oltre questo tempo un'analisi «in corso» è morta (functions/index.js, ANALISI_MAX_MS: 300 s della funzione più margine). */
@@ -298,13 +340,14 @@ export async function applicaFoto(entryId, attuali, { nuove, tolte }, attesa, vi
 
 /**
  * Salva una nota nuova (Diario e pagina del progetto): con la visibilità del suo progetto, poi le foto. Ritorna
- * { id, saved } come create().
+ * { id, saved } come create(), più `pronta`: nota e foto scritte (da lì parte l'analisi).
  */
 export function salvaNotaNuova(dati, foto, progetti) {
   const visibility = visibilitaNota(dati.projectId, progetti);
   const r = create(COLL, { ...dati, analyzed: false }, visibility);
-  applicaFoto(r.id, [], foto, r.saved, visibility);
-  return r;
+  // L'agente legge anche le foto (14/11): l'analisi parte quando sono scritte (`pronta`), non appena c'è la nota.
+  const fotoScritte = applicaFoto(r.id, [], foto, r.saved, visibility).catch(() => {});
+  return { ...r, pronta: Promise.all([r.saved, fotoScritte]) };
 }
 
 /**
@@ -530,12 +573,12 @@ export function mount(container) {
     render();
   }
 
-  function nuova(testo = "") {
+  function nuova(testo = "", { ripresa = null, projectId = undefined, foto = [], registraSubito = false } = {}) {
     apriNota({
-      testo, progetti, projectId: filtro !== "tutte" ? filtro : null,
+      testo, progetti, ripresa, fotoIniziali: foto, registraSubito, projectId: projectId !== undefined ? projectId : filtro !== "tutte" ? filtro : null,
       onSalva: (dati, foto) => {
-        const { id: entryId, saved } = salvaNotaNuova(dati, foto, progetti);
-        if (auto) analizza(entryId, saved);
+        const { id: entryId, pronta } = salvaNotaNuova(dati, foto, progetti);
+        if (auto) analizza(entryId, pronta);
       },
     });
   }
@@ -604,6 +647,35 @@ export function mount(container) {
     try { eventi = await leggiEventi(); } catch (e) { /* niente */ }
     disegnaProssimi();
   }
+
+  // ── Note vocali da salvare (14/11) ──
+  // Registrazioni rimaste sul telefono: l'app si è chiusa mentre registravi, o il foglio si è chiuso senza salvare.
+  // Toccandola si riapre la nota con il testo già trascritto e si finisce il resto; la × la butta (con Annulla).
+  const vocali = el("div.vocali", { hidden: true });
+  const buttate = new Set();
+  async function disegnaVocali() {
+    const lista = (await sospese()).filter((v) => !buttate.has(v.id));
+    if (smontato) return;
+    vocali.hidden = !lista.length;
+    if (!lista.length) { vocali.replaceChildren(); return; }
+    vocali.replaceChildren(fascia(lista.length === 1 ? "Nota vocale da salvare" : "Note vocali da salvare"), ...lista.map((v) => {
+      const d = new Date(v.inizio);
+      const quando = `${stessoGiorno(d, new Date()) ? "oggi" : fmtDate(d)} alle ${d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}`;
+      const dettagli = [quando, v.durataMs ? durata(v.durataMs / 1000) : null, v.daTrascrivere ? "da trascrivere" : null].filter(Boolean).join(" · ");
+      return el("div.vocali__riga", { "data-id": v.id },
+        el("button.vocali__apri", { type: "button", onclick: () => nuova(v.testo, { ripresa: v.id, projectId: v.projectId }) },
+          icon("microfono"),
+          el("div", { style: "min-width:0" },
+            el("div.vocali__titolo", {}, `Registrazione di ${dettagli}`),
+            v.testo ? el("div.vocali__anteprima", {}, v.testo) : el("div.vocali__anteprima", {}, "Tocca per trascriverla e salvarla"))),
+        el("button.tondo.tondo--piatto", { type: "button", "aria-label": "Butta la registrazione", onclick: () => {
+          buttate.add(v.id); disegnaVocali();
+          const via = setTimeout(() => eliminaVocale(v.id), 5200);
+          toast("Registrazione buttata", { azione: { label: "Annulla", fn: () => { clearTimeout(via); buttate.delete(v.id); disegnaVocali(); } } });
+        } }, icon("chiudi")));
+    }));
+  }
+  window.addEventListener("registrazioni", disegnaVocali);
 
   // Il nome di chi ha scritto una nota condivisa, se non sei tu (la casa arriva subito: è già in memoria).
   let casa = null;
@@ -714,6 +786,7 @@ export function mount(container) {
   }
 
   container.append(
+    vocali,
     prossimi,
     el("div.segmenti", { style: "align-items:center;justify-content:space-between" }, stato, autoBtn),
     filtri,
@@ -722,9 +795,26 @@ export function mount(container) {
     eventoFab,
   );
 
-  // Testo condiviso da un'altra app: apre subito il foglio con il testo dentro.
+  // Una nota chiesta da un'altra pagina (le fonti di Chiedi, 14/11): si apre il suo foglio di lettura.
+  const chiesta = richiestaPer("diario");
+  if (chiesta?.startsWith("nota:")) {
+    // Dopo il montaggio: il router chiude i fogli aperti quando ha finito di cambiare pagina.
+    setTimeout(() => leggiUno(COLL, chiesta.slice(5)).then((n) => { if (n && !smontato) leggiNota(n); else if (!n) toast("Questa nota non c'è più"); }), 0);
+  }
+
+  // Testo o foto condivisi da un'altra app (14/11 anche le foto: uno scontrino, un biglietto da visita, uno screenshot):
+  // apre subito il foglio con il testo e le foto dentro (sw.js le mette da parte, app.js le passa qui).
   const condiviso = sessionStorage.getItem("macroapp.share");
-  if (condiviso) { sessionStorage.removeItem("macroapp.share"); setTimeout(() => nuova(condiviso), 0); }
+  const conFoto = sessionStorage.getItem("macroapp.share.foto") === "1";
+  if (condiviso != null || conFoto) {
+    sessionStorage.removeItem("macroapp.share"); sessionStorage.removeItem("macroapp.share.foto");
+    (conFoto ? fotoCondivise() : Promise.resolve([])).then((foto) => setTimeout(() => nuova(condiviso || "", { foto }), 0));
+  }
+  // Scorciatoia dell'icona «Nota vocale»: #/diario/vocale.
+  if (/^#\/diario\/vocale/.test(location.hash)) {
+    history.replaceState(history.state, "", "#/diario");
+    setTimeout(() => nuova("", { registraSubito: true }), 0);
+  }
 
   segui();
   const stop1 = watchVisible("projects", {}, (docs) => {
@@ -739,5 +829,6 @@ export function mount(container) {
   const stop4 = suGoogle(() => caricaProssimi());
   const stop5 = suCalendari(() => caricaProssimi());
   caricaProssimi();
-  return () => { clearTimeout(timerAnalisi); stopNote(); stopTutte(); stop1(); stop2(); stop3(); stop4(); stop5(); dati.ferma(); smontato = true; piu.remove(); eventoFab.remove(); lasciaDoppio?.(); lasciaDoppio = null; };
+  disegnaVocali();
+  return () => { window.removeEventListener("registrazioni", disegnaVocali); clearTimeout(timerAnalisi); stopNote(); stopTutte(); stop1(); stop2(); stop3(); stop4(); stop5(); dati.ferma(); smontato = true; piu.remove(); eventoFab.remove(); lasciaDoppio?.(); lasciaDoppio = null; };
 }

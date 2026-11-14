@@ -16,7 +16,7 @@ import * as progetto from "../modules/progetto/index.js";
 
 export const MASSIMO = 5;
 /** Le pagine che si possono mettere in barra, nell'ordine in cui si propongono. */
-export const PAGINE = ["diario", "lista", "spese", "task", "calendario", "manuale", "proposte"];
+export const PAGINE = ["diario", "lista", "spese", "task", "calendario", "chiedi", "manuale", "proposte"];
 const predefinita = () => navModules.map((m) => m.id); // letta al bisogno: registry.js importa anche questo file
 const CHIAVE_PAGINA = "macroapp.progetto";  // progetto aperto nella pagina Progetto (modules/progetto)
 const CHIAVE_NOMI = "macroapp.barra.progetti"; // { id: { name, colore } } dei progetti in barra

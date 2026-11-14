@@ -86,6 +86,16 @@ export function vaiA(id, apri = null) {
   else navigate(id);
 }
 
+/** Nel mount di un modulo: cosa gli è stato chiesto di aprire (vaiA(id, apri)), una volta sola; null se niente. */
+export function richiestaPer(id) {
+  try {
+    const v = sessionStorage.getItem(CHIAVE_APRI) || "";
+    if (!v.startsWith(`${id}:`)) return null;
+    sessionStorage.removeItem(CHIAVE_APRI);
+    return v.slice(id.length + 1);
+  } catch (e) { return null; }
+}
+
 /** Nel mount di un modulo: true, una volta sola, se il menu ha chiesto di aprire quella cosa. */
 export function richiesto(id, apri) {
   try {

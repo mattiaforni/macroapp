@@ -3,6 +3,8 @@
 //
 // Documento in `proposals`:
 //   kind        "task" | "shopping_item" | "manual_entry" | "expense" | "event" | "draft" | "project_summary"
+//               | "task_done" | "task_due" (14/11: un task aperto che la nota dice fatto o di cui sposta la scadenza;
+//               payload { taskId, text, prima (scadenza di adesso), due (la nuova) })
 //               ("note", l'appunto, non viene più proposto dall'agente; la conferma resta per quelle vecchie)
 //   source      "agent" | "bank" | "share"
 //   status      "pending" | "accepted" | "rejected"
@@ -11,7 +13,7 @@
 //   sourceEntryId  la nota del diario da cui nasce (se viene dall'agente)
 //   visibility  "shared" se riguarda la casa/coppia, "private" se è solo tua
 
-import { el, icon, toast, toDate, testoRicco, colonnaGiorno, fmtMoney } from "../core/ui.js";
+import { el, icon, toast, toDate, testoRicco, colonnaGiorno, fmtMoney, fmtDate } from "../core/ui.js";
 import { create, update, watchVisible, readVisible, VIS, where } from "../core/db.js";
 import { session } from "../core/auth.js";
 import { aggiungiVoci } from "../modules/lista/index.js";
@@ -33,6 +35,8 @@ export const TIPI = {
   event: { nome: "Calendario", icona: "calendario" },
   draft: { nome: "Bozza", icona: "mail" },
   project_summary: { nome: "Sintesi del progetto", icona: "diario" },
+  task_done: { nome: "Task fatto", icona: "spunta" },
+  task_due: { nome: "Nuova scadenza", icona: "calendario" },
 };
 
 /** Cosa succede quando confermi, tipo per tipo. Ritorna il messaggio di conferma. */
@@ -96,6 +100,19 @@ const APPLICA = {
     const x = p.payload;
     create("notes", { type: "draft", channel: x.channel || "", to: x.to || "", subject: x.subject || "", text: x.body || "" }, VIS.PRIVATE);
     return "Bozza salvata tra gli appunti";
+  },
+  // Un task che la nota dice fatto, o con una scadenza nuova (14/11): si cambia il task che c'è.
+  async task_done(p) {
+    const x = p.payload || {};
+    if (!x.taskId) throw new Error("task mancante");
+    await update("tasks", x.taskId, { done: true, doneAt: new Date() });
+    return "Task segnato fatto";
+  },
+  async task_due(p) {
+    const x = p.payload || {};
+    if (!x.taskId || !/^\d{4}-\d{2}-\d{2}$/.test(x.due || "")) throw new Error("task o data mancante");
+    await update("tasks", x.taskId, { due: x.due });
+    return "Scadenza spostata";
   },
   // La sintesi proposta sostituisce quella del progetto (si legge e si corregge dal progetto).
   async project_summary(p) {
@@ -179,7 +196,7 @@ function sintesiProposta(x) {
 export function giornoDi(p) {
   const x = p.payload || {};
   if (p.kind === "expense") return toDate(x.date);
-  if ((p.kind === "event" || p.kind === "task") && /^\d{4}-\d{2}-\d{2}$/.test(x.due || "")) return new Date(`${x.due}T12:00:00`);
+  if ((p.kind === "event" || p.kind === "task" || p.kind === "task_due") && /^\d{4}-\d{2}-\d{2}$/.test(x.due || "")) return new Date(`${x.due}T12:00:00`);
   return null;
 }
 
@@ -187,7 +204,7 @@ export function giornoDi(p) {
 export function titoloDi(p) {
   const x = p.payload || {};
   if (p.kind === "expense") return x.description || x.text || String(p.summary || "").replace(/\s*·\s*[\d.,]+\s*€\s*$/, "") || "Spesa";
-  if (p.kind === "event" || p.kind === "task") return x.text || p.summary || "";
+  if (p.kind === "event" || p.kind === "task" || p.kind === "task_done" || p.kind === "task_due") return x.text || p.summary || "";
   return p.summary || x.text || x.name || "";
 }
 
@@ -204,6 +221,8 @@ export function renderAzione(p) {
   let dettagli = [];
   if (p.kind === "task") dettagli = [x.project && `progetto ${x.project}`, x.people];
   if (p.kind === "event") dettagli = [x.time || "tutto il giorno", x.place];
+  if (p.kind === "task_due") dettagli = [x.prima ? `era per il ${fmtDate(x.prima)}` : "era senza scadenza"];
+  if (p.kind === "task_done") dettagli = ["la nota dice che è fatto"];
   // Una spesa confermata è pagata da te e divisa a metà (si cambia poi dal suo foglio): lo dice la riga.
   if (p.kind === "expense") dettagli = [x.account, "da dividere a metà"];
   dettagli = dettagli.filter(Boolean);

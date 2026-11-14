@@ -32,6 +32,18 @@ Scelte: nessun framework né bundler (coerente con i progetti precedenti, deploy
 ## Backend (`functions/`)
 
 - `analyzeEntry` (callable): legge una nota del diario del chiamante, chiama `reason()` con uno schema JSON e scrive proposte. Non modifica mai i moduli. In ogni nota scrive il titolo e le persone nominate (`persone`: collegate a una voce della rubrica o a un contatto Google, scelto tra quelli con una parola del nome nel testo: `src/google/contatti.js`; nessuna voce entra in rubrica), salvo che l'utente li abbia scritti a mano nel foglio della nota. Se la nota è di un progetto con istruzioni, scrive anche il riepilogo nella nota (testo della nota, correggibile, come titolo e persone) con i temi della nota, e propone la sintesi aggiornata del progetto (`project_summary`, da confermare; solo se cambia). Contesto: la sintesi attuale e le ultime 8 note dello stesso progetto (riepilogo se c'è, se no testo); senza sintesi, fino a 30 note, per costruire la prima. Ritorna `{ proposals, riepilogo, titolo, persone, sintesi, sintesiEsito, modello }`.
+- Dal 14/11 l'agente legge anche: le foto della nota (al più 4, immagini prima del testo); ciò che c'è già (task aperti propri
+  e della casa con un codice [t1…], la lista della spesa, gli eventi dei prossimi 21 giorni dei calendari che la persona vede):
+  non propone doppioni e può proporre `task_done` / `task_due` su un task aperto (il codice diventa l'id sul server); i PDF di
+  Drive dei progetti (`drive_testi`). Ogni chiamata scrive i token e il costo stimato in `consumi` (`src/consumi.js`).
+- `chiedi` (callable, `{ id }`, 14/11): risponde a una domanda di `domande/{id}` con Claude e strumenti di sola lettura
+  (`cerca_note`, `leggi_nota`, `spese`, `task`, `eventi`, `progetti`, `manuale`, `lista`; `src/chiedi.js`), in un giro di al più
+  8 chiamate e ~230 s. Le funzioni usano l'Admin SDK, che salta le regole: ogni strumento filtra a mano (proprio, o `shared`
+  della casa di cui la persona è membro). La risposta cita i codici delle fonti ([n3], [s12]): il server li toglie dal testo e
+  scrive le fonti accanto. Stato, passi e risposta sul documento, come l'analisi delle note. Modello da `users.modelli.domande`
+  (Sonnet); ripiego dei rifiuti lato server (`fallbacks: "default"`, beta), tolto da solo se l'API non lo accetta.
+- `revisioneSettimana` (schedulata, domenica 18:47): per chi ha un telefono con le notifiche e non ha spento «settimana», una
+  domanda di tipo `settimana` scritta con gli stessi strumenti (`src/settimana.js`) e una notifica che la apre in Chiedi.
 - `bank` (callable, `{ azione }`): `banche` (elenco per paese), `avvia` (`POST /auth` → url del consenso, `state` salvato in `bank_connections/{uid}.pending`), `concludi` (`POST /sessions` col `code`, controlla lo `state`, chiude la sessione precedente, salva conti e scadenza), `scollega` (`DELETE /sessions/{id}`), `sincronizza` (la lettura di `syncBank`, a richiesta). Scrive solo nel documento del chiamante.
 - `contatti` (callable): Google Contatti. `avvio` → pagina di Google (OAuth con codice, `access_type=offline`);
   `collega` → scambia il codice, conserva il refresh token in `google_tokens/{uid}`; `token` → permesso di un'ora
@@ -226,7 +238,8 @@ il segreto GOOGLE_OAUTH_CLIENT.
   con istruzioni, il server legge il testo dei documenti collegati con il permesso dell'utente (`tokenServer` in
   account.js, `functions/src/google/drive.js`: Documenti, Fogli e Presentazioni esportati come testo, file di testo
   così come sono, fino a 6 documenti, 6000 caratteri l'uno e 20000 in tutto) e li dà all'agente come contesto della
-  nota; PDF e altri formati si elencano solo per nome. Nel manuale i documenti servono a ritrovare contratti e
+  nota; i PDF (dal 14/11, fino a 10 MB) li trascrive Claude Haiku una volta per versione del file (`drive_testi`), gli altri
+  formati si elencano solo per nome. Nel manuale i documenti servono a ritrovare contratti e
   garanzie con un tocco. Una ricerca libera dell'agente su tutto il Drive non c'è: su un Drive intero la rilevanza per
   parole chiave è troppo rumorosa per finire nel prompt senza una scelta dell'utente.
 
@@ -234,9 +247,24 @@ il segreto GOOGLE_OAUTH_CLIENT.
 
 - **Note vocali** del diario (27/10): il telefono registra (components/registratore.js), la function `trascrivi` manda l'audio
   a Gemini con il vocabolario del progetto e della rubrica (src/trascrizione.js) e restituisce il testo, che entra nel campo
-  della nota; poi tutto come una nota scritta. Claude non accetta audio. L'audio non viene salvato.
+  della nota; poi tutto come una nota scritta. Claude non accetta audio. Sul server l'audio non viene salvato.
+  **A pezzi, dal 14/11** (Mattia: «non vedo quello che sto trascrivendo» e «se blocco lo schermo non registra»): il registratore
+  ascolta il livello della voce (AudioContext) e taglia nelle pause (al primo silenzio di 0,6 s dopo 6 s, al più tardi a 30 s
+  appena la voce cala, comunque a 45 s; in secondo piano solo a tempo), con il registratore del pezzo nuovo avviato prima di
+  fermare il vecchio. Ogni pezzo va a `trascrivi` subito, in ordine, con la fine del testo già trascritto (`prima`), e il testo
+  entra nel campo a ogni pausa; una pausa lunga (oltre 2,2 s) va a capo. Audio (un blob al secondo) e testo stanno nell'archivio
+  del telefono (IndexedDB, core/archivio.js) finché la nota non è salvata: un pezzo la cui risposta si perde si riprova da solo
+  (subito al ritorno nell'app o in rete); se l'app si chiude o il foglio si chiude senza salvare, il Diario mostra in cima
+  «Nota vocale da salvare» e riapre la nota col testo, trascrivendo il resto. Se il telefono smette di dare audio (traccia
+  muta: schermo spento, chiamata) lo si dice al ritorno. Non parola per parola: il riconoscimento del telefono (Web Speech)
+  su Android si contende il microfono con la registrazione, e Gemini sul pezzo intero scrive meglio nomi e termini.
 - **Notifiche push** (FCM): fatte (vedi «Notifiche»).
-- **Web Share Target**: già dichiarato nel manifest; il contenuto condiviso diventa una proposta di appunto.
+- **Condivisione verso l'app** (manifest → `share_target`, dal 14/11 in POST con le immagini): `sw.js` riceve `/condividi`,
+  mette le immagini nella cache `dd-condivisi` e apre `/?share=1&text=…&foto=1`; il Diario apre una nota nuova con il testo e
+  le foto, e l'agente le legge (scontrini, biglietti da visita, screenshot). Solo immagini: un PDF condiviso non passa.
+- **Scorciatoie dell'icona** (manifest → `shortcuts`, 14/11): tenendo premuta l'icona, «Nota vocale» (`#/diario/vocale`, registra
+  subito), «Lista» (`#/lista/nuova`), «Scansiona» (`#/lista/scansiona`), «Chiedi» (`#/chiedi/nuova`). Icone 96 px in `icons/`,
+  disegnate dalle icone a linea dell'app su fondo inchiostro. Android le aggiorna con il WebAPK (vedi Stato in CLAUDE.md).
 
 ## Ordine di sviluppo
 

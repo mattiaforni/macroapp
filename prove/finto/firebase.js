@@ -13,6 +13,15 @@ try {
 } catch (e) { console.warn("stub: dati non ripresi", e); }
 
 function coll(name) { if (!store.has(name)) store.set(name, new Map()); return store.get(name); }
+// Consumi dell'AI come li scrive il server (functions/src/consumi.js): consumi/{uid}_{AAAAMM}.
+function consumoFinto(voce, usd) {
+  const d = new Date(), id = `${UID}_${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
+  const c = coll("consumi").get(id) || { ownerUid: UID, mese: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`, voci: {} };
+  const servizio = voce === "trascrizione" ? "gemini" : "claude";
+  c[servizio] = { usd: (c[servizio]?.usd || 0) + usd, chiamate: (c[servizio]?.chiamate || 0) + 1 };
+  c.voci[voce] = { usd: (c.voci[voce]?.usd || 0) + usd, chiamate: (c.voci[voce]?.chiamate || 0) + 1 };
+  coll("consumi").set(id, c);
+}
 window.__finto = { coll, notify: () => notify() }; // per le prove: guardare dentro una collezione (e scriverci, poi notify)
 function notify() {
   try { sessionStorage.setItem(PERSIST, JSON.stringify({ seq, store: [...store].map(([c, m]) => [c, [...m]]) })); } catch (e) {}
@@ -194,12 +203,58 @@ export function httpsCallable(_f, name) {
   if (name === "prodotto") return prodottoFinto;
   if (name === "contribuisci") return contribuisciFinto;
   // Trascrizione finta: segna cosa ha ricevuto (formato, dimensione, progetto) per le asserzioni della prova.
+  // Dal 14/11 a pezzi: il primo pezzo dà la frase della lezione, i successivi un seguito numerato. Per le prove:
+  // `finto.trascrivi.cade` = quante chiamate perdono la risposta (telefono bloccato, rete), poi riescono;
+  // `finto.trascrivi.ritardo` (ms).
   if (name === "trascrivi") return async (data) => {
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((r) => setTimeout(r, Number(sessionStorage.getItem("finto.trascrivi.ritardo") || 300)));
+    const cade = Number(sessionStorage.getItem("finto.trascrivi.cade") || 0);
+    if (cade > 0) {
+      sessionStorage.setItem("finto.trascrivi.cade", String(cade - 1));
+      const e = new Error("internal"); e.code = "functions/internal"; throw e;
+    }
     const viste = JSON.parse(sessionStorage.getItem("finto.trascrizioni") || "[]");
-    viste.push({ mimeType: data.mimeType, kb: Math.round((data.audio || "").length * 0.75 / 1024), projectId: data.projectId || null });
+    viste.push({ mimeType: data.mimeType, kb: Math.round((data.audio || "").length * 0.75 / 1024), projectId: data.projectId || null, prima: data.prima || "", pezzo: data.pezzo ?? null });
     sessionStorage.setItem("finto.trascrizioni", JSON.stringify(viste));
+    consumoFinto("trascrizione", 0.0004); notify();
+    if (data.pezzo) return { data: { testo: `poi il pezzo ${data.pezzo} della dettatura.` } };
     return { data: { testo: "Lezione di oggi con Marco: rovescio a due mani e split step prima della risposta al servizio." } };
+  };
+  // Chiedi (14/11), come il server (functions/src/chiedi.js): «in corso» con i passi sul documento, poi la risposta con le
+  // fonti (la prima nota del diario e la prima spesa che trova). `finto.chiedi.persa` = "1": la risposta si perde (telefono
+  // bloccato) ma il documento si completa lo stesso; `finto.chiedi.ritardo` (ms).
+  if (name === "chiedi") return async (data) => {
+    const D = coll("domande");
+    const d = D.get(data.id);
+    if (!d || d.ownerUid !== UID) { const e = new Error("Domanda non trovata"); e.code = "functions/not-found"; throw e; }
+    if (d.stato === "in_corso") return { data: { giaInCorso: true } };
+    Object.assign(d, { stato: "in_corso", inizio: new Date(), passi: [] }); notify();
+    const ritardo = Number(sessionStorage.getItem("finto.chiedi.ritardo") || 400);
+    const persa = sessionStorage.getItem("finto.chiedi.persa") === "1";
+    sessionStorage.removeItem("finto.chiedi.persa");
+    const lavoro = (async () => {
+      await new Promise((r) => setTimeout(r, ritardo / 2));
+      d.passi = ["Cerco nelle note: «lezione»"]; notify();
+      await new Promise((r) => setTimeout(r, ritardo / 2));
+      d.passi = [...d.passi, "Guardo le spese dal 2026-11-01 al 2026-11-30"]; notify();
+      await new Promise((r) => setTimeout(r, ritardo / 2));
+      const nota = [...coll("journal_entries").entries()].find(([, n]) => /lezione/i.test(n.text || ""));
+      const spesa = [...coll("expenses").entries()].find(([, x]) => x.type !== "settlement");
+      const fonti = [
+        nota && { tipo: "nota", id: nota[0], titolo: nota[1].titolo || "Lezione", sotto: "nota", codice: "n1" },
+        spesa && { tipo: "spesa", id: spesa[0], titolo: spesa[1].description, sotto: "spesa", codice: "s1" },
+      ].filter(Boolean);
+      const n = d.turni.length;
+      const risposta = n === 1
+        ? "Nell'ultima lezione avete lavorato su **rovescio a due mani** e split step.\n\n- Piedi più larghi sul rovescio\n- Split step prima della risposta al servizio"
+        : `Seguito ${n}: sì, la correzione sulla spalla torna anche lì.`;
+      d.turni = [...d.turni.slice(0, -1), { ...d.turni[n - 1], risposta, fonti, modello: "sonnet", at: new Date() }];
+      d.stato = "fatta"; notify();
+      consumoFinto(d.tipo === "settimana" ? "settimana" : "chiedi", 0.03); notify();
+      return { data: { fatta: true } };
+    })();
+    if (persa) { lavoro.catch(() => {}); const e = new Error("internal"); e.code = "functions/internal"; throw e; }
+    return lavoro;
   };
   const esegui = async (data) => {
     if (name === "google") return { data: google(data) };
@@ -212,6 +267,7 @@ export function httpsCallable(_f, name) {
     // Nota di un progetto con istruzioni: riepilogo nella nota, un'azione e la sintesi del progetto proposta.
     const nota = coll("journal_entries").get(data.entryId);
     const progetto = nota?.projectId ? coll("projects").get(nota.projectId) : null;
+    consumoFinto(progetto?.istruzioni ? "progetti" : "note", progetto?.istruzioni ? 0.042 : 0.006);
     // Titolo e persone, per tutte le note, come il server (agent.js): non se l'utente li ha scritti a mano.
     // Persone: le voci della rubrica il cui nome proprio è nel testo, e i contatti Google finti (non in rubrica).
     if (nota) {
@@ -242,6 +298,16 @@ export function httpsCallable(_f, name) {
         payload: { projectId: nota.projectId, projectName: progetto.name, prima: !progetto.sintesi, sintesi } });
       notify();
       return { data: { proposals: cambia ? 2 : 1, riepilogo: true, sintesi: cambia, sintesiEsito: nota.sintesiEsito, modello: scelti.progetti || "opus" } };
+    }
+    // «Fatto: …» (14/11): come il server con i task aperti, propone di segnare fatto il primo task aperto che la nota nomina.
+    if (/^fatto:/i.test(nota?.text || "")) {
+      for (const [id, p] of [...P]) if (p.sourceEntryId === data.entryId && p.status === "pending") P.delete(id);
+      const parole = String(nota.text).toLowerCase().split(/\W+/).filter((w) => w.length > 4);
+      const task = [...coll("tasks").entries()].find(([, t]) => !t.done && parole.some((w) => String(t.text).toLowerCase().includes(w)));
+      if (task) P.set("p" + (++seq), { ...base, visibility: task[1].visibility || "private", kind: "task_done", summary: `Segna fatto: ${task[1].text}`,
+        payload: { taskId: task[0], text: task[1].text, prima: task[1].due || "" } });
+      notify();
+      return { data: { proposals: task ? 1 : 0, modello: scelti.note || "sonnet" } };
     }
     // Le quattro azioni solo dalla nota dell'assemblea; le altre note (riflessioni, prove) non ne hanno.
     if (!/assemblea/i.test(nota?.text || "")) {

@@ -11,6 +11,7 @@ import { VERSION } from "../version.js";
 
 const GRUPPI = [
   ["Casa", [
+    { icona: "domanda", testo: "Chiedi", vai: ["chiedi"], nota: "domande all'AI sulle tue cose" },
     { icona: "calendario", testo: "Calendario", vai: ["calendario"] },
     { icona: "manuale", testo: "Manuale e rubrica", vai: ["manuale"] },
     { icona: "ripeti", testo: "Spese ricorrenti", vai: ["spese", "ricorrenti"] },

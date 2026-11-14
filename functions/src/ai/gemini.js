@@ -11,13 +11,17 @@ function perGemini(x) {
   return out;
 }
 
+/** Blocchi di un messaggio nel formato di Claude (testo, immagini e PDF in base64) → parti di Gemini. */
+const parti = (user) => (typeof user === "string" ? [{ text: user }] : user.map((b) => (b.type === "text" ? { text: b.text }
+  : b.source?.type === "base64" ? { inlineData: { mimeType: b.source.media_type, data: b.source.data } } : { text: "" })));
+
 export async function reason({ system, user, schema, key }) {
   const res = await fetch(base(key, "generateContent"), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: system }] },
-      contents: [{ role: "user", parts: [{ text: user }] }],
+      contents: [{ role: "user", parts: parti(user) }],
       generationConfig: { responseMimeType: "application/json", responseSchema: perGemini(schema) },
     }),
   });
@@ -39,13 +43,21 @@ export const MODELLO_TRASCRIZIONE = "gemini-3.8-flash";
 const ATTESA_TRASCRIZIONE = 100_000; // ms: sotto il tempo massimo della funzione (120 s)
 
 /** Il prompt della trascrizione, con il vocabolario della persona e del progetto (src/trascrizione.js). */
-export function promptTrascrizione(contesto = {}) {
+export function promptTrascrizione(contesto = {}, { prima = "" } = {}) {
   const righe = [
     "Trascrivi questa nota vocale in italiano, parola per parola. Metti la punteggiatura e vai a capo quando",
     "cambia argomento. Non riassumere, non riordinare, non aggiungere e non togliere nulla: puoi togliere solo",
     "le esitazioni (ehm, mmm) e le parole ripetute per errore. Se un punto non si capisce, scrivi [incomprensibile].",
     "Restituisci solo il testo della trascrizione, senza commenti.",
   ];
+  // A pezzi (14/11): l'app taglia la registrazione nelle pause e manda ogni pezzo con la fine del testo già trascritto.
+  if (prima) {
+    righe.push("", "Questo audio è il seguito di una nota più lunga, tagliata in una pausa. La parte già trascritta finisce così:",
+      "<prima>", prima, "</prima>",
+      "Trascrivi solo il nuovo audio, senza ripetere quella parte: se comincia a metà frase, continua la frase (minuscola",
+      "e punteggiatura di conseguenza).");
+  }
+  righe.push("Se nell'audio non c'è nessuna parola, restituisci soltanto [silenzio].");
   const { progetto, istruzioni, temi = [], persone = [] } = contesto;
   if (progetto) {
     righe.push("", `La nota appartiene al progetto «${progetto}».`);
@@ -57,14 +69,14 @@ export function promptTrascrizione(contesto = {}) {
   return righe.join("\n");
 }
 
-export async function transcribe({ audioBase64, mimeType, key, contesto }) {
+export async function transcribe({ audioBase64, mimeType, key, contesto, prima = "" }) {
   const res = await fetch(base(key, "generateContent", MODELLO_TRASCRIZIONE), {
     method: "POST",
     signal: AbortSignal.timeout(ATTESA_TRASCRIZIONE),
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       contents: [{ role: "user", parts: [
-        { text: promptTrascrizione(contesto) },
+        { text: promptTrascrizione(contesto, { prima }) },
         { inlineData: { mimeType, data: audioBase64 } },
       ] }],
     }),

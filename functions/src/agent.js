@@ -4,6 +4,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { reason, MODELLI } from "./ai/provider.js";
 import { leggiDocumenti, sezioneDocumenti } from "./google/drive.js";
 import { contattiNominati, normalizza } from "./google/contatti.js";
+import { registra as registraConsumo } from "./consumi.js";
 
 /**
  * Modello per la nota: users/{uid}.modelli = { note, progetti } (pagina «Modelli AI» dell'app).
@@ -40,7 +41,7 @@ dei punti sotto una rubrica, una riga breve a sé che finisce con ":" (es. "Acqu
 "- ". Ciò che va ricordato sta nel riepilogo e nella sintesi: le azioni restano per le cose da fare, comprare,
 spendere o scrivere.
 
-Il riepilogo riporta SOLO ciò che dice il testo della nota. La sintesi, le note precedenti e i documenti
+Il riepilogo riporta SOLO ciò che dice la nota (il testo e, se ci sono, le sue foto). La sintesi, le note precedenti e i documenti
 servono a capirla e a collegarla, non a completarla: un punto che non è nella nota non entra nel riepilogo,
 nemmeno se è plausibile o se torna da altre lezioni. Un collegamento con il passato si scrive come tale, con
 la data ("torna la correzione del 15 ottobre"), solo se la nota stessa lo tocca. Se la nota è breve, vaga o
@@ -120,7 +121,39 @@ Oltre alle azioni, per ogni nota:
   nome ("il maestro", "gli adolescenti"), né gruppi, enti o luoghi. Lista vuota se non ne nomina.`;
 }
 
-export function system({ oggi, io = "", altro, progetti, persone, categorie, contattiGoogle = [], titoloUtente = "", progetto = null, dataNota = "" }) {
+/**
+ * Ciò che c'è già nell'app (14/11, dall'analisi di Mattia: l'agente proponeva doppioni e non poteva dire «questo task è
+ * fatto»): task aperti con un codice ([t1]…), la lista della spesa, gli eventi delle prossime settimane. I codici si
+ * traducono negli id veri sul server (`esistenti` → `rif`): il modello non vede né inventa id.
+ */
+export function sezioneEsistenti(es) {
+  if (!es || (!es.task.length && !es.lista.length && !es.eventi.length)) return "";
+  const righe = [`
+Ciò che c'è già nell'app, per non proporre doppioni e per riconoscere ciò che la nota chiude o sposta:`];
+  if (es.task.length) righe.push(`<task_aperti>
+${es.task.map((t) => `[${t.ref}] ${t.text}${t.due ? ` · scadenza ${t.due}` : ""}${t.progetto ? ` · progetto ${t.progetto}` : ""}`).join("\n")}
+</task_aperti>`);
+  if (es.lista.length) righe.push(`<lista_della_spesa>${es.lista.join(", ")}</lista_della_spesa>`);
+  if (es.eventi.length) righe.push(`<calendario>
+${es.eventi.join("\n")}
+</calendario>`);
+  righe.push(`Non proporre un task, una voce della lista o un evento che c'è già, anche se la nota lo dice con altre parole.
+Se la nota dice che uno dei task aperti è fatto ("ho chiamato l'idraulico"), proponi task_done; se ne sposta la
+scadenza, task_due. In payload.ref scrivi il codice del task così com'è tra le parentesi quadre (es. "t3"), mai altro.`);
+  return righe.join("\n");
+}
+
+/** Le foto della nota, allegate al messaggio prima del testo. */
+function sezioneFoto(n) {
+  if (!n) return "";
+  return `
+La nota ha ${n === 1 ? "una foto" : `${n} foto`}, allegate prima del testo: sono parte della nota. Leggile come tali:
+uno scontrino è una spesa (importo totale e negozio, da dividere solo se la nota non dice altro), un biglietto da
+visita una persona o un negozio con i recapiti, un invito o una locandina un evento con giorno e ora, una lavagna o
+degli appunti un contenuto della nota. Se la nota non ha testo, contano solo le foto.`;
+}
+
+export function system({ oggi, io = "", altro, progetti, persone, categorie, contattiGoogle = [], titoloUtente = "", progetto = null, dataNota = "", esistenti = null, foto = 0 }) {
   return `Sei l'assistente di un'app personale e di coppia (lista della spesa, spese condivise, task per progetti,
 manuale di casa, calendario della casa, appunti). Ricevi una nota scritta o dettata dall'utente: può contenere errori di dettatura
 e poca punteggiatura. Estrai SOLO le azioni concrete che la nota contiene o chiede, senza inventarne.
@@ -149,6 +182,10 @@ Tipi di azione:
   payload.time (HH:MM di inizio se la nota la dice, altrimenti vuoto = tutto il giorno), payload.place
   (luogo se indicato). Un impegno con un orario è un event, non un task; una cosa da fare "entro" un
   giorno è un task.
+- task_done: uno dei task aperti elencati sotto, che la nota dice fatto. payload.ref (il suo codice, es. "t3").
+  summary: "Segna fatto: " e il task.
+- task_due: uno dei task aperti elencati sotto, di cui la nota cambia la scadenza. payload.ref, payload.due (la nuova
+  scadenza, AAAA-MM-GG). summary: il task e la nuova data.
 - draft: SOLO se la nota chiede di scrivere, rispondere, mandare o preparare un messaggio, una mail o un testo
   per qualcuno. Scrivi il testo pronto da inviare, in italiano, nel registro adatto al destinatario,
   firmato "Mattia" se serve una firma. payload.channel ("email", "messaggio" o "documento"),
@@ -164,12 +201,14 @@ Per ogni azione:
 Un'informazione da conservare non è un'azione: se riguarda la casa può essere una manual_entry "info",
 se riguarda un progetto con istruzioni va nel riepilogo e nella sintesi, altrimenti resta nella nota.
 Se la nota è una riflessione senza azioni, restituisci una lista vuota di azioni.
+${sezioneEsistenti(esistenti)}
+${sezioneFoto(foto)}
 ${sezioneNota({ titoloUtente })}
 ${sezioneProgetto(progetto, altro)}`;
 }
 
 const PAYLOAD = ["text", "due", "time", "place", "project", "people", "description", "amount", "name", "category", "notes",
-  "type", "phone", "email", "channel", "to", "subject", "body"];
+  "type", "phone", "email", "channel", "to", "subject", "body", "ref"];
 
 export const SCHEMA = {
   type: "object",
@@ -181,7 +220,7 @@ export const SCHEMA = {
       items: {
         type: "object",
         properties: {
-          kind: { type: "string", enum: ["task", "shopping_item", "expense", "manual_entry", "event", "draft"] },
+          kind: { type: "string", enum: ["task", "shopping_item", "expense", "manual_entry", "event", "draft", "task_done", "task_due"] },
           shared: { type: "boolean" },
           summary: { type: "string" },
           payload: {
@@ -205,6 +244,7 @@ export const SCHEMA = {
               to: { type: "string" },
               subject: { type: "string" },
               body: { type: "string" },
+              ref: { type: "string" },
             },
             // Tutti obbligatori: con i campi facoltativi la grammatica dell'output strutturato
             // diventa troppo complessa («Schema is too complex» dopo decine di secondi).
@@ -252,6 +292,8 @@ function pulisci(kind, p = {}) {
       type: ["shop", "person", "info"].includes(p.type) ? p.type : "shop", phone: s(p.phone), email: s(p.email),
     };
     case "draft": return { channel: ["email", "messaggio", "documento"].includes(p.channel) ? p.channel : "messaggio", to: s(p.to), subject: s(p.subject), body: s(p.body) };
+    case "task_done": return { ref: s(p.ref).replace(/[[\]]/g, "") };
+    case "task_due": return { ref: s(p.ref).replace(/[[\]]/g, ""), due: /^\d{4}-\d{2}-\d{2}$/.test(s(p.due)) ? s(p.due) : "" };
     default: return { text: s(p.text) || s(p.notes) };
   }
 }
@@ -271,7 +313,11 @@ async function contesto(db, entry, uid) {
       .where("type", "==", "person").select("name", "googleId").get() : null,
   ]);
   const nomi = new Set();
-  for (const d of [...mie.docs, ...(casa?.docs || [])]) if (!d.data().archived) nomi.add(d.data().name);
+  const nomiProgetti = new Map();
+  for (const d of [...mie.docs, ...(casa?.docs || [])]) {
+    nomiProgetti.set(d.id, d.data().name || "");
+    if (!d.data().archived) nomi.add(d.data().name);
+  }
   // Voci della rubrica con l'id: le persone nominate nella nota vi si collegano (`journal_entries.persone`).
   const voci = new Map();
   for (const d of [...mieVoci.docs, ...(vociCasa?.docs || [])]) {
@@ -287,8 +333,69 @@ async function contesto(db, entry, uid) {
   const iso = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Rome" }).format(new Date());
   return {
     oggi: `${oggi} (${iso})`, io: nomiCasa[uid] || "", altro: altro.split(" ")[0], progetti: [...nomi],
-    persone: persone.slice(0, 300), vociPersone, categorie,
+    persone: persone.slice(0, 300), vociPersone, categorie, nomiProgetti, casa: casaDati,
   };
+}
+
+const MAX_TASK = 60;          // task aperti dati all'agente (prima quelli con la scadenza più vicina)
+const MAX_LISTA = 80;         // voci da comprare
+const GIORNI_EVENTI = 21;     // eventi del calendario dei prossimi giorni
+const MAX_EVENTI = 40;
+
+/**
+ * Ciò che c'è già (14/11): task aperti tuoi e della casa, la lista della spesa, gli eventi dei calendari che vedi nei
+ * prossimi GIORNI_EVENTI giorni (con il permesso del calendario). Ritorna { task: [{ ref, id, text, due, progetto,
+ * visibility }], lista: [testi], eventi: [righe] }. Un pezzo che non si legge resta vuoto: l'analisi va avanti.
+ */
+export async function esistenti(db, uid, hid, { nomiProgetti = new Map(), casa = {}, tokenGoogle = null, passo = () => {} } = {}) {
+  const vuoto = { docs: [] };
+  const leggi = (q) => q.get().catch((e) => { passo(`esistenti: ${e.message}`); return vuoto; });
+  const [miei, dellaCasa, lista, utente] = await Promise.all([
+    leggi(db.collection("tasks").where("ownerUid", "==", uid).where("done", "==", false).limit(200)),
+    hid ? leggi(db.collection("tasks").where("householdId", "==", hid).where("visibility", "==", "shared").where("done", "==", false).limit(200)) : vuoto,
+    hid ? leggi(db.collection("shopping_items").where("householdId", "==", hid).where("visibility", "==", "shared").where("done", "==", false).limit(200)) : vuoto,
+    db.collection("users").doc(uid).get().then((d) => d.data() || {}, () => ({})),
+  ]);
+  const visti = new Map();
+  for (const d of [...miei.docs, ...dellaCasa.docs]) if (!visti.has(d.id)) visti.set(d.id, { id: d.id, ...d.data() });
+  const task = [...visti.values()].filter((t) => s(t.text))
+    .sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999"))
+    .slice(0, MAX_TASK)
+    .map((t, i) => ({ ref: `t${i + 1}`, id: t.id, text: s(t.text).slice(0, 140), due: t.due || "", progetto: nomiProgetti.get(t.projectId) || "", visibility: t.visibility || "private" }));
+  const voci = [...new Set(lista.docs.map((d) => s(d.data().text)).filter(Boolean))].slice(0, MAX_LISTA);
+  let eventi = [];
+  if (tokenGoogle) {
+    try {
+      const t = await tokenGoogle();
+      if (t.permessi?.calendario && t.accessToken) {
+        const { eventiTra, calendariDi } = await import("./avvisi-calendario.js");
+        const { oraRoma } = await import("./avvisi.js");
+        const ora = new Date();
+        const fino = new Date(ora.getTime() + GIORNI_EVENTI * 86400e3);
+        const lista = await eventiTra(t.accessToken, calendariDi(casa, utente), ora, fino);
+        eventi = lista.slice(0, MAX_EVENTI).map((e) => `${e.giornoInizio}${e.tuttoIlGiorno ? "" : ` ${oraRoma(e.inizio).ora}`} ${e.titolo}${e.luogo ? ` (${e.luogo})` : ""}${e.casa ? "" : ` · calendario ${e.calNome}`}`);
+      }
+    } catch (e) {
+      passo(`eventi non letti: ${e.details?.motivo || e.message}`);
+    }
+  }
+  return { task, lista: voci, eventi };
+}
+
+/** Le foto della nota (journal_photos, al più MAX_FOTO) come blocchi immagine per Claude. */
+const MAX_FOTO = 4;
+async function fotoDellaNota(db, entry, passo) {
+  const ids = (Array.isArray(entry.foto) ? entry.foto : []).map((f) => f?.id).filter(Boolean).slice(0, MAX_FOTO);
+  if (!ids.length) return [];
+  const docs = await Promise.all(ids.map((id) => db.collection("journal_photos").doc(id).get().catch(() => null)));
+  const blocchi = [];
+  for (const d of docs) {
+    const f = d?.exists ? d.data() : null;
+    if (!f?.dati || f.entryId !== entry.id) continue;
+    blocchi.push({ type: "image", source: { type: "base64", media_type: f.mime || "image/jpeg", data: f.dati } });
+  }
+  if (blocchi.length < ids.length) passo(`foto: ${blocchi.length} di ${ids.length} lette`);
+  return blocchi;
 }
 
 /**
@@ -357,7 +464,7 @@ const fmtData = (t) => new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome
  * Le query usano gli indici ownerUid + projectId + createdAt e householdId + visibility + projectId + createdAt; se
  * mancano (appena pubblicati) si va avanti senza.
  */
-export async function progettoDellaNota(db, entry, uid, passo, tokenGoogle) {
+export async function progettoDellaNota(db, entry, uid, passo, tokenGoogle, { leggiPdf = null } = {}) {
   if (!entry.projectId) return null;
   const snap = await db.collection("projects").doc(entry.projectId).get();
   if (!snap.exists) return null;
@@ -418,13 +525,14 @@ export async function progettoDellaNota(db, entry, uid, passo, tokenGoogle) {
     } catch (err) {
       passo(`documenti: permesso Google non ottenuto (${err.details?.motivo || err.message})`);
     }
-    documenti = await leggiDocumenti(token, p.documenti, passo);
+    documenti = await leggiDocumenti(token, p.documenti, passo, { pdf: leggiPdf ? { db, uid, leggi: leggiPdf } : null });
   }
   return { id: snap.id, name: p.name || "senza nome", istruzioni, sintesi, precedenti, seguenti, dopo, documenti };
 }
 
-/** Spese e lista riguardano sempre la casa; le bozze sono sempre solo tue. */
-function visibilita(a) {
+/** Spese e lista riguardano sempre la casa; le bozze sono sempre solo tue; un task chiuso o spostato come il task. */
+function visibilita(a, task = null) {
+  if (task) return task.visibility === "shared" ? "shared" : "private";
   if (a.kind === "expense" || a.kind === "shopping_item" || a.kind === "event") return "shared";
   if (a.kind === "draft") return "private";
   if (a.kind === "manual_entry" && a.payload?.type === "person") return "private";
@@ -446,27 +554,46 @@ export async function analyzeJournalEntry(db, entry, { uid, keys, provider, clie
   const tokenGoogle = () => (permesso ||= import("./google/account.js").then(({ tokenServer }) => tokenServer(db, uid, clientGoogle)));
   // Titolo e persone scritti a mano dall'utente nel foglio della nota: l'agente non li cambia.
   const titoloUtente = entry.titoloAMano ? s(entry.titolo) : "";
-  const [ctx, progetto, profilo, contattiTutti] = await Promise.all([
-    contesto(db, entry, uid), progettoDellaNota(db, entry, uid, passo, tokenGoogle),
+  // PDF di Drive collegati al progetto (14/11): li legge Haiku una volta per versione del file (src/google/drive.js).
+  const leggiPdf = (dati, nome) => reason({
+    system: "Trascrivi il testo dei documenti che ricevi, così com'è, in testo semplice.",
+    user: [{ type: "document", source: { type: "base64", media_type: "application/pdf", data: dati } },
+      { type: "text", text: `Trascrivi il testo del PDF «${nome}»: titoli, paragrafi ed elenchi nell'ordine; le tabelle come righe di testo con i valori separati da « | ». Niente commenti né riassunti. Al più 30.000 caratteri: se è più lungo, fermati lì.` }],
+    schema: { type: "object", properties: { testo: { type: "string" } }, required: ["testo"], additionalProperties: false },
+    keys, provider, maxTokens: 24000, model: "haiku",
+    onUso: (uso, id) => registraConsumo(db, uid, "pdf", { modello: id, uso }),
+  }).then((o) => o.testo);
+  const [ctx, progetto, profilo, contattiTutti, foto] = await Promise.all([
+    contesto(db, entry, uid), progettoDellaNota(db, entry, uid, passo, tokenGoogle, { leggiPdf }),
     db.collection("users").doc(uid).get().then((d) => (d.exists ? d.data() : {}), () => ({})),
     entry.personeAMano ? [] : contattiNominati(tokenGoogle, `${titoloUtente} ${entry.text || ""}`, { passo }),
+    fotoDellaNota(db, entry, passo),
   ]);
+  const gia = await esistenti(db, uid, profilo.householdId || entry.householdId || null, { nomiProgetti: ctx.nomiProgetti, casa: ctx.casa, tokenGoogle, passo });
   // Ai contatti Google si tolgono l'utente e chi è già in rubrica (stesso contatto o stesso nome).
   const inRubrica = new Set(ctx.vociPersone.flatMap((v) => [v.googleId, normalizza(v.name)]).filter(Boolean));
   const contatti = contattiTutti.filter((c) => !inRubrica.has(c.googleId) && !inRubrica.has(normalizza(c.nome))
     && normalizza(c.nome) !== normalizza(ctx.io));
   const conRiepilogo = !!progetto?.istruzioni;
   const modello = modelloPer(profilo, conRiepilogo);
-  passo(`contesto pronto (${ctx.progetti.length} progetti, ${ctx.persone.length} persone, ${contatti.length} contatti Google possibili`
+  passo(`contesto pronto (${ctx.progetti.length} progetti, ${ctx.persone.length} persone, ${contatti.length} contatti Google possibili, ${gia.task.length} task aperti, ${gia.lista.length} voci in lista, ${gia.eventi.length} eventi${foto.length ? `, ${foto.length} foto` : ""}`
     + (progetto ? `, progetto con ${progetto.precedenti.length} note precedenti${progetto.dopo ? ` e ${progetto.dopo} successive` : ""}${progetto.documenti.filter((d) => d.testo).length ? `, ${progetto.documenti.filter((d) => d.testo).length} documenti letti` : ""}${conRiepilogo ? ", riepilogo" : ""}` : "") + `), modello ${modello}`);
   // Tetti larghi: il ragionamento del modello conta nel tetto (vedi ai/claude.js), si paga solo l'usato.
+  // Le foto prima del testo (Claude legge meglio così); una nota di sole foto ha un testo che lo dice.
+  const testo = s(entry.text) || "(La nota non ha testo: solo le foto.)";
+  let uso = null, idModello = MODELLI[modello];
   const out = await reason({
-    system: system({ ...ctx, contattiGoogle: contatti.map((c) => c.nome), titoloUtente, progetto, dataNota: dataNota(entry.createdAt) }),
-    user: entry.text, schema: schema(conRiepilogo), keys, provider,
+    system: system({ ...ctx, contattiGoogle: contatti.map((c) => c.nome), titoloUtente, progetto, dataNota: dataNota(entry.createdAt), esistenti: gia, foto: foto.length }),
+    user: foto.length ? [...foto, { type: "text", text: testo }] : testo, schema: schema(conRiepilogo), keys, provider,
     maxTokens: conRiepilogo ? 32000 : 8000, model: modello,
+    onUso: (u, id) => { uso = u; idModello = id || idModello; },
   });
-  passo(`risposta dell'AI (${Array.isArray(out.actions) ? out.actions.length : 0} azioni)`);
-  const actions = (Array.isArray(out.actions) ? out.actions : []).filter((a) => SCHEMA.properties.actions.items.properties.kind.enum.includes(a.kind));
+  const { usd } = await registraConsumo(db, uid, conRiepilogo ? "progetti" : "note", { modello: idModello, uso });
+  passo(`risposta dell'AI (${Array.isArray(out.actions) ? out.actions.length : 0} azioni, ${usd.toFixed(4)} $)`);
+  const perRef = new Map(gia.task.map((t) => [t.ref, t]));
+  const actions = (Array.isArray(out.actions) ? out.actions : []).filter((a) => SCHEMA.properties.actions.items.properties.kind.enum.includes(a.kind))
+    // Un task chiuso o spostato deve essere uno di quelli elencati (e, se spostato, con una data).
+    .filter((a) => !["task_done", "task_due"].includes(a.kind) || (perRef.has(pulisci(a.kind, a.payload).ref) && (a.kind === "task_done" || pulisci(a.kind, a.payload).due)));
   const riepilogo = conRiepilogo ? s(out.riepilogo) : "";
   const titolo = entry.titoloAMano ? "" : s(out.titolo).replace(/^["«“]+|["»”]+$/g, "").trim().slice(0, 80);
   const persone = entry.personeAMano ? null : collegaPersone(out.persone, { voci: ctx.vociPersone, contatti, io: ctx.io });
@@ -494,15 +621,20 @@ export async function analyzeJournalEntry(db, entry, { uid, keys, provider, clie
   sintesiInAttesa.docs.filter((d) => d.data().payload?.projectId === progetto?.id).forEach((d) => batch.delete(d.ref));
   for (const a of actions) {
     const ref = db.collection("proposals").doc();
+    const p = pulisci(a.kind, a.payload);
+    // Task chiuso o spostato: il codice diventa l'id vero, con il testo e la scadenza di adesso per la riga.
+    const task = p.ref ? perRef.get(p.ref) : null;
+    const payload = task ? { taskId: task.id, text: task.text, prima: task.due || "", ...(a.kind === "task_due" ? { due: p.due } : {}) }
+      // Un evento da una nota di un progetto è di quel progetto (7/11): l'app lo scrive nell'evento su Google.
+      : { ...p, ...(a.kind === "event" && progetto?.id ? { projectId: progetto.id } : {}) };
     batch.set(ref, {
       ownerUid: uid,
       householdId: entry.householdId || null,
-      visibility: visibilita(a),
+      visibility: visibilita(a, task),
       kind: a.kind,
       source: "agent",
       status: "pending",
-      // Un evento da una nota di un progetto è di quel progetto (7/11): l'app lo scrive nell'evento su Google.
-      payload: { ...pulisci(a.kind, a.payload), ...(a.kind === "event" && progetto?.id ? { projectId: progetto.id } : {}) },
+      payload,
       summary: s(a.summary),
       sourceEntryId: entry.id,
       createdAt: FieldValue.serverTimestamp(),
@@ -534,5 +666,5 @@ export async function analyzeJournalEntry(db, entry, { uid, keys, provider, clie
   }
   await batch.commit();
   passo(`proposte scritte${riepilogo ? ", riepilogo scritto" : ""}${persone ? `, ${persone.length} persone (${persone.filter((p) => p.voceId || p.googleId).length} collegate)` : ""}${sintesiEsito ? `, sintesi ${sintesiEsito}` : ""}`);
-  return { azioni: actions.length + (nuovaSintesi ? 1 : 0), riepilogo: !!riepilogo, titolo: !!titolo, persone: persone?.length || 0, sintesi: !!nuovaSintesi, sintesiEsito, modello };
+  return { azioni: actions.length + (nuovaSintesi ? 1 : 0), riepilogo: !!riepilogo, titolo: !!titolo, persone: persone?.length || 0, sintesi: !!nuovaSintesi, sintesiEsito, modello, costo: usd };
 }

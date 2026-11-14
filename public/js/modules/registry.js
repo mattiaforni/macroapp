@@ -18,7 +18,8 @@ import * as calendario from "./calendario/index.js";
 import * as google from "./google/index.js";
 import * as scansioni from "./scansioni/index.js";
 import * as barra from "./barra/index.js";
+import * as chiedi from "./chiedi/index.js";
 
-export const modules = [diario, lista, spese, task, progetto, manuale, proposte, banca, notifiche, modelli, impostazioni, calendario, google, scansioni, barra];
+export const modules = [diario, lista, spese, task, progetto, manuale, proposte, banca, notifiche, modelli, impostazioni, calendario, google, scansioni, barra, chiedi];
 export const navModules = modules.filter((m) => m.nav);
 export const DEFAULT_ROUTE = "diario"; // se non c'è nessuna scelta (core/barra.js)

@@ -339,5 +339,11 @@ export function mount(container) {
     render();
     if (!rilettura) rilettura = setTimeout(() => aggiornaRiassunti(items, (it, r) => update(COLL, it.id, { prodotto: r })), 1200);
   });
+  // Scorciatoie dell'icona dell'app (14/11, manifest.json): #/lista/nuova apre «Mi serve», #/lista/scansiona la fotocamera.
+  const scorciatoia = location.hash.match(/^#\/lista\/(nuova|scansiona)/)?.[1];
+  if (scorciatoia) {
+    history.replaceState(history.state, "", "#/lista");
+    setTimeout(() => (scorciatoia === "nuova" ? apriMiServe(() => items) : scansionaInLista(() => items)), 0);
+  }
   return () => { stop(); clearTimeout(rilettura); piu.remove(); scansionaFab.remove(); lasciaDoppio(); };
 }

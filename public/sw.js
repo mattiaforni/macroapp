@@ -13,8 +13,27 @@ self.addEventListener("activate", (e) => {
   );
 });
 
+// Condivisione verso l'app (manifest.json → share_target, 14/11): testo e immagini arrivano qui in POST. Le immagini
+// vanno nella cache «dd-condivisi» (le prende il Diario e le toglie), il testo nell'indirizzo, poi si apre l'app.
+async function condivisione(req) {
+  const dati = await req.formData();
+  const testo = ["title", "text", "url"].map((k) => dati.get(k)).filter(Boolean).join("\n");
+  const foto = dati.getAll("foto").filter((f) => f && typeof f !== "string" && /^image\//.test(f.type || ""));
+  if (foto.length) {
+    const cache = await caches.open("dd-condivisi");
+    await Promise.all((await cache.keys()).map((k) => cache.delete(k)));
+    await Promise.all(foto.slice(0, 8).map((f, i) => cache.put(`/condivisi/${i}-${encodeURIComponent(f.name || "foto")}`, new Response(f, { headers: { "content-type": f.type } }))));
+  }
+  const q = new URLSearchParams({ share: "1", text: testo, ...(foto.length ? { foto: "1" } : {}) });
+  return Response.redirect(`/?${q}`, 303);
+}
+
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
+  if (e.request.method === "POST" && url.origin === location.origin && url.pathname === "/condividi") {
+    e.respondWith(condivisione(e.request).catch(() => Response.redirect("/?share=1", 303)));
+    return;
+  }
   if (e.request.method !== "GET" || url.origin !== location.origin) return;
   // Pagine riservate di Firebase (login, configurazione): sempre dalla rete, mai toccate dal service worker.
   if (url.pathname.startsWith("/__/")) return;

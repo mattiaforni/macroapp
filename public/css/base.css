@@ -255,6 +255,14 @@ a.pillola { text-decoration: none; }
 .registra__punto { width: 8px; height: 8px; border-radius: 50%; background: var(--frutto); flex: none; animation: registra-punto 1.2s ease-in-out infinite; }
 @keyframes registra-punto { 50% { opacity: .25; } }
 @media (prefers-reduced-motion: reduce) { .registra__punto { animation: none; } }
+/* Col livello della voce (14/11): il pallino è pieno quando parli e chiaro nelle pause, così si vede che ti sente. */
+.registra__punto[style*="--livello"] { animation: none; opacity: calc(.3 + .7 * var(--livello)); }
+/* Note vocali non salvate, in cima al Diario (components/registratore.js → sospese). */
+.vocali__riga { display: flex; gap: 12px; align-items: flex-start; padding: 12px 0; border-bottom: 1px solid var(--linea); }
+.vocali__apri { flex: 1; min-width: 0; text-align: left; background: none; border: 0; padding: 0; color: inherit; font: inherit; display: flex; gap: 12px; align-items: flex-start; }
+.vocali__apri svg { flex: none; width: 20px; height: 20px; margin-top: 1px; color: var(--frutto); }
+.vocali__titolo { font-weight: 500; }
+.vocali__anteprima { color: var(--inchiostro-2); font-size: 14px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-top: 2px; }
 
 .etichetta {
   display: inline-block; font-size: 10.5px; font-weight: 600; padding: 2px 7px; border-radius: 4px;
@@ -908,3 +916,29 @@ button.tessera__indice:active, .tessera .altro:active { background: rgba(255,255
 .nova li.on::before { background: var(--indice); border-color: var(--indice); color: #fff; font-weight: 600; }
 .nova__perche { font-size: 13px; color: var(--inchiostro-2); }
 .prodotto__nota { padding-left: 38px; }
+/* Valore a destra di una riga (consumi nella pagina Modelli AI). */
+.riga__valore { flex: none; font-variant-numeric: tabular-nums; color: var(--inchiostro-2); font-size: 14px; }
+/* Chiedi (14/11, modules/chiedi): la domanda in serif, la risposta come la sintesi, le fonti come righe, la ricerca in corso. */
+.domanda__turno { padding: 14px 0 6px; }
+.domanda__turno + .domanda__turno { border-top: 1px solid var(--linea); margin-top: 6px; }
+.domanda__testo { font-family: var(--display); font-weight: 400; font-size: 24px; line-height: 1.15; margin: 0 0 10px; }
+.domanda__risposta { margin-top: 4px; }
+.domanda__fonti { margin-top: 14px; }
+.domanda__modello { margin-top: 8px; }
+.fonte { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 0; background: none; border: 0; border-bottom: 1px solid var(--linea); color: inherit; font: inherit; text-align: left; }
+.fonte:last-child { border-bottom: none; }
+.fonte > svg { width: 18px; height: 18px; flex: none; color: var(--inchiostro-2); }
+.fonte > svg:last-child { width: 14px; height: 14px; color: var(--inchiostro-3); }
+.fonte__testo { flex: 1; min-width: 0; }
+.fonte__testo b { display: block; font-weight: 500; font-size: 15px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fonte__testo small { display: block; color: var(--inchiostro-2); font-size: 13px; }
+.domanda__attesa { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; }
+.domanda__attesa b { display: block; font-weight: 500; }
+.domanda__attesa small { display: block; color: var(--inchiostro-2); font-size: 13px; margin-top: 2px; }
+.domanda__attesa--errore { justify-content: space-between; align-items: center; }
+.domanda__attesa--errore b { color: var(--frutto); }
+.domanda__anello { width: 18px; height: 18px; flex: none; margin-top: 1px; border-radius: 50%; border: 1.5px solid var(--linea-forte); border-top-color: var(--accento); animation: gira .9s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .domanda__anello { animation: none; } }
+.domanda__segui { margin-top: 10px; }
+/* Il campo per continuare una domanda è una riga, che cresce col testo. */
+.domanda__segui textarea { min-height: 0; }

@@ -71,8 +71,8 @@ export function mount(container) {
     apriNota({
       progetti, projectId: progetto.id,
       onSalva: (dati, foto) => {
-        const { id: entryId, saved } = salvaNotaNuova(dati, foto, progetti);
-        if (analisiAutomatica()) analizza(entryId, saved);
+        const { id: entryId, pronta } = salvaNotaNuova(dati, foto, progetti);
+        if (analisiAutomatica()) analizza(entryId, pronta);
         if (vista !== "lezioni") scegli("lezioni");
       },
     });

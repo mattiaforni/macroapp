@@ -10,7 +10,7 @@ Campi comuni a tutte le collezioni di contenuto, compilati da `core/db.js`:
 | `createdAt`, `updatedAt` | timestamp | server |
 
 ## `users/{uid}`
-`displayName, email, photoURL, householdId, createdAt, google?: { collegato, scaduto, email, dal, permessi: { contatti, calendario, drive } }, dispositivi?: { <id>: { token, nome, aggiornato } }, notifiche?: { spese, task, lista, calendario, promemoria, riepilogo, diario, banca, anticipo, silenzio }, modelli?: { note, progetti }, calendari?: [{ id, nome, colore, modificabile }], barra?: [id]`
+`displayName, email, photoURL, householdId, createdAt, google?: { collegato, scaduto, email, dal, permessi: { contatti, calendario, drive } }, dispositivi?: { <id>: { token, nome, aggiornato } }, notifiche?: { spese, task, lista, calendario, promemoria, riepilogo, diario, banca, settimana, anticipo, silenzio }, modelli?: { note, progetti, domande }, calendari?: [{ id, nome, colore, modificabile }], barra?: [id]`
 `google` lo scrive la funzione `google`: dice all'app se l'account Google è collegato, con quale account e quali
 delle tre spunte (contatti, calendario, Drive) sono state date. Il vecchio campo `contattiGoogle` (collegamento ai
 soli contatti, prima del 27/10) vale come `google` con il solo permesso dei contatti finché non si ricollega.
@@ -18,7 +18,9 @@ soli contatti, prima del 27/10) vale come `google` con il solo permesso dei cont
 la funzione `avvisa` toglie quelli il cui token non vale più. `notifiche`: categorie per la persona, su tutti
 i suoi telefoni; `false` = spenta, assente = accesa. In più (1/11) `anticipo`: minuti di anticipo dei promemoria degli
 eventi (15, 30, 60, 120; assente = 60) e `silenzio`: `false` = suonano anche di notte (assente = senza suono 22:30–7:30). `modelli`: modello dell'AI per le note semplici e per quelle
-dei progetti con istruzioni (`haiku`, `sonnet`, `opus`; assente = Sonnet e Opus), letto da `analyzeEntry`.
+dei progetti con istruzioni (`haiku`, `sonnet`, `opus`; assente = Sonnet e Opus), letto da `analyzeEntry`; dal 14/11 anche
+`domande` (Chiedi e la revisione della settimana; assente = Sonnet). `notifiche.settimana`: `false` = niente revisione della
+domenica (e non la si scrive nemmeno).
 `barra` (3/11): le sezioni della barra in basso scelte dalla persona, in ordine, al più 5: id di una pagina
 (`diario`, `lista`, `spese`, `task`, `calendario`, `manuale`, `proposte`) o `progetto-<id del progetto>`; assente =
 Diario, Lista, Spese, Task. La prima è la pagina su cui si apre l'app. `calendari`: gli altri calendari di Google Calendar che la persona vede accanto a quello della casa (il personale, la
@@ -88,7 +90,8 @@ Convenzione del testo: una sezione «## Tema» per tema, prima riga facoltativa 
 per temi e si corregge dalla pagina del progetto (`modules/progetto`, `components/sintesi.js`).
 `documenti`: file di Google Drive collegati al progetto (`components/documenti.js`, dal foglio del progetto). Con le
 istruzioni, l'agente ne legge il testo come contesto quando analizza una nota (Documenti, Fogli e Presentazioni di Google
-esportati come testo, file di testo così come sono; PDF e altri formati solo per nome): `functions/src/google/drive.js`.
+esportati come testo, file di testo così come sono, PDF letti da Claude dal 14/11 (`drive_testi`); gli altri formati solo per
+nome): `functions/src/google/drive.js`.
 
 ## `expense_rules`
 `match: { description_contains }, set: { visibility, category, split, autoAccept }` — da definire con i dati reali.
@@ -123,6 +126,9 @@ analisi, se è `true`, il server manda una notifica a chi ha scritto la nota e t
 `foto` (4/11): le foto della nota, in ordine, con id in `journal_photos` e proporzioni (per disegnare i riquadri
 prima che le immagini arrivino); l'elenco del Diario non carica mai le immagini.
 
+Dal 14/11 l'agente legge anche le foto della nota (al più 4, come immagini per Claude) e una nota può essere di sole foto
+(`text` vuoto: uno scontrino, un biglietto da visita, un'immagine condivisa da un'altra app).
+
 ## `journal_photos`
 `entryId, ordine, mime ("image/jpeg"), w, h, dati (JPEG in base64, lato lungo ≤ 1600 px, ≤ 900 KB), mini (miniatura in base64, lato ≤ 240 px)`
 — con la visibilità della loro nota e le sue stesse regole (in una nota condivisa le foto possono averle aggiunte tutti e due:
@@ -136,12 +142,33 @@ parte): se diventano tante, la strada è Storage con gli stessi campi.
 confermati prima del 26/10, quando l'agente proponeva ancora il tipo `note`). Nessuna pagina li mostra.
 
 ## `proposals`
-`kind: "task"|"shopping_item"|"expense"|"manual_entry"|"event"|"draft"|"project_summary"|"note", source: "agent"|"bank"|"share", status: "pending"|"accepted"|"rejected"|"discarded", payload, summary, decidedBy, sourceEntryId`
+`kind: "task"|"shopping_item"|"expense"|"manual_entry"|"event"|"draft"|"project_summary"|"task_done"|"task_due"|"note", source: "agent"|"bank"|"share", status: "pending"|"accepted"|"rejected"|"discarded", payload, summary, decidedBy, sourceEntryId`
 Cosa fa la conferma, tipo per tipo: `APPLICA` in `public/js/components/proposals.js`. Le proposte dell'agente compaiono sotto la nota del diario da cui nascono; rianalizzare una nota sostituisce quelle ancora in attesa.
 `project_summary` (payload `projectId, projectName, sintesi, prima`): confermata scrive `projects.sintesi`; una nuova proposta di sintesi dello stesso progetto sostituisce quella in attesa. `note` non viene più proposto.
 `event` (payload `text, due "AAAA-MM-GG", time "HH:MM" o vuoto = tutto il giorno, place`): confermata crea l'evento nel
 calendario della casa su Google Calendar (serve Google collegato con il permesso del calendario e `households.calendario`
 scelto; altrimenti la conferma non passa e la proposta resta). Sempre `shared`.
+`task_done`, `task_due` (14/11; payload `taskId, text, prima` = la scadenza di adesso, e per `task_due` `due` = la nuova): un
+task aperto che la nota dice fatto, o di cui sposta la scadenza. L'agente vede i task aperti con un codice ([t3]) e il server lo
+traduce nell'id: il modello non scrive mai id. Confermata segna fatto il task o ne cambia `due`; visibilità come il task.
+
+## `domande` (14/11)
+`tipo: "domanda"|"settimana", turni: [{ domanda, risposta?, fonti?: [{ tipo: "nota"|"spesa"|"task"|"evento"|"voce"|"progetto", id, titolo, sotto, codice, calId? }], modello?, at }], stato: "nuova"|"in_corso"|"fatta"|"errore", inizio?, fine?, passi: [string], errore?`
+— sempre `private`, solo di chi le fa (regole: lettura, modifica ed eliminazione del proprietario; nessuno cambia proprietario,
+casa o visibilità). Chiedi: l'app crea la domanda (`stato: "nuova"`) o aggiunge un turno, poi chiama la function `chiedi`,
+che segna `in_corso` (in una transazione: una seconda richiesta mentre una è in corso da meno di 300 s non riparte), scrive
+i `passi` mentre cerca («Cerco nelle note: rovescio»), poi la risposta e le fonti nell'ultimo turno e `stato: "fatta"` (o
+`"errore"` con `errore`). Una «nuova» più vecchia di 90 s o un «in corso» più vecchio di 300 s è da riprovare. Le revisioni
+della domenica sono domande di tipo `settimana` create dal server. Indice `ownerUid+createdAt`.
+
+## `consumi/{uid}_{AAAAMM}` (14/11)
+`ownerUid, mese: "AAAA-MM", claude: { usd, chiamate }, gemini: { usd, chiamate }, voci: { note|progetti|chiedi|settimana|pdf|trascrizione: { usd, chiamate, ingresso, uscita } }, aggiornato`
+— quanto è costata l'AI nel mese, stima dai prezzi di listino (`functions/src/consumi.js`). Lo scrive solo il server a ogni
+chiamata (incrementi), lo legge il proprietario (pagina Modelli AI).
+
+## `drive_testi/{uid}_{fileId}` (14/11)
+`ownerUid, fileId, nome, modifiedTime, testo, letto` — testo dei PDF di Drive collegati ai progetti, letto da Claude (Haiku) una
+volta per versione del file (`modifiedTime`) e dato all'agente come gli altri documenti. Solo server.
 
 ## `bank_connections/{uid}`
 `ownerUid, householdId, active, aspsp: { name, country }, sessionId, accounts: [{ uid, name, product, details, currency, type, ibanMask, idMask }], accountIds, consentExpiresAt, linkedAt, unlinkedAt, lastSyncAt, lastAttemptAt, lastSyncCreated, lastError, needsRenewal, sessionStatus, sessionEndedAt?, scartati: [{ key, giorno, descrizione, importo, conto, motivo }], lettura: { conti: [{ uid, conto, tipo, letti, stati, ultimo, ultimi: [{ key, giorno, contabilizzato, verso, stato, importo, descrizione, esito }] }], inAttesa: [{ giorno, descrizione, importo, conto, stato }] }, pending?: { state, authorizationId, aspsp, startedAt }`
@@ -166,7 +193,8 @@ in che giorno è partito l'ultimo riepilogo del mattino.
 - `journal_entries`, `journal_photos`: come le altre collezioni della casa (`canRead`, `validNew`, `canWrite`, `canDelete`), in più nessuno cambia `ownerUid` né `householdId` (`modificaNota`)
 - `households`: un non membro può solo aggiungersi, fino a 2 membri
 - `prodotti`: lettura per chi è autenticato, scrittura solo dal server
-- `avvisi_stato`, `google_tokens`, `off_account`: solo il server
+- `avvisi_stato`, `google_tokens`, `off_account`, `drive_testi`: solo il server
+- `domande`: solo del proprietario; `consumi`: lettura del proprietario, scrittura solo dal server
 
 ## Eventi di Google Calendar (non su Firestore)
 Gli eventi restano su Google. L'app vi scrive solo `extendedProperties.shared.ddProgetto` = id del progetto dell'evento (7/11;

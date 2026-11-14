@@ -176,6 +176,29 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Chiedi (14/11): domande all'AI sui propri dati, solo di chi le fa. L'app crea la domanda e aggiunge i seguiti;
+    // risposta, fonti e stato li scrive la function `chiedi`. Si possono eliminare.
+    match /domande/{id} {
+      allow read: if signedIn() && resource.data.ownerUid == uid();
+      allow create: if signedIn() && validNew() && request.resource.data.visibility == 'private';
+      allow update: if signedIn() && resource.data.ownerUid == uid()
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['ownerUid', 'householdId', 'visibility']);
+      allow delete: if signedIn() && resource.data.ownerUid == uid();
+    }
+
+    // Consumi dell'AI del mese (14/11): li scrive solo il server, li legge chi li ha fatti (pagina Modelli AI).
+    // L'id è {uid}_{AAAAMM}: si controlla quello, perché un mese ancora senza consumi (documento assente) si possa
+    // leggere senza errore, come bank_connections.
+    match /consumi/{id} {
+      allow read: if signedIn() && id.matches(uid() + '_[0-9]{6}');
+      allow write: if false;
+    }
+
+    // Testo dei PDF di Drive letti per l'agente (14/11), cache per persona e file: solo il server.
+    match /drive_testi/{id} {
+      allow read, write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

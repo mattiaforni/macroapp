@@ -101,8 +101,9 @@ function evento(e, c) {
   };
 }
 
-/** Eventi (ricorrenze espanse) dei calendari tra `da` e `a`; lo stesso evento in due calendari una volta sola. */
-async function eventiTra(token, calendari, da, a) {
+/** Eventi (ricorrenze espanse) dei calendari tra `da` e `a`; lo stesso evento in due calendari una volta sola.
+ *  Anche per l'agente del diario e per Chiedi (14/11). */
+export async function eventiTra(token, calendari, da, a) {
   const esiti = await Promise.allSettled(calendari.map((c) => eventiDi(token, c.id, {
     timeMin: da.toISOString(), timeMax: a.toISOString(), singleEvents: "true", orderBy: "startTime", timeZone: FUSO,
   }).then((items) => items.filter((e) => e.status !== "cancelled").map((e) => evento(e, c)))));
@@ -118,7 +119,7 @@ async function eventiTra(token, calendari, da, a) {
 }
 
 /** I calendari che questa persona vede nell'app: quello della casa, poi i suoi (come calendariVisti nell'app). */
-function calendariDi(h, u) {
+export function calendariDi(h, u) {
   const lista = h.calendario?.id ? [{ id: h.calendario.id, nome: h.calendario.nome || "Casa", casa: true }] : [];
   for (const c of Array.isArray(u?.calendari) ? u.calendari : []) {
     if (c?.id && !lista.some((x) => x.id === c.id)) lista.push({ id: c.id, nome: c.nome || "", casa: false });
@@ -140,7 +141,7 @@ function avvisaGoogle(e, predefiniti) {
 }
 
 /** «oggi alle 20:00», «domani», «sab 7 nov, 20:00», «dal 7 al 9 nov» (rispetto a `oggi`). */
-function quandoEvento(e, oggi) {
+export function quandoEvento(e, oggi) {
   const g = e.giornoInizio === oggi ? "oggi" : e.giornoInizio === dopo(oggi) ? "domani" : giornoCorto(e.giornoInizio);
   if (e.tuttoIlGiorno) return e.giornoFine > e.giornoInizio ? `dal ${giornoCorto(e.giornoInizio)} al ${giornoCorto(e.giornoFine)}` : g;
   const ora = oraRoma(e.inizio).ora.replace(/^0/, "");

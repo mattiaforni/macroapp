@@ -32,6 +32,7 @@ export const GRUPPI = [
     ["promemoria", "Promemoria degli eventi", "Eventi con orario dei tuoi calendari, se Google non ti avvisa già", "orologio"],
     ["riepilogo", "Riepilogo del mattino", "Alle 7:30: eventi di oggi, task in scadenza o in ritardo, banca", "sole"],
     ["diario", "Analisi del diario", "A fine analisi di una nota, se nel frattempo hai lasciato l'app", "scintilla"],
+    ["settimana", "Revisione della settimana", "La domenica sera: com'è andata, scritta dall'AI (si apre in Chiedi). Spenta, non si scrive", "domanda"],
     ["banca", "Banca", "Spese da confermare, consenso interrotto o in scadenza: nel riepilogo, se è acceso", "banca"],
   ] },
 ];

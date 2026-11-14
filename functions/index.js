@@ -411,15 +411,33 @@ const FORMATI_AUDIO = { "audio/webm": "audio/webm", "audio/ogg": "audio/ogg", "a
 const MAX_AUDIO_BASE64 = 12_000_000; // ~9 MB di audio: a 32 kbit/s più di mezz'ora
 
 /**
- * Nota vocale → testo. data = { audio (base64), mimeType, projectId? }. Ritorna { testo }.
+ * Nota vocale → testo. data = { audio (base64), mimeType, projectId?, prima?, pezzo? }. Ritorna { testo }.
  * Con projectId il prompt riceve nome, istruzioni e temi del progetto; sempre i nomi della rubrica
- * (src/trascrizione.js). L'audio non viene salvato da nessuna parte.
+ * (src/trascrizione.js). Dal 14/11 l'app manda la registrazione a pezzi, tagliati nelle pause, mentre si parla:
+ * `prima` è la fine del testo già trascritto (per continuare la frase), `pezzo` il numero, solo per il registro.
+ * Un pezzo senza parole torna vuoto. L'audio non viene salvato da nessuna parte.
  */
+// Il contesto (rubrica, progetto) si rilegge al più ogni due minuti per persona e progetto: i pezzi di una nota
+// arrivano ogni pochi secondi.
+const contestiTrascrizione = new Map();
+async function contestoPer(db, uid, projectId) {
+  const chiave = `${uid}|${projectId || ""}`;
+  const c = contestiTrascrizione.get(chiave);
+  if (c && Date.now() - c.at < 120_000) return c.contesto;
+  const { contestoTrascrizione } = await import("./src/trascrizione.js");
+  const contesto = await contestoTrascrizione(db, uid, projectId || null);
+  contestiTrascrizione.set(chiave, { at: Date.now(), contesto });
+  if (contestiTrascrizione.size > 50) contestiTrascrizione.delete(contestiTrascrizione.keys().next().value);
+  return contesto;
+}
+
 export const trascrivi = onCall(
   { secrets: [GEMINI_API_KEY], timeoutSeconds: 120 },
   async (req) => {
     if (!req.auth) throw new HttpsError("unauthenticated", "Accesso richiesto");
     const { audio, mimeType, projectId } = req.data || {};
+    const prima = typeof req.data?.prima === "string" ? req.data.prima.slice(-600) : "";
+    const pezzo = Number.isInteger(req.data?.pezzo) ? req.data.pezzo : null;
     if (typeof audio !== "string" || audio.length < 100) throw new HttpsError("invalid-argument", "Registrazione vuota");
     if (audio.length > MAX_AUDIO_BASE64) throw new HttpsError("invalid-argument", "Registrazione troppo lunga: dividila in due note");
     const tipo = FORMATI_AUDIO[String(mimeType || "").split(";")[0].trim().toLowerCase()];
@@ -427,14 +445,23 @@ export const trascrivi = onCall(
     const t0 = Date.now();
     try {
       const db = await getDb();
-      const { contestoTrascrizione } = await import("./src/trascrizione.js");
-      const contesto = await contestoTrascrizione(db, req.auth.uid, projectId || null);
+      const contesto = await contestoPer(db, req.auth.uid, projectId);
       const { transcribe } = await import("./src/ai/provider.js");
-      const { testo, uso } = await transcribe({ audioBase64: audio, mimeType: tipo, keys: { gemini: GEMINI_API_KEY.value().trim() }, contesto });
+      const { MODELLO_TRASCRIZIONE } = await import("./src/ai/gemini.js");
+      let testo = "", uso = null;
+      try {
+        ({ testo, uso } = await transcribe({ audioBase64: audio, mimeType: tipo, keys: { gemini: GEMINI_API_KEY.value().trim() }, contesto, prima }));
+      } catch (err) {
+        // Un pezzo senza parole (una pausa lunga): niente testo, non un errore.
+        if (!/trascrizione vuota/i.test(String(err.message))) throw err;
+      }
+      if (/^\[silenzio\]$/i.test(testo.trim())) testo = "";
+      const { registra } = await import("./src/consumi.js");
+      const { usd } = await registra(db, req.auth.uid, "trascrizione", { modello: MODELLO_TRASCRIZIONE, uso });
       // Nel registro solo misure: niente testo (il repository è pubblico e la Diagnosi pubblica il registro).
-      console.log(`trascrivi: ${Math.round((audio.length * 0.75) / 1024)} KB ${tipo}, ${testo.length} caratteri in ${Date.now() - t0} ms`
-        + (uso ? `, token ${uso.promptTokenCount ?? "?"} in / ${uso.candidatesTokenCount ?? "?"} out / ${uso.thoughtsTokenCount ?? 0} pensiero` : "")
-        + (contesto.progetto ? ", con progetto" : ""));
+      console.log(`trascrivi: ${Math.round((audio.length * 0.75) / 1024)} KB ${tipo}${pezzo != null ? `, pezzo ${pezzo}` : ""}, ${testo.length} caratteri in ${Date.now() - t0} ms`
+        + (uso ? `, token ${uso.promptTokenCount ?? "?"} in / ${uso.candidatesTokenCount ?? "?"} out / ${uso.thoughtsTokenCount ?? 0} pensiero, ${usd.toFixed(5)} $` : "")
+        + (contesto.progetto ? ", con progetto" : "") + (prima ? ", con il testo di prima" : ""));
       return { testo };
     } catch (err) {
       if (err instanceof HttpsError) throw err;
@@ -546,5 +573,52 @@ export const giroAvvisi = onSchedule(
     const db = await getDb();
     const { giroAvvisi: giro } = await import("./src/avvisi-calendario.js");
     await giro(db, clientGoogle());
+  },
+);
+
+// ───────────── Chiedi e revisione della settimana (14/11) ─────────────
+
+/**
+ * Chiedi: una domanda sui propri dati ({ id } di domande/{id}, creato dall'app con la domanda). Claude cerca con
+ * strumenti di sola lettura (note, spese, task, calendario, progetti, manuale, lista) e risponde con le fonti; stato,
+ * passi e risposta li scrive il server sul documento, così arrivano anche se il telefono si blocca. Ritorna { fatta }
+ * o { giaInCorso }. Vedi src/chiedi.js.
+ */
+export const chiedi = onCall(
+  { secrets: [ANTHROPIC_API_KEY, GOOGLE_OAUTH_CLIENT], timeoutSeconds: 300 },
+  async (req) => {
+    if (!req.auth) throw new HttpsError("unauthenticated", "Accesso richiesto");
+    const id = req.data?.id;
+    if (typeof id !== "string" || !id || id.includes("/")) throw new HttpsError("invalid-argument", "Domanda mancante");
+    const t0 = Date.now();
+    try {
+      const db = await getDb();
+      const { chiedi: rispondi } = await import("./src/chiedi.js");
+      // Nel registro solo misure e nomi degli strumenti: niente domande né risposte (repository pubblico).
+      return await rispondi(db, req.auth.uid, id, {
+        key: ANTHROPIC_API_KEY.value().trim(), clientGoogle: clientGoogle(),
+        passo: (p) => console.log(`chiedi ${id}: ${/^(Cerco nelle note|Leggo la sintesi)/.test(p) ? p.split(/[:«(]/)[0].trim() : p} dopo ${Date.now() - t0} ms`),
+      });
+    } catch (err) {
+      if (err.codice === "not-found") throw new HttpsError("not-found", "Domanda non trovata");
+      console.error("chiedi", String(err.message).slice(0, 300));
+      if (/\b401\b|authentication|invalid x-api-key/i.test(err.message)) throw new HttpsError("failed-precondition", "Chiave dell'AI non configurata");
+      const [codice, testo] = spiegaErrore(err.message);
+      throw new HttpsError(codice, testo.replace("Analisi non riuscita", "Risposta non riuscita"));
+    }
+  },
+);
+
+/**
+ * Revisione della settimana, la domenica alle 18:47: per chi ha un telefono con le notifiche e non ha spento la
+ * categoria «settimana», Claude scrive com'è andata (note e progetti, task, spese, i prossimi sette giorni) in una
+ * domanda di tipo «settimana», che si apre dalla notifica nella pagina Chiedi. Vedi src/settimana.js.
+ */
+export const revisioneSettimana = onSchedule(
+  { schedule: "47 18 * * 0", timeZone: "Europe/Rome", secrets: [ANTHROPIC_API_KEY, GOOGLE_OAUTH_CLIENT], timeoutSeconds: 540, retryCount: 0 },
+  async () => {
+    const db = await getDb();
+    const { revisioni } = await import("./src/settimana.js");
+    await revisioni(db, { key: ANTHROPIC_API_KEY.value().trim(), clientGoogle: clientGoogle() });
   },
 );
