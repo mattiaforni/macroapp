@@ -35,7 +35,7 @@ il lavoro tipico è «cambia questo» → commit su `main` → pubblicazione aut
 
 | file | cosa fa |
 |---|---|
-| `app.js` | guscio: accesso, barra in basso (le sezioni scelte dalla persona, `core/barra.js`; `idsBarra` aggiornato sul posto, route dei progetti `progetto-<id>` registrate quando compaiono, apertura sulla prima sezione), pulsante del menu, router, service worker, ricorrenti all'avvio; in testata a destra le `azioni()` del modulo aperto (oggi solo l'orologio della Lista) |
+| `app.js` | guscio: accesso, barra in basso (le sezioni scelte dalla persona, `core/barra.js`; `idsBarra` aggiornato sul posto, route dei progetti `progetto-<id>` registrate quando compaiono, apertura sulla prima sezione), pulsante del menu, router, service worker (14/11: tornando nell'app si rilegge `version.js`; se è uscita una versione nuova si ricarica da sola, o con un foglio o il menu aperti mostra «C'è una versione nuova · Ricarica»), ricorrenti all'avvio; in testata a destra le `azioni()` del modulo aperto (oggi solo l'orologio della Lista) |
 | `core/barra.js` | barra in basso personalizzabile (3/11): `users.barra` = id delle sezioni (pagine di `PAGINE` o `progetto-<id>`), al più `MASSIMO` (5), per persona; `scelte()`, `sezione(id)` → { id, title, icon, colore, modulo, mount } (un progetto monta la pagina Progetto dopo aver scritto `macroapp.progetto`), `sezioneAttiva(route)` (la pagina Progetto aperta dal menu conta come la sua sezione se è in barra), `progettiDisponibili`, `salvaBarra`, `suBarra`; nomi e colori dei progetti in barra copiati in localStorage per disegnarla subito; `apriPaginaProgetto(pid)` (menu, Diario, Task): la sezione se è in barra, se no la pagina Progetto |
 | `core/router.js` | router a hash (`fallback` può essere una funzione: la prima sezione della barra); `vaiA(id, apri)` + `richiesto(id, apri)` (o `richiestaPer(id)`: cosa è stato chiesto, es. `nota:<id>` per il Diario); `sostituisci(id, smonta, figli)` adotta una pagina già montata (scorrimento): il menu chiede a una pagina di aprire un suo foglio. Passaggi tra le pagine con View Transitions (`<html data-passaggio>` = `entra` / `torna`): vaiA entra sempre, il resto lo decide `transizione(da, a)` in app.js |
 | `core/scorrimento.js` | scorrimento tra le sezioni della barra come in Leghe (30/10, dal video di Mattia): la pagina segue il dito e quella accanto (montata davvero, in un pannello fisso `.scorro` a lato, senza il suo +) entra con lei; al rilascio si assesta (`--t-scorro`, oltre un quinto dello schermo o con un colpo deciso: velocità sugli ultimi 100 ms), poi la pagina nuova passa nella vista così com'è (`sostituisci` nel router: niente rimontaggio; il 30/10 rimontare dava scatti). Solo sulle sezioni, con foglio e menu chiusi, non dai bordi (gesto «indietro» del telefono) né da pillole che scorrono in orizzontale; con «riduci movimento» cambio secco. Attivato in app.js |
@@ -155,6 +155,13 @@ python3 prove/additivi.py                   # rigenera la tabella degli additivi
 Le regole di sicurezza non sono simulate. Se usi nuove funzioni dell'SDK, aggiorna `prove/finto/firebase.js`.
 
 ## Stato (14 novembre 2026) e prossimi passi
+
+- [x] **Aggiornamento più agile** (14/11, Mattia: «non c'è modo di avere una modalità più agile di aggiornamento?»). Le pagine
+      arrivano già alla riapertura dell'app, ma un'app rimasta aperta in background restava sulla versione vecchia (il service
+      worker, che ricaricava, cambia di rado). Ora a ogni ritorno nell'app (al più ogni 10 s) si rilegge `version.js`, che il
+      deploy riscrive col commit: se è cambiata la pagina si ricarica da sola; con un foglio o il menu aperti lo chiede soltanto.
+      Resta fuori ciò che sta nell'«involucro» installato da Chrome (nome, icona, condivisione, scorciatoie dell'icona): lo
+      aggiorna Chrome quando vuole; si forza con `chrome://webapks` → Update o reinstallando l'app (i dati sono sul server).
 
 - [x] **Più AI e trascrizione a pezzi** (14/11, dopo un'analisi dell'app chiesta da Mattia; scelte sue: tutte le proposte tranne
       la banca che impara, che gli interessa meno; Gmail da spiegare meglio; più la trascrizione: «non vedo quello che sto

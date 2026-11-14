@@ -2237,6 +2237,33 @@ with sync_playwright() as p:
         azione.locator("button[aria-label='Conferma']").click()
         pg.wait_for_selector("text=Task segnato fatto")
         assert pg.evaluate(f"window.__finto.coll('tasks').get('{tid}').done") is True
+
+        # ── Versione nuova mentre l'app è aperta (14/11): tornando nell'app, con un foglio aperto la chiede; senza, si
+        #    ricarica da sola (e una volta ricaricata non ricomincia) ──
+        step[0] = "versione nuova"
+        versione = os.path.join(SITE, "js", "version.js")
+        torna = "document.dispatchEvent(new Event('visibilitychange'))"
+        pg.click("button.fab")
+        pg.wait_for_selector("#foglio h2 >> text=Nuova nota")
+        pg.evaluate("window.__segno = 1")
+        open(versione, "w").write('export const VERSION = "prova2";\n')
+        pg.wait_for_timeout(10200)
+        pg.evaluate(torna)
+        pg.wait_for_selector("#toast >> text=C'è una versione nuova", timeout=4000)
+        assert pg.evaluate("window.__segno") == 1, "con un foglio aperto non si ricarica"
+        pg.click("#foglio button[aria-label='Indietro']")
+        open(versione, "w").write('export const VERSION = "prova3";\n')
+        pg.wait_for_timeout(10200)
+        with pg.expect_navigation(timeout=6000):
+            pg.evaluate(torna)
+        pg.wait_for_selector("#page-title >> text=Diario", timeout=8000)
+        assert pg.evaluate("window.__segno") is None, "ricaricata"
+        pg.wait_for_timeout(10200)
+        pg.evaluate("window.__segno = 2")
+        pg.evaluate(torna)
+        pg.wait_for_timeout(1500)
+        assert pg.evaluate("window.__segno") == 2, "stessa versione: niente ricarica"
+        open(versione, "w").write('export const VERSION = "dev";\n')
         print("FLUSSO COMPLETO")
     except Exception as e:
         shot(pg, "errore")

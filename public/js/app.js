@@ -168,6 +168,23 @@ if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("/sw.js").then((r) => r.update()).catch(console.warn);
   });
+  // Versione nuova pubblicata mentre l'app restava aperta in background (14/11, Mattia: «una modalità più agile di
+  // aggiornamento»): il service worker cambia di rado, quindi non basta il suo controllerchange. Tornando nell'app si
+  // rilegge version.js (lo riscrive ogni deploy col commit pubblicato): se è cambiata la pagina si ricarica da sola; con
+  // un foglio o il menu aperti (una nota a metà, una registrazione) lo chiede soltanto, e lo rifà al prossimo ritorno.
+  let ultimoControllo = Date.now();
+  let avvisata = false;
+  document.addEventListener("visibilitychange", async () => {
+    if (document.visibilityState !== "visible" || Date.now() - ultimoControllo < 10_000) return;
+    ultimoControllo = Date.now();
+    try {
+      const r = await fetch(`/js/version.js?v=${Date.now()}`, { cache: "no-store" });
+      const nuova = r.ok ? (await r.text()).match(/VERSION\s*=\s*"([^"]+)"/)?.[1] : null;
+      if (!nuova || nuova === VERSION || reloaded) return;
+      if (document.getElementById("foglio").hidden && !document.querySelector(".menu.aperto")) { reloaded = true; location.reload(); return; }
+      if (!avvisata) { avvisata = true; toast("C'è una versione nuova", { azione: { label: "Ricarica", fn: () => location.reload() } }); }
+    } catch (e) { /* senza rete: al prossimo ritorno */ }
+  });
   // Tocco su una notifica con l'app già aperta: il service worker dice quale pagina mostrare.
   navigator.serviceWorker.addEventListener("message", (e) => {
     if (e.data?.tipo !== "apri") return;
