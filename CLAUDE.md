@@ -28,9 +28,9 @@ Documenti: `docs/ARCHITETTURA.md` (come funziona e perché), `docs/MODELLO-DATI.
     18:47, `src/settimana.js`, senza azioni);
   - `bank` (consenso, letture, `src/banking/enable.js`) e `syncBank` (ogni giorno alle 7:15);
   - `google`: collegamento una tantum con Contatti, Calendario e Drive, permessi di un'ora (`src/google/account.js`);
-  - `cartella` (22/11): cartella `D&D/<progetto>` su Drive per ogni progetto, nel Drive del proprietario e col suo permesso
-    (`drive.file`), condivisa con l'altra persona se il progetto è condiviso (`src/google/cartelle.js`, piano in
-    `docs/PIANO-DRIVE-MCP.md`); `giroAvvisi` riallinea quelle rimaste indietro;
+  - `cartella` (22/11, `docs/PIANO-DRIVE-MCP.md`): cartella `D&D/<progetto>` nel Drive del proprietario, col suo permesso
+    (`drive.file`), condivisa se il progetto lo è (`src/google/cartelle.js`); copia leggibile, foto e «Apri come
+    documento» (`src/google/copia.js`); `giroAvvisi` riallinea cartelle e copie rimaste indietro;
   - `avvisa` (notifiche push, `src/avvisi.js`) e `giroAvvisi` (ogni 5 minuti: eventi nuovi, promemoria, riepilogo delle
     7:30, `src/avvisi-calendario.js`);
   - `prodotto` (scheda da Open Food Facts / Open Beauty Facts con l'indice, cache `prodotti/{ean}`, `src/prodotti/`) e
@@ -219,12 +219,10 @@ Scelte di Mattia da non riproporre (il perché e il contesto in docs/STORIA.md, 
 ## Da verificare
 
 Dal telefono o con i dati veri (dettagli in docs/STORIA.md alla data):
-- **Cartelle su Drive** (22/11, passo 1 del piano): Mattia aggiunge lo scope `drive.file` nella schermata di consenso OAuth
-  e ricollega Google (anche la compagna); poi un progetto nuovo ha la sua cartella in «D&D», «Drive» la apre, un progetto
-  condiviso la condivide con l'altra (lei la vede in «Condivisi con me»), tornando privato la condivisione sparisce.
-  Schermata di consenso «In produzione» come pensa Mattia (allora niente scadenza dei 7 giorni): da guardare in Google
-  Cloud → Google Auth Platform → Pubblico (Audience), o nella pagina Google dell'app prima di ricollegare (collegato da
-  più di 7 giorni e ancora attivo = in produzione).
+- **Cartelle su Drive** (22/11, piano Drive): dopo scope `drive.file` in console e Google ricollegato da tutti e due, la
+  cartella in «D&D» di un progetto nuovo, condivisa o no secondo il progetto; la copia in «Copia dall'app» pochi secondi
+  dopo una nota; «Apri come documento» dal telefono; le foto in «Foto». Consenso OAuth «In produzione» (Google Auth
+  Platform → Pubblico), come pensa Mattia: allora niente scadenza dei 7 giorni.
 - **Backup** (14/11): **prima Mattia** dà in console il ruolo di export ai due service account (docs/ARCHITETTURA.md,
   Backup, «Da fare una volta in console»: oggi il backup prende 403); poi Diagnosi con `backup` e `backupora`, un Ripristino
   di prova, il PITR attivo (Diagnosi), il primo backup del lunedì.

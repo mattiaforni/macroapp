@@ -527,7 +527,7 @@ export async function progettoDellaNota(db, entry, uid, passo, tokenGoogle, { le
     }
     documenti = await leggiDocumenti(token, p.documenti, passo, { pdf: leggiPdf ? { db, uid, leggi: leggiPdf } : null });
   }
-  return { id: snap.id, name: p.name || "senza nome", istruzioni, sintesi, precedenti, seguenti, dopo, documenti };
+  return { id: snap.id, name: p.name || "senza nome", istruzioni, sintesi, precedenti, seguenti, dopo, documenti, cartella: !!p.cartella?.id };
 }
 
 /** Spese e lista riguardano sempre la casa; le bozze sono sempre solo tue; un task chiuso o spostato come il task. */
@@ -649,6 +649,9 @@ export async function analyzeJournalEntry(db, entry, { uid, keys, provider, clie
     ...(persone ? { persone } : {}),
     sintesiEsito, updatedAt: FieldValue.serverTimestamp(),
   });
+  // La copia leggibile del progetto su Drive (22/11) va rifatta: titolo, riepilogo e persone della nota sono cambiati. La
+  // chiede anche l'app quando riceve la risposta; questo segno la fa rifare al giro dei 5 minuti se l'app era chiusa.
+  if (progetto?.cartella) batch.update(db.collection("projects").doc(progetto.id), { copiaRichiesta: FieldValue.serverTimestamp() });
   if (nuovaSintesi) {
     batch.set(db.collection("proposals").doc(), {
       ownerUid: uid,

@@ -293,12 +293,13 @@ export const google = onCall(
 );
 
 /**
- * Cartella del progetto su Google Drive (22/11, docs/PIANO-DRIVE-MCP.md): { azione: "crea" | "allinea", projectId }.
+ * Cartella del progetto su Google Drive (22/11, docs/PIANO-DRIVE-MCP.md): { azione: "crea" | "allinea" | "copia" |
+ * "documento", projectId, entryId? } (copia leggibile e «Apri come documento»: src/google/copia.js).
  * La cartella sta nel Drive del proprietario del progetto e si scrive con il suo permesso (drive.file); chi chiama deve
  * vedere il progetto. Ritorna { cartella: { id, link, nome, condivisaCon } } (o { inCorso }). Vedi src/google/cartelle.js.
  */
 export const cartella = onCall(
-  { secrets: [GOOGLE_OAUTH_CLIENT], timeoutSeconds: 60 },
+  { secrets: [GOOGLE_OAUTH_CLIENT], timeoutSeconds: 120 },
   async (req) => {
     if (!req.auth) throw new HttpsError("unauthenticated", "Accesso richiesto");
     try {
@@ -307,6 +308,11 @@ export const cartella = onCall(
       const { tokenServer } = await import("./src/google/account.js");
       const r = await gestisci(db, req.auth.uid, req.data || {}, { client: clientGoogle(), tokenServer });
       // Nel registro solo l'esito: niente nomi di progetti (repository pubblico, la Diagnosi pubblica il registro).
+      if (req.data?.azione === "copia") {
+        console.log(`cartella copia: ${r.inCorso ? "in corso" : r.cartella === null ? "senza cartella" : `${r.scritti} documenti scritti, ${r.tenuti} tenuti (cambiati a mano), ${r.foto} foto`}`);
+        return { inCorso: !!r.inCorso, scritti: r.scritti || 0, tenuti: r.tenuti || 0, foto: r.foto || 0 };
+      }
+      if (req.data?.azione === "documento") { console.log(`cartella documento: ${r.nuovo ? "creato" : "riaperto"}`); return { link: r.link, nome: r.nome, nuovo: !!r.nuovo }; }
       console.log(`cartella ${req.data?.azione}: ${r.inCorso ? "in corso" : r.creata ? "creata" : r.cartella ? "allineata" : "nessuna"}`);
       const c = r.cartella || null;
       return { cartella: c ? { id: c.id || "", link: c.link || "", nome: c.nome || "", condivisaCon: c.condivisaCon || null } : null, inCorso: !!r.inCorso };
@@ -596,7 +602,7 @@ export const syncBank = onSchedule(
  * Vedi src/avvisi-calendario.js.
  */
 export const giroAvvisi = onSchedule(
-  { schedule: "every 5 minutes", timeZone: "Europe/Rome", secrets: [GOOGLE_OAUTH_CLIENT], timeoutSeconds: 120, memory: "256MiB", retryCount: 0 },
+  { schedule: "every 5 minutes", timeZone: "Europe/Rome", secrets: [GOOGLE_OAUTH_CLIENT], timeoutSeconds: 240, memory: "256MiB", retryCount: 0 },
   async () => {
     const db = await getDb();
     const { giroAvvisi: giro } = await import("./src/avvisi-calendario.js");
@@ -607,6 +613,10 @@ export const giroAvvisi = onSchedule(
       const { tokenServer } = await import("./src/google/account.js");
       const n = await giroCartelle(db, { client: clientGoogle(), tokenServer });
       if (n) console.log(`giroAvvisi: ${n} cartelle allineate`);
+      // Copie leggibili rimaste indietro (chiamata dall'app persa, analisi finita con l'app chiusa).
+      const { giroCopie } = await import("./src/google/copia.js");
+      const c = await giroCopie(db, { client: clientGoogle(), tokenServer });
+      if (c) console.log(`giroAvvisi: ${c} copie rifatte`);
     } catch (err) { console.warn("giroAvvisi: cartelle", String(err.message).slice(0, 160)); }
   },
 );

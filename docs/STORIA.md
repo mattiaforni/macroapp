@@ -609,3 +609,20 @@ fila su sua richiesta, un passo per commit.
       collegamento: rifiuto e poi tocco che la crea, allineamento quando Circolo diventa condiviso, riga nella pagina
       Google). Da fare a mano: scope nella schermata di consenso, ricollegare Google (vedi «Da verificare» in CLAUDE.md).
 
+- [x] **Passo 2: app → Drive.** Nella cartella del progetto, sottocartella «Copia dall'app»: Documento Google «Sintesi e
+      da fare» e uno per mese con le note, scritti in HTML e convertiti da Google, riscritti solo se il contenuto cambia;
+      sottocartella «Foto» con le foto delle note. Si aggiorna pochi secondi dopo ogni modifica: `core/db.js` avvisa delle
+      scritture, `core/cartelle.js` segna `projects.copiaRichiesta` e chiama `cartella` → `copia` (4 s dopo l'ultima, o
+      uscendo dall'app); l'analisi di una nota segna anche lei la richiesta e `giroAvvisi` recupera quelle rimaste
+      indietro. Una copia alla volta per progetto (la seconda richiesta fa ricominciare quella in corso). Privacy: copia di un
+      progetto condiviso solo con le cose condivise. Niente cicli: dopo ogni scrittura il testo esportato e `modifiedTime`
+      vanno in `drive_file` (versione precedente per il passo 3); un documento della copia cambiato a mano su Drive non si
+      sovrascrive finché la modifica non è stata letta. «Apri come documento» dal foglio di lettura di una nota di un
+      progetto e sotto la sintesi: Documento Google nella cartella, creato una volta e poi riaperto; la finestra si apre al
+      tocco e riceve il documento (toast con «Apri» se non si può). Collezioni nuove `drive_cartelle`, `drive_file` (solo
+      server, regole e casi). Prove: prova-drive.mjs (copia con tre documenti e due foto, niente note private né di
+      un'altra casa, niente riscritture inutili, documento cambiato a mano tenuto, toccato senza cambiarlo riscritto, foto
+      tolta nel cestino, copia già in corso, giro, documento di una nota e della sintesi, nota privata rifiutata, HTML) e
+      prova.py (copia chiesta dopo la nota di Tennis, «Apri come documento» della sintesi e della nota con la finestra che
+      riceve il documento).
+

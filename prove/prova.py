@@ -706,6 +706,8 @@ with sync_playwright() as p:
             m = [x for x in drive_files if ("name contains" not in qs) or (qs.split("'")[1].lower() in x["name"].lower())]
             r.fulfill(status=200, content_type="application/json", body=json.dumps({"files": m}))
         pg.route("https://www.googleapis.com/drive/v3/files**", drive)
+        # I Documenti Google aperti dall'app (22/11, «Apri come documento»): una pagina finta, senza rete
+        ctx.route("https://docs.google.com/**", lambda r: r.fulfill(status=200, content_type="text/html", body="<p>Documento Google</p>"))
         menu(pg, "Manuale e rubrica")
         pg.wait_for_selector("h1 >> text=Manuale")
         pg.click("button.fab")
@@ -1065,6 +1067,10 @@ with sync_playwright() as p:
         # Nel Diario la nota è una riga come le lezioni: titolo dell'AI, anteprima dal riepilogo, temi
         pg.wait_for_selector(".lezione__titolo >> text=Spalla chiusa sul dritto", timeout=6000)
         riga = pg.locator(".voce-nota", has_text="Spalla chiusa sul dritto")
+        # La copia leggibile su Drive (22/11): qualche secondo dopo, l'app la chiede per il progetto della nota
+        tennis_id = pg.evaluate("[...window.__finto.coll('projects')].find(([, p]) => p.name === 'Tennis')[0]")
+        pg.wait_for_function(f"JSON.parse(sessionStorage.getItem('finto.cartelle') || '[]').some((c) => c.azione === 'copia' && c.projectId === '{tennis_id}')", timeout=9000)
+        assert pg.evaluate(f"!!window.__finto.coll('projects').get('{tennis_id}').copiaRichiesta"), "la richiesta di copia resta sul progetto"
         assert "Dritto: chiudere prima la spalla" in riga.locator(".lezione__anteprima").inner_text(), "anteprima dal riepilogo"
         assert riga.locator(".lezione__temi .etichetta >> text=Dritto").count() == 1
         assert pg.locator("text=oggi il maestro").count() == 0, "il testo si legge solo aprendo la nota"
@@ -1132,6 +1138,11 @@ with sync_playwright() as p:
         assert corpo.locator("ul").count() == 2 and corpo.locator("li").count() == 3, "due elenchi sotto le due rubriche"
         pg.wait_for_timeout(200)
         shot(pg, "17c-progetto-sintesi")
+        # La sintesi come Documento Google (22/11): la finestra si apre al tocco e riceve il documento quando è pronto
+        with ctx.expect_page() as nuova:
+            pg.click("button.btn--piatto >> text=Apri come documento")
+        nuova.value.wait_for_url(f"https://docs.google.com/document/d/doc-{tennis_id}-sintesi/edit", timeout=5000)
+        nuova.value.close()
         # Toccando il testo della sintesi si scrive lì
         tocca_testo(pg, ".tema--aperto .tema__corpo", "Mano sinistra per la distanza")
         pg.wait_for_selector("#foglio >> text=Sintesi di Tennis")
@@ -1142,6 +1153,12 @@ with sync_playwright() as p:
         # Dal tema alla lezione: foglio di lettura con riepilogo e trascrizione ripiegata
         pg.click(".tema--aperto .tema__lezioni button.pillola")
         pg.wait_for_selector("#foglio >> text=Spalla chiusa sul dritto")
+        # Anche la nota, dal suo foglio di lettura (22/11)
+        nota_id = pg.evaluate("[...window.__finto.coll('journal_entries')].find(([, n]) => n.titolo === 'Spalla chiusa sul dritto, piedi larghi sul rovescio')[0]")
+        with ctx.expect_page() as nuova:
+            pg.click("#foglio button >> text=Apri come documento")
+        nuova.value.wait_for_url(f"https://docs.google.com/document/d/doc-{tennis_id}-{nota_id}/edit", timeout=5000)
+        nuova.value.close()
         assert pg.locator("#foglio .lezione__riepilogo h4 >> text=Cosa ho imparato").count() == 1
         assert pg.locator("#foglio .nota__testo--trascrizione").is_hidden()
         pg.click("#foglio button.nota__apri")

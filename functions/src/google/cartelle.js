@@ -1,4 +1,5 @@
-// Cartelle dei progetti su Google Drive (22/11, docs/PIANO-DRIVE-MCP.md, passo 1).
+// Cartelle dei progetti su Google Drive (22/11, docs/PIANO-DRIVE-MCP.md, passo 1; la copia leggibile, «Apri come
+// documento» e le foto, passo 2, stanno in copia.js).
 //
 // Ogni progetto ha una cartella `D&D/<nome del progetto>` nel Drive di chi l'ha creato (il proprietario del progetto),
 // creata dall'app alla creazione del progetto o con un tocco dalla pagina del progetto. Un progetto condiviso ha la
@@ -260,9 +261,25 @@ export async function creaCartella(db, uid, pid, { client, tokenServer }) {
   }
 }
 
-/** La function `cartella`: { azione: "crea" | "allinea", projectId }. */
+/**
+ * La function `cartella`: { azione, projectId, entryId? }. Azioni: «crea» e «allinea» (qui), «copia» (la copia leggibile
+ * e le foto, copia.js) e «documento» («Apri come documento» di una nota, con `entryId`, o della sintesi).
+ */
 export async function gestisci(db, uid, data = {}, { client, tokenServer }) {
   if (data.azione === "crea") return creaCartella(db, uid, data.projectId, { client, tokenServer });
+  if (data.azione === "copia" || data.azione === "documento") {
+    const c = await import("./copia.js");
+    try {
+      return data.azione === "copia"
+        ? await c.copiaDaApp(db, uid, data.projectId, { client, tokenServer })
+        : await c.apriComeDocumento(db, uid, { projectId: data.projectId, entryId: data.entryId || null }, { client, tokenServer });
+    } catch (e) {
+      if (e.codice === "not-found") throw errore("not-found", e.message, "nota");
+      if (e.codice === "privata") throw errore("failed-precondition", e.message, "privata");
+      if (e.status === 409) throw errore("aborted", e.message, "in-corso");
+      throw e;
+    }
+  }
   if (data.azione === "allinea") {
     const p = await progettoVisibile(db, uid, data.projectId);
     if (!p.cartella?.id) return { cartella: null };

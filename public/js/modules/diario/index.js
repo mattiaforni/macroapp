@@ -55,6 +55,7 @@ import { watchPending, renderAzione } from "../../components/proposals.js";
 import { aggiungiVoci } from "../lista/index.js";
 import { apriTask, apriProgetto } from "../task/index.js";
 import { vaiA, richiestaPer } from "../../core/router.js";
+import { bottoneDocumento, toccaProgetto } from "../../core/cartelle.js";
 import { apriPaginaProgetto } from "../../core/barra.js";
 import { apriSpesa } from "../spese/index.js";
 import { apriVoceManuale } from "../manuale/index.js";
@@ -375,6 +376,8 @@ export function salvaModificaNota(n, dati, foto, progetti) {
   // Chi l'ha modificata per ultimo e quando (si legge in fondo al foglio della nota condivisa).
   const firma = { modificataDa: session.user.uid, modificataAt: serverTimestamp() };
   const salvata = update(COLL, n.id, cambia ? { ...dati, ...firma, visibility } : { ...dati, ...firma });
+  // Spostata in un altro progetto: anche la copia su Drive di quello di prima va rifatta (22/11).
+  if (n.projectId && "projectId" in dati && dati.projectId !== n.projectId) toccaProgetto(n.projectId);
   if (cambia) visibilitaFoto(n.foto || [], visibility);
   applicaFoto(n.id, n.foto || [], foto, salvata, visibility);
   return salvata;
@@ -498,7 +501,7 @@ export function rigaNota(n, { conGiorno = true, conOra = false, progetto = null,
  * Una nota condivisa (7/11) la modificano tutti e due: `autore` è il nome di chi l'ha scritta, se non sei tu;
  * `modificata` = { chi, quando } dell'ultima modifica a mano (`modificataDa`, `modificataAt`), detta in piccolo in fondo.
  */
-export function apriLettura(n, { progetto = null, proposte = [], autore = null, modificata = null, inAnalisi = false, onModifica, onAnalizza, onElimina }) {
+export function apriLettura(n, { progetto = null, perDocumento = progetto, proposte = [], autore = null, modificata = null, inAnalisi = false, onModifica, onAnalizza, onElimina }) {
   // In analisi (da qui o sul server): niente seconda analisi, il pulsante lo dice.
   const occupata = inAnalisi || analisiInCorso(n);
   const d = toDate(n.createdAt) || new Date();
@@ -531,6 +534,8 @@ export function apriLettura(n, { progetto = null, proposte = [], autore = null, 
       n.riepilogo ? trascrizione : null,
       sintesiInvariata(n, occupata),
       proposte.length ? el("div.azioni-ai", { style: "margin-top:14px" }, ...proposte.map(renderAzione)) : null,
+      // La nota come Documento Google nella cartella del progetto (22/11): da scrivere con calma, o da condividere.
+      n.projectId && perDocumento?.id === n.projectId ? (() => { const b = bottoneDocumento(perDocumento, { entryId: n.id }); return b ? el("div.segmenti", { style: "padding-top:10px" }, b) : null; })() : null,
       // Chi l'ha modificata per ultimo (note condivise, richiesta di Mattia del 7/11): appena visibile, in fondo.
       modificata ? el("p.nota__modifica", {}, `Ultima modifica: ${modificata.chi}, ${quandoBreve(modificata.quando)}`) : null,
       el("div.foglio__piede", {},
@@ -766,7 +771,7 @@ export function mount(container) {
       inAnalisi: inCorso.has(n.id),
       onModifica: (fuoco) => modifica(n, fuoco),
       onAnalizza: () => analizza(n.id),
-      onElimina: () => { remove(COLL, n.id); eliminaFotoDi(n); toast("Nota eliminata"); },
+      onElimina: () => { remove(COLL, n.id, { copia: n }); eliminaFotoDi(n); toast("Nota eliminata"); },
     });
   }
 

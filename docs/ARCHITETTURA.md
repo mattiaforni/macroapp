@@ -287,6 +287,34 @@ progetto e, per i progetti senza istruzioni, barra del progetto nei Task). La fu
 dice al server dove scrivere con il permesso del proprietario. Prova senza rete: `node functions/strumenti/prova-drive.mjs`
 (Firestore e Drive finti in `functions/strumenti/finti.mjs`).
 
+**App → Drive (passo 2, `src/google/copia.js`).** Nella cartella del progetto:
+- *Copia leggibile*, sottocartella «Copia dall'app»: un Documento Google «Sintesi e da fare» (sintesi per temi e task
+  aperti) e uno per mese con le note («Note 2026-11 (novembre)»: giorno, titolo, chi l'ha scritta, persone, temi, foto,
+  riepilogo e trascrizione). Il server scrive HTML che Google converte in Documento (upload `multipart`, `mimeType` del
+  Documento); la seconda volta sostituisce il contenuto dello stesso file. Si riscrive solo un documento il cui HTML è
+  cambiato (hash in `drive_cartelle`), quindi niente data di aggiornamento nel testo. **Quando**: `core/db.js` avvisa delle
+  scritture (`suScrittura`) e `core/cartelle.js` capisce di quale progetto con cartella (note, task, il progetto stesso; per
+  un'eliminazione dalla `copia` del documento, per uno spostamento anche il progetto di prima): segna subito
+  `projects.copiaRichiesta` (resta anche se l'app si chiude) e 4 secondi dopo l'ultima modifica chiama `cartella` con
+  `copia` (subito se l'app va in secondo piano). L'analisi di una nota segna anche lei `copiaRichiesta`; `giroAvvisi` rifà
+  le copie con `copiaRichiesta` dopo l'ultima copia (`drive_cartelle.copiaAt`). Una copia alla volta per progetto: una
+  richiesta mentre ne gira un'altra la segna (`copiaAncora`) e quella in corso ricomincia, così l'ultima modifica entra.
+- *Privacy*: un progetto condiviso ha la cartella condivisa, quindi la copia porta solo note e task condivisi della casa;
+  un progetto privato anche quelli privati del proprietario. Una nota privata in un progetto condiviso non diventa
+  documento («Apri come documento» lo rifiuta).
+- *Niente cicli, niente perdite*: dopo ogni scrittura il server esporta il testo del documento e lo tiene in
+  `drive_file/{progetto}_{file}` con `modifiedTime` (la «versione precedente» per il passo 3). Prima di riscrivere un
+  documento della copia guarda se `modifiedTime` è cambiato: se il testo è ancora quello scritto dall'app lo riscrive, se
+  qualcuno l'ha cambiato su Drive **non lo sovrascrive** finché quella modifica non è stata letta (passo 3).
+- *«Apri come documento»* (foglio di lettura di una nota di un progetto, sintesi nella pagina del progetto): un Documento
+  Google nella cartella del progetto (creata se manca), con il testo della nota (riepilogo e trascrizione) o la sintesi;
+  la seconda volta si riapre lo stesso, che può essere stato cambiato. L'app apre la finestra al tocco (dopo, il telefono
+  la bloccherebbe) e ci manda il documento quando è pronto; senza finestra, un toast con «Apri».
+- *Foto*: le foto delle note della copia vanno nella sottocartella «Foto» (`AAAA-MM-GG Titolo (n).jpg`, al più 20 per
+  giro); una foto tolta dalla nota va nel cestino. Firestore (`journal_photos`) resta la fonte.
+Stato in `drive_cartelle/{progetto}` (sottocartelle, documenti della copia con hash e `modifiedTime`, foto, documenti
+aperti, `copiaAt`, `copiaInCorso`, `copiaAncora`) e `drive_file`, solo server.
+
 ## Integrazioni previste
 
 - **Note vocali** del diario (27/10): il telefono registra (components/registratore.js), la function `trascrivi` manda l'audio

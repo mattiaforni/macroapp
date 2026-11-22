@@ -201,6 +201,15 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Cartelle dei progetti su Drive (22/11): stato delle copie leggibili, delle foto e dei documenti (drive_cartelle, per
+    // progetto) e, per file, ciò che l'app ha scritto e il testo della versione precedente (drive_file): solo il server.
+    match /drive_cartelle/{id} {
+      allow read, write: if false;
+    }
+    match /drive_file/{id} {
+      allow read, write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

@@ -24,7 +24,7 @@ import { eliminaFotoDi } from "../../components/foto.js";
 import { apriProgetto, rigaTask } from "../task/index.js";
 import { elencoDocumenti } from "../../components/documenti.js";
 import { vaiA } from "../../core/router.js";
-import { bottoneDrive } from "../../core/cartelle.js";
+import { bottoneDrive, bottoneDocumento } from "../../core/cartelle.js";
 
 export const id = "progetto";
 export const title = "Progetto";
@@ -93,13 +93,14 @@ export function mount(container) {
   /** Foglio di lettura di una lezione: lo stesso del Diario. */
   function apriLezione(n) {
     apriLettura(n, {
+      perDocumento: progetto, // «Apri come documento» nella cartella del progetto (22/11)
       autore: autoreDi(n),
       modificata: ultimaModifica(n, casa),
       proposte: proposteDi(n),
       inAnalisi: inCorso.has(n.id),
       onModifica: (fuoco) => modifica(n, fuoco),
       onAnalizza: () => analizza(n.id),
-      onElimina: () => { remove(NOTE, n.id); eliminaFotoDi(n); toast("Nota eliminata"); },
+      onElimina: () => { remove(NOTE, n.id, { copia: n }); eliminaFotoDi(n); toast("Nota eliminata"); },
     });
   }
 
@@ -152,6 +153,7 @@ export function mount(container) {
     nodi.push(el("div.segmenti", { style: "padding-top:12px;align-items:center" },
       el("button.btn.btn--piatto", { onclick: () => apriSintesi(progetto) }, icon("matita"), "Modifica la sintesi"),
       progetto.sintesiStorico?.length ? el("button.btn.btn--piatto", { onclick: () => apriVersioni(progetto) }, icon("orologio"), "Versioni") : null,
+      bottoneDocumento(progetto), // la sintesi come Documento Google nella cartella (22/11)
       quando ? el("span.meta", {}, `aggiornata il ${quando.toLocaleDateString("it-IT", { day: "numeric", month: "long" })}`) : null));
     nodi.push(...documenti());
     return nodi;

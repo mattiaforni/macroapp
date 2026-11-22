@@ -95,6 +95,8 @@ per temi e si corregge dalla pagina del progetto (`modules/progetto`, `component
 (`condivisaCon`) se il progetto è condiviso; `visibilita` = quella a cui è allineata (il giro di `giroAvvisi` riallinea le
 altre), `persa` = nel cestino o tolta (un tocco su «Drive» la ricrea). La scrive solo la function `cartella` (le regole
 vietano all'app di crearla o cambiarla: il suo id dice al server dove scrivere con il permesso del proprietario).
+`copiaRichiesta?` (22/11): quando qualcosa del progetto è cambiato e la copia leggibile su Drive va rifatta; lo segnano
+l'app (core/cartelle.js) e l'analisi di una nota, `giroAvvisi` rifà le copie con `copiaRichiesta` dopo `drive_cartelle.copiaAt`.
 `documenti`: file di Google Drive collegati al progetto (`components/documenti.js`, dal foglio del progetto). Con le
 istruzioni, l'agente ne legge il testo come contesto quando analizza una nota (Documenti, Fogli e Presentazioni di Google
 esportati come testo, file di testo così come sono, PDF letti da Claude dal 14/11 (`drive_testi`); gli altri formati solo per
@@ -184,6 +186,19 @@ chiamata (incrementi), lo legge il proprietario (pagina Modelli AI).
 `ownerUid, fileId, nome, modifiedTime, testo, letto` — testo dei PDF di Drive collegati ai progetti, letto da Claude (Haiku) una
 volta per versione del file (`modifiedTime`) e dato all'agente come gli altri documenti. Solo server.
 
+## `drive_cartelle/{projectId}` (22/11)
+`ownerUid, projectId, sottocartelle: { copia, foto }, copie: { sintesi | AAAA-MM: { id, hash, modifiedTime } }, foto: { <id della
+foto>: { id } }, documenti: { sintesi | nota:<id>: { id, link, nome } }, copiaAt, copiaInCorso?, copiaAncora?` — stato della
+cartella del progetto su Drive: sottocartelle «Copia dall'app» e «Foto», documenti della copia leggibile (hash dell'HTML
+scritto, `modifiedTime` dopo la scrittura), foto caricate, documenti di «Apri come documento», ultima copia e blocco della
+copia in corso. Solo server (function `cartella`, `giroAvvisi`).
+
+## `drive_file/{projectId}_{fileId}` (22/11)
+`ownerUid, projectId, fileId, nome, ruolo: "copia" | "documento", chiave, modifiedTime, testo, daApp, letto` — un file della
+cartella del progetto che l'app ha scritto: `modifiedTime` e testo (esportato) subito dopo la scrittura. È la «versione
+precedente» con cui si riconoscono le modifiche fatte da altri su Drive (nessun ciclo: le scritture dell'app non tornano
+come novità). Solo server.
+
 ## `bank_connections/{uid}`
 `ownerUid, householdId, active, aspsp: { name, country }, sessionId, accounts: [{ uid, name, product, details, currency, type, ibanMask, idMask }], accountIds, consentExpiresAt, linkedAt, unlinkedAt, lastSyncAt, lastAttemptAt, lastSyncCreated, lastError, needsRenewal, sessionStatus, sessionEndedAt?, scartati: [{ key, giorno, descrizione, importo, conto, motivo }], lettura: { conti: [{ uid, conto, tipo, letti, stati, ultimo, ultimi: [{ key, giorno, contabilizzato, verso, stato, importo, descrizione, esito }] }], inAttesa: [{ giorno, descrizione, importo, conto, stato }] }, pending?: { state, authorizationId, aspsp, startedAt }`
 Scritta solo dalla function `bank` e da `syncBank`. Il client legge solo la propria (la pagina Banca la segue in tempo reale). `pending` c'è tra l'avvio del consenso e il ritorno dalla banca: lo `state` serve a riconoscere il ritorno. `ibanMask` = prime due e ultime quattro cifre dell'IBAN; `idMask` = ultime quattro dell'altro identificativo (carte senza IBAN). `name` con alcune banche (Intesa) è l'intestatario: la pagina nomina il conto da `product`, `details` o `type` (`cash_account_type`). `lastSyncAt` = ultima lettura riuscita, `lastAttemptAt` = ultimo tentativo. `needsRenewal`: la banca ha chiuso il consenso prima di `consentExpiresAt` (Enable Banking risponde `EXPIRED_SESSION`); `syncBank` salta il collegamento finché `concludi` non lo rinnova; `sessionStatus` è lo stato della sessione secondo `GET /sessions/{id}` (`EXPIRED`, `REVOKED`, …), `sessionEndedAt` quando ce ne siamo accorti. `appId`/`privateKey` (credenziali proprie del collegamento) sono previsti ma non usati.
@@ -209,6 +224,7 @@ in che giorno è partito l'ultimo riepilogo del mattino.
 - `prodotti`: lettura per chi è autenticato, scrittura solo dal server
 - `avvisi_stato`, `google_tokens`, `off_account`, `drive_testi`: solo il server
 - `projects.cartella`: solo il server (l'app non la mette in un progetto nuovo né la cambia)
+- `drive_cartelle`, `drive_file`: solo il server
 - `domande`: solo del proprietario; `consumi`: lettura del proprietario, scrittura solo dal server
 
 ## Eventi di Google Calendar (non su Firestore)

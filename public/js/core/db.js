@@ -30,6 +30,15 @@ function eventoModifica(coll, data, prima) {
   return null;
 }
 
+// Chi vuole sapere delle scritture dell'app (22/11: core/cartelle.js, la copia del progetto su Drive) si registra qui:
+// fn(coll, id, dati, tipo, copia) con tipo «crea» | «modifica» | «elimina» e, per «elimina», la copia del documento se
+// chi elimina l'ha data. Un errore di chi ascolta non ferma la scrittura.
+const scritture = new Set();
+export function suScrittura(fn) { scritture.add(fn); return () => scritture.delete(fn); }
+function avvisaScrittura(coll, id, dati, tipo, copia = null) {
+  for (const fn of scritture) { try { fn(coll, id, dati || {}, tipo, copia); } catch (e) { console.warn("suScrittura", e); } }
+}
+
 function base(visibility) {
   return {
     ownerUid: session.user.uid,
@@ -50,6 +59,7 @@ export function create(coll, data, visibility = VIS.SHARED) {
   const saved = setDoc(ref, { ...base(visibility), ...data });
   saved.catch((e) => console.error(`create(${coll})`, e));
   if (visibility === VIS.SHARED && AVVISI_NUOVI.has(coll)) saved.then(() => segnala(coll, ref.id, "nuovo"), () => {});
+  avvisaScrittura(coll, ref.id, data, "crea");
   return { id: ref.id, saved };
 }
 
@@ -68,6 +78,7 @@ export async function createWithId(coll, id, data, visibility = VIS.SHARED) {
  */
 export function update(coll, id, data, { prima = null } = {}) {
   const evento = eventoModifica(coll, data, prima);
+  avvisaScrittura(coll, id, data, "modifica");
   return updateDoc(doc(db, coll, id), { ...data, updatedAt: serverTimestamp() })
     .then(() => { if (evento) segnala(coll, id, evento, prima ? { prima } : {}); })
     .catch((e) => console.error(`update(${coll})`, e));
@@ -75,9 +86,11 @@ export function update(coll, id, data, { prima = null } = {}) {
 
 /**
  * Elimina un documento. `copia` (facoltativo, per le spese condivise): il documento come era, perché la notifica
- * all'altra persona possa dire cosa è stato eliminato (dopo, il server non lo trova più).
+ * all'altra persona possa dire cosa è stato eliminato (dopo, il server non lo trova più). Per note e task la usa anche
+ * la copia del progetto su Drive (core/cartelle.js), per sapere di quale progetto erano.
  */
 export function remove(coll, id, { copia = null } = {}) {
+  avvisaScrittura(coll, id, null, "elimina", copia);
   return deleteDoc(doc(db, coll, id))
     .then(() => {
       if (coll === "expenses" && copia?.visibility === VIS.SHARED) {

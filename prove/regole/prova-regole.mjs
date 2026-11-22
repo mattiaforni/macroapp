@@ -231,11 +231,19 @@ await caso("domande: sempre private, e nessuno ne cambia proprietario, casa o vi
   await si(getDocs(query(collection(db(mA), "domande"), where("ownerUid", "==", mA))));
   await si(deleteDoc(doc(db(mA), "domande", "domandaM")));
 });
-await caso("google_tokens, avvisi_stato, drive_testi: solo il server", async () => {
+await caso("google_tokens, avvisi_stato, drive_testi, drive_cartelle, drive_file: solo il server", async () => {
   await no(getDoc(doc(db(mA), "google_tokens", mA)));
   await no(setDoc(doc(db(mA), "google_tokens", mA), { refreshToken: "x" }));
   await no(getDoc(doc(db(mA), "avvisi_stato", A)));
   await no(getDoc(doc(db(mA), "drive_testi", `${mA}_file`)));
+  await no(getDoc(doc(db(mA), "drive_cartelle", "tennis")));
+  await no(setDoc(doc(db(mA), "drive_cartelle", "tennis"), { ownerUid: mA, copie: {} }));
+  await no(getDoc(doc(db(mA), "drive_file", "tennis_f1")));
+  await no(setDoc(doc(db(mA), "drive_file", "tennis_f1"), { ownerUid: mA, testo: "x" }));
+});
+await caso("la richiesta di copia su Drive (copiaRichiesta) la segnano tutti e due sul progetto condiviso", async () => {
+  await si(updateDoc(doc(db(gA), "projects", "tennis"), { copiaRichiesta: serverTimestamp() }));
+  await no(updateDoc(doc(db(bB), "projects", "tennis"), { copiaRichiesta: serverTimestamp() }));
 });
 await caso("una collezione non prevista è chiusa", async () => {
   await no(getDoc(doc(db(mA), "qualcosa", "x")));

@@ -12,7 +12,7 @@
 import { el, icon, toast, fascia, vuoto, attesa, sceltaVisibilita, sceltaColore, fmtDate, meseBreve, isoGiorno, toDate, fab, pillolaProgetto } from "../../core/ui.js";
 import { create, update, remove, watchVisible, readVisible, VIS } from "../../core/db.js";
 import { allineaProgetto } from "../../core/note.js";
-import { cartellaPerNuovo, allineaCartella, bottoneDrive } from "../../core/cartelle.js";
+import { cartellaPerNuovo, allineaCartella, bottoneDrive, toccaProgetto } from "../../core/cartelle.js";
 import { session } from "../../core/auth.js";
 import { openSheet, campo } from "../../components/sheet.js";
 import { sceltaPersone } from "../../components/persone.js";
@@ -150,14 +150,17 @@ export async function apriTask(esistente = null, prefill = {}, progettiNoti = nu
           ...modiDiContatto(p).filter((m) => m.canale !== "sms").map((m) => linkContatto(m, p.name, "a.pillola")))),
       campo("Note", nota),
       esistente ? el("div.foglio__piede", {},
-        el("button.btn.btn--pericolo", { onclick: () => { remove(TASKS, esistente.id); sheet.close(); toast("Task eliminato"); } }, icon("cestino"), "Elimina"),
+        el("button.btn.btn--pericolo", { onclick: () => { remove(TASKS, esistente.id, { copia: esistente }); sheet.close(); toast("Task eliminato"); } }, icon("cestino"), "Elimina"),
       ) : null,
     ],
     onConfirm: () => {
       const text = testo.value.trim();
       if (!text) { testo.focus(); return false; }
       const dati = { text, projectId, due: due || null, ...persone.valore(visibility), note: nota.value.trim() };
-      if (esistente) update(TASKS, esistente.id, { ...dati, visibility });
+      if (esistente) {
+        update(TASKS, esistente.id, { ...dati, visibility });
+        if (esistente.projectId && esistente.projectId !== projectId) toccaProgetto(esistente.projectId); // copia su Drive del progetto di prima
+      }
       else create(TASKS, { ...dati, done: false }, visibility);
     },
   });

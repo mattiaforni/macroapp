@@ -166,7 +166,7 @@ async function contribuisciFinto(data = {}) {
   return { data: { scheda: { ...scheda, ean: data.ean, letto: Date.now() }, campi: Object.keys(c), avvisi: [], aggiornata: true } };
 }
 
-// Function `cartella` finta (22/11): come il server (functions/src/google/cartelle.js), scrive projects/{id}.cartella; la
+// Function `cartella` finta (22/11): come il server (functions/src/google/cartelle.js e copia.js), scrive projects/{id}.cartella; la
 // cartella è condivisa con «giulia@example.com» se il progetto è condiviso. Tiene le chiamate (sessionStorage
 // «finto.cartelle») per la prova; `finto.cartelle.errore` = un motivo da restituire una volta (es. «cartelle»).
 async function cartellaFinta(data = {}) {
@@ -182,6 +182,16 @@ async function cartellaFinta(data = {}) {
   const p = coll("projects").get(data.projectId);
   if (!p) throw Object.assign(new Error("Progetto non trovato"), { code: "functions/not-found", details: { motivo: "progetto" } });
   if (data.azione === "allinea" && !p.cartella?.id) return { data: { cartella: null } };
+  // Copia leggibile (passo 2): il server rifà i documenti; qui solo la chiamata, tenuta per la prova.
+  if (data.azione === "copia") return { data: p.cartella?.id ? { inCorso: false, scritti: 1, tenuti: 0, foto: 0 } : { cartella: null } };
+  // «Apri come documento»: un Documento Google nella cartella, lo stesso la seconda volta.
+  if (data.azione === "documento") {
+    const chiave = data.entryId || "sintesi";
+    const fatti = JSON.parse(sessionStorage.getItem("finto.documenti") || "[]");
+    const nuovo = !fatti.includes(`${data.projectId}-${chiave}`);
+    sessionStorage.setItem("finto.documenti", JSON.stringify([...new Set([...fatti, `${data.projectId}-${chiave}`])]));
+    return { data: { link: `https://docs.google.com/document/d/doc-${data.projectId}-${chiave}/edit`, nome: chiave === "sintesi" ? `Sintesi di ${p.name}` : "Nota", nuovo } };
+  }
   const id = p.cartella?.id || `cartella-${data.projectId}`;
   p.cartella = { id, link: `https://drive.google.com/drive/folders/${id}`, nome: p.name, ownerUid: p.ownerUid, condivisaCon: p.visibility === "shared" ? "giulia@example.com" : null };
   notify();
