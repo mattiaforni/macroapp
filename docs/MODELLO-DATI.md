@@ -110,7 +110,8 @@ nome): `functions/src/google/drive.js`.
 `people` è la copia in chiaro dei nomi: serve a chi non vede la voce in rubrica (voce privata dell'altro membro) e ai task vecchi, che avevano solo il testo.
 
 ## `journal_entries`
-`text, titolo?, titoloAMano?, persone?: [{ nome, voceId?, googleId? }], personeAMano?, projectId?, riepilogo?, temi?: [string], riepilogoAt?, analyzed, analyzedAt, analysisError, analisi?, modello?, sintesiEsito?, avvisaAFine?, foto?: [{ id, w, h }]` — `private` (solo
+`text, titolo?, titoloAMano?, persone?: [{ nome, voceId?, googleId? }], personeAMano?, projectId?, riepilogo?, temi?: [string], riepilogoAt?, analyzed, analyzedAt, analysisError, analisi?, modello?, sintesiEsito?, avvisaAFine?, foto?: [{ id, w, h }], fonte?: { tipo: "drive" | "chat", fileId?, nome?, link? }`
+(`fonte`, 22/11: la nota viene da una proposta da Drive o dalla chat di claude.ai) — `private` (solo
 il proprietario), tranne le note di un progetto condiviso, che dal 7/11 sono `shared` come il progetto (i membri della casa le
 leggono, le modificano, le rianalizzano e le eliminano; la visibilità la cambia solo il proprietario, e nessuno cambia `ownerUid`
 o `householdId`). `modificataDa`, `modificataAt`: chi ha salvato l'ultima modifica a mano dal foglio della nota (non l'analisi),
@@ -151,7 +152,12 @@ parte): se diventano tante, la strada è Storage con gli stessi campi.
 confermati prima del 26/10, quando l'agente proponeva ancora il tipo `note`). Nessuna pagina li mostra.
 
 ## `proposals`
-`kind: "task"|"shopping_item"|"expense"|"manual_entry"|"event"|"event_update"|"draft"|"project_summary"|"task_done"|"task_due"|"note", source: "agent"|"bank"|"share"|"chiedi", status: "pending"|"accepted"|"rejected"|"discarded", payload, summary, decidedBy, sourceEntryId, domandaId?, turno?`
+`kind: "task"|"shopping_item"|"expense"|"manual_entry"|"event"|"event_update"|"draft"|"project_summary"|"task_done"|"task_due"|"journal_entry"|"note", source: "agent"|"bank"|"share"|"chiedi"|"drive"|"mcp", status: "pending"|"accepted"|"rejected"|"discarded", payload, summary, decidedBy, sourceEntryId, domandaId?, turno?, projectId?, driveFile?`
+Da Drive (22/11, `source: "drive"`, functions/src/google/novita.js): `projectId` (la proposta compare in cima alla pagina del
+progetto), `driveFile: { id, nome, link }` (il file cambiato), `ownerUid` = proprietario del progetto, visibilità del progetto.
+`journal_entry` (22/11; payload `projectId, titolo, text, giorno "AAAA-MM-GG", analizza, fonte?: { tipo, fileId?, nome?, link? }`):
+una nota del diario da aggiungere («Avanzamento da Drive», o una nota proposta dalla chat di claude.ai); confermata entra con
+la visibilità del suo progetto, nel suo giorno, `titoloAMano` se ha un titolo; con `analizza` poi la legge l'agente.
 Cosa fa la conferma, tipo per tipo: `APPLICA` in `public/js/components/proposals.js`. Le proposte dell'agente compaiono sotto la nota del diario da cui nascono; rianalizzare una nota sostituisce quelle ancora in attesa.
 `project_summary` (payload `projectId, projectName, sintesi, prima`): confermata scrive `projects.sintesi`; una nuova proposta di sintesi dello stesso progetto sostituisce quella in attesa. `note` non viene più proposto.
 `event` (payload `text, due "AAAA-MM-GG", time "HH:MM" o vuoto = tutto il giorno, place`): confermata crea l'evento nel
@@ -194,10 +200,12 @@ scritto, `modifiedTime` dopo la scrittura), foto caricate, documenti di «Apri c
 copia in corso. Solo server (function `cartella`, `giroAvvisi`).
 
 ## `drive_file/{projectId}_{fileId}` (22/11)
-`ownerUid, projectId, fileId, nome, ruolo: "copia" | "documento", chiave, modifiedTime, testo, daApp, letto` — un file della
-cartella del progetto che l'app ha scritto: `modifiedTime` e testo (esportato) subito dopo la scrittura. È la «versione
-precedente» con cui si riconoscono le modifiche fatte da altri su Drive (nessun ciclo: le scritture dell'app non tornano
-come novità). Solo server.
+`ownerUid, projectId, fileId, nome, ruolo: "copia" | "documento" | "cartella" | "collegato", chiave, modifiedTime, testo, daApp, letto, analisi?: { inCorso?, fatta?, proposte?, modello?, versione?, errori?, errore? }`
+— un file della cartella del progetto (o collegato al progetto): la versione che l'app conosce, cioè `modifiedTime` e testo
+subito dopo una scrittura dell'app (`daApp: true`) o dopo che il controllo delle novità l'ha letta (`daApp: false`). È la
+«versione precedente» con cui si trova la parte nuova (passo 3) e si riconoscono le modifiche fatte da altri (nessun ciclo:
+le scritture dell'app non tornano come novità). `analisi`: lettura in corso (una alla volta per file), esito, tentativi
+falliti sulla stessa versione (al più 3). Solo server.
 
 ## `bank_connections/{uid}`
 `ownerUid, householdId, active, aspsp: { name, country }, sessionId, accounts: [{ uid, name, product, details, currency, type, ibanMask, idMask }], accountIds, consentExpiresAt, linkedAt, unlinkedAt, lastSyncAt, lastAttemptAt, lastSyncCreated, lastError, needsRenewal, sessionStatus, sessionEndedAt?, scartati: [{ key, giorno, descrizione, importo, conto, motivo }], lettura: { conti: [{ uid, conto, tipo, letti, stati, ultimo, ultimi: [{ key, giorno, contabilizzato, verso, stato, importo, descrizione, esito }] }], inAttesa: [{ giorno, descrizione, importo, conto, stato }] }, pending?: { state, authorizationId, aspsp, startedAt }`

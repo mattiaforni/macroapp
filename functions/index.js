@@ -598,11 +598,12 @@ export const syncBank = onSchedule(
 /**
  * Avvisi a orario, ogni 5 minuti: eventi nuovi nel calendario della casa, promemoria degli eventi, riepilogo
  * del mattino alle 7:30. Legge Google Calendar con il permesso di ciascuno (GOOGLE_OAUTH_CLIENT per rinnovarlo).
- * Dal 22/11 anche le cartelle dei progetti su Drive da riallineare (src/google/cartelle.js → giroCartelle).
+ * Dal 22/11 anche le cartelle dei progetti su Drive: da riallineare (src/google/cartelle.js → giroCartelle), copie
+ * leggibili rimaste indietro (copia.js → giroCopie), novità nelle cartelle da leggere con l'AI (novita.js → giroNovita).
  * Vedi src/avvisi-calendario.js.
  */
 export const giroAvvisi = onSchedule(
-  { schedule: "every 5 minutes", timeZone: "Europe/Rome", secrets: [GOOGLE_OAUTH_CLIENT], timeoutSeconds: 240, memory: "256MiB", retryCount: 0 },
+  { schedule: "every 5 minutes", timeZone: "Europe/Rome", secrets: [GOOGLE_OAUTH_CLIENT, ANTHROPIC_API_KEY], timeoutSeconds: 300, memory: "512MiB", retryCount: 0 },
   async () => {
     const db = await getDb();
     const { giroAvvisi: giro } = await import("./src/avvisi-calendario.js");
@@ -617,6 +618,10 @@ export const giroAvvisi = onSchedule(
       const { giroCopie } = await import("./src/google/copia.js");
       const c = await giroCopie(db, { client: clientGoogle(), tokenServer });
       if (c) console.log(`giroAvvisi: ${c} copie rifatte`);
+      // Drive → app (passo 3): file della cartella nuovi o cambiati e fermi da 30 minuti → proposte da confermare.
+      const { giroNovita } = await import("./src/google/novita.js");
+      const nv = await giroNovita(db, { client: clientGoogle(), tokenServer, key: ANTHROPIC_API_KEY.value().trim() });
+      if (nv.letti) console.log(`giroAvvisi: ${nv.letti} file letti da Drive, ${nv.proposte} proposte`);
     } catch (err) { console.warn("giroAvvisi: cartelle", String(err.message).slice(0, 160)); }
   },
 );

@@ -6,7 +6,7 @@
 // consumi/{uid}_{AAAAMM} = { ownerUid, mese: "AAAA-MM", claude: { usd, chiamate }, gemini: { usd, chiamate },
 //   voci: { <voce>: { usd, chiamate, ingresso, uscita } }, aggiornato }
 // Voci: note (analisi delle note semplici), progetti (note dei progetti con istruzioni), chiedi, settimana (revisione
-// della domenica), pdf (testo dei PDF di Drive), trascrizione.
+// della domenica), pdf (testo dei PDF di Drive), trascrizione, drive (22/11: novità nelle cartelle dei progetti).
 import { FieldValue } from "firebase-admin/firestore";
 
 // $ per milione di token: [ingresso, uscita, lettura dalla cache]. Novembre 2026.

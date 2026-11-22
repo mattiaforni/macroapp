@@ -7,6 +7,8 @@ import assert from "node:assert/strict";
 import { dbFinto, driveFinto } from "./finti.mjs";
 import { gestisci, giroCartelle, RADICE } from "../src/google/cartelle.js";
 import { giroCopie, htmlDaTesto, normalizzaTesto } from "../src/google/copia.js";
+import { giroNovita, differenze, FERMO_MS } from "../src/google/novita.js";
+import { strumentiDi } from "../src/chiedi.js";
 
 const D = driveFinto();
 globalThis.fetch = D.fetch;
@@ -229,3 +231,123 @@ assert.equal(htmlDaTesto("## Dritto\nStato: migliora\nAcquisito:\n- Racchetta **
 assert.equal(normalizzaTesto("* uno\n\n  - due  \r\n"), normalizzaTesto("uno\ndue"));
 
 console.log("prova-drive: copia leggibile, foto e «Apri come documento» a posto");
+
+// ───────────── Passo 3: Drive → app ─────────────
+const DOCG = "application/vnd.google-apps.document";
+const richieste = [];
+let risposta = null;
+// Un Claude finto: tiene la richiesta e risponde con `risposta` (o con niente da proporre).
+const chiedi = async (o) => {
+  richieste.push(o);
+  o.onUso?.({ input_tokens: 1000, output_tokens: 200 }, "claude-finto");
+  return risposta || { riassunto: "", nota: { titolo: "", testo: "" }, sintesi: "", task: [], task_fatti: [] };
+};
+const giro = (dopo) => giroNovita(db, { ...opz, key: "chiave-finta", chiedi, adesso: dopo });
+const proposteDrive = () => Object.values(DATI.proposals || {}).filter((x) => x.source === "drive");
+const ultimoCambio = () => Math.max(...[...D.files.values()].map((f) => Date.parse(f.modifiedTime)));
+
+// 0. Le differenze: solo le righe nuove o tolte, con una riga di contesto.
+const df = differenze("## Spiaggia\n- Ombrellone\n- Lettini", "## Spiaggia\n- Ombrellone\n- Lettini\n- Cabina\n\n## Pranzo\n- Panini");
+assert.equal(df.testo, "  - Lettini\n+ - Cabina\n+ ## Pranzo\n+ - Panini");
+assert.equal(differenze("a\nb", "a\nb").testo, "", "nessuna differenza");
+
+// 1. Il documento della copia cambiato a mano nel passo 2 e un file nuovo messo da Mattia nella cartella: niente finché
+// non sono fermi da 30 minuti; le copie scritte dall'app non tornano come novità.
+const prog = D.aggiungiAMano({ name: "Programma estate", mimeType: DOCG, parents: [cartellaMare] }, "mattia@example.com", "Programma dell'estate\nPrenotare il bagno Marino entro maggio\nIl bagno è prenotato");
+assert.equal((await giro(ultimoCambio() + 10 * 60e3)).letti, 0, "dieci minuti dopo: niente");
+assert.equal(richieste.length, 0);
+risposta = { riassunto: "Nuovo programma", nota: { titolo: "Programma dell'estate", testo: "Scritto il programma: bagno Marino da prenotare entro maggio." },
+  sintesi: DATI.projects.casa.sintesi + "\n- Bagno Marino", task: [{ text: "Prenotare il bagno Marino", due: "2027-05-31", people: "" }], task_fatti: ["t1"] };
+const e1 = await giro(ultimoCambio() + FERMO_MS + 1000);
+assert.equal(e1.letti, 2, "il file nuovo e la copia cambiata a mano");
+assert.equal(richieste.length, 2);
+const rNuovo = richieste.find((r) => /Programma estate/.test(r.user));
+assert.match(rNuovo.user, /\+ Prenotare il bagno Marino entro maggio/, "un file nuovo si legge tutto");
+assert.match(rNuovo.system, /è nuovo/);
+assert.match(rNuovo.system, /\[t1\] Prenotare il bagno/, "i task aperti del progetto, con il codice");
+assert.doesNotMatch(rNuovo.system, /Segreto/, "niente task privati in un progetto condiviso");
+assert.equal(rNuovo.model, "haiku", "differenza piccola: Haiku");
+const rCopia = richieste.find((r) => /Note 2026-11/.test(r.user));
+assert.match(rCopia.system, /copia leggibile del progetto/);
+assert.match(rCopia.user, /\+ Appunti miei aggiunti a mano/);
+assert.doesNotMatch(rCopia.user, /^\+ .*Prezzi/m, "della copia solo ciò che è cambiato");
+const pd = proposteDrive();
+assert.deepEqual([...new Set(pd.map((x) => x.kind))].sort(), ["journal_entry", "project_summary", "task", "task_done"]);
+for (const x of pd) {
+  assert.equal(x.status, "pending");
+  assert.equal(x.projectId, "casa");
+  assert.equal(x.visibility, "shared", "con la visibilità del progetto");
+  assert.equal(x.ownerUid, "io", "del proprietario del progetto");
+  assert.ok(x.driveFile?.id);
+}
+const notaProposta = pd.find((x) => x.kind === "journal_entry");
+assert.equal(notaProposta.payload.titolo, "Programma dell'estate");
+assert.equal(notaProposta.payload.analizza, false);
+assert.equal(notaProposta.payload.fonte.tipo, "drive");
+assert.equal(pd.filter((x) => x.kind === "project_summary").length, 1, "una sola sintesi in attesa per progetto");
+assert.equal(pd.find((x) => x.kind === "task_done").payload.taskId, "t1", "il codice diventa l'id del task");
+assert.equal(pd.filter((x) => x.kind === "task_done").length, 1, "due file dicono lo stesso task fatto: una proposta sola");
+assert.equal(pd.filter((x) => x.kind === "task").length, 1, "niente task doppi");
+assert.ok(DATI.consumi && Object.keys(DATI.consumi).some((k) => k.startsWith("io_")), "costi al proprietario");
+
+// 2. Di nuovo: niente (stessa versione). Una riga aggiunta al programma: solo quella va all'agente.
+risposta = null;
+assert.equal((await giro(ultimoCambio() + FERMO_MS + 2000)).letti, 0);
+D.modificaAMano(prog.id, "mattia@example.com", testo(prog) + "\nComprare la crema solare");
+await giro(ultimoCambio() + FERMO_MS + 1000);
+const rRiga = richieste[richieste.length - 1];
+assert.match(rRiga.user, /\+ Comprare la crema solare/);
+assert.doesNotMatch(rRiga.user, /\+ Prenotare il bagno/, "la parte vecchia non si rilegge");
+assert.match(rRiga.system, /SOLO le differenze/);
+
+// 3. Letta la modifica a mano della copia, la copia si può riscrivere: torna com'è nell'app.
+const notaCopia = [...D.files.values()].find((f) => f.name === "Note 2026-11 (novembre)");
+DATI.journal_entries.n2.text = "Ombrellone 30 euro al giorno.";
+await gestisci(db, "io", { azione: "copia", projectId: "casa" }, opz);
+assert.match(testo(notaCopia), /Ombrellone 30 euro/, "riscritta dopo che la modifica è stata letta");
+const dopoCopia = richieste.length;
+await giro(ultimoCambio() + FERMO_MS + 1000);
+assert.equal(richieste.length, dopoCopia, "la riscrittura dell'app non torna come novità");
+
+// 4. Un documento collegato a mano: la prima volta è solo il punto di partenza; poi le modifiche si leggono.
+const coll = D.aggiungiAMano({ name: "Preventivo bagno", mimeType: DOCG, parents: ["root"] }, "mattia@example.com", "Preventivo: 600 euro la stagione");
+DATI.projects.casa.documenti = [{ id: coll.id, nome: "Preventivo bagno", mime: DOCG, link: coll.webViewLink }];
+const prima4 = richieste.length;
+await giro(ultimoCambio() + FERMO_MS + 1000);
+assert.equal(richieste.length, prima4, "collegato: niente analisi la prima volta");
+assert.equal(DATI.drive_file[`casa_${coll.id}`].ruolo, "collegato");
+D.modificaAMano(coll.id, "mattia@example.com", "Preventivo: 600 euro la stagione\nSconto del 10% se si paga a marzo");
+await giro(ultimoCambio() + FERMO_MS + 1000);
+assert.match(richieste[richieste.length - 1].user, /\+ Sconto del 10%/);
+
+// 5. Senza il permesso del proprietario sui file dell'app la cartella non si guarda; un errore dell'AI si riprova al
+// massimo tre volte per versione.
+DATI.users.io.google.permessi.cartelle = false;
+D.modificaAMano(prog.id, "mattia@example.com", testo(prog) + "\nAltro");
+const prima5 = richieste.length;
+await giro(ultimoCambio() + FERMO_MS + 1000);
+assert.equal(richieste.length, prima5);
+DATI.users.io.google.permessi.cartelle = true;
+const rotto = async () => { throw new Error("Claude 529 overloaded"); };
+let t5 = ultimoCambio() + FERMO_MS + 1000;
+for (let i = 0; i < 5; i++) { await giroNovita(db, { ...opz, key: "k", chiedi: rotto, adesso: t5 }); t5 += 7 * 60e3; }
+assert.equal(DATI.drive_file[`casa_${prog.id}`].analisi.errori, 3, "tre tentativi, poi basta");
+
+console.log("prova-drive: novità da Drive a posto");
+
+// ───────────── Chiedi legge i documenti del progetto ─────────────
+const tokenPer = (u) => tokenServer(db, u);
+const { esegui: strumenti } = strumentiDi(db, { uid: "lei", hid: "casa", nomi: DATI.households.casa.memberNames, tokenPer });
+const elenco = await strumenti.documenti({ progetto: "casa in montagna" });
+const nomi = elenco.documenti.map((x) => x.nome).sort();
+assert.ok(nomi.includes("Programma estate") && nomi.includes("Preventivo bagno"), `cartella e collegati: ${nomi}`);
+assert.ok(!nomi.some((x) => /^Note 2026|Sintesi e da fare|\.jpg$/.test(x)), "non la copia dell'app né le foto");
+assert.ok(nomi.includes("2026-11-03 Prezzi"), "i documenti aperti dall'app sono documenti della cartella");
+const cod = elenco.documenti.find((x) => x.nome === "Preventivo bagno").codice;
+assert.match(cod, /^d\d+$/);
+assert.match((await strumenti.leggi_documento({ codice: cod })).testo, /Sconto del 10%/, "letto con il permesso del proprietario");
+assert.match((await strumenti.leggi_documento({ codice: "d99" })).errore, /Codice sconosciuto/);
+assert.match((await strumenti.documenti({ progetto: "Tennis" })).errore, /Nessun progetto/, "un progetto privato dell'altra persona non c'è");
+
+console.log("prova-drive: Chiedi e i documenti di Drive a posto");
+

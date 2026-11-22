@@ -173,15 +173,19 @@ export async function ricordaScritto(db, p, f, { ruolo, chiave, testo }) {
   });
 }
 
-/** Un documento dell'app è stato cambiato da qualcuno su Drive (testo diverso da quello scritto)? */
+/**
+ * Un documento dell'app è stato cambiato da qualcuno su Drive, con una modifica non ancora letta? La versione nota è in
+ * drive_file: quella scritta dall'app o quella già letta dal controllo delle novità (passo 3, novita.js). Se è cambiato
+ * ma il testo è uguale a quello noto, no.
+ */
 async function cambiatoAMano(db, token, p, st) {
   const meta = await seEsiste(token, st.id, CAMPI);
   if (!meta) return { perso: true };
   if (meta.modifiedTime === st.modifiedTime) return { meta, cambiato: false };
-  const scritto = (await db.collection(FILE).doc(`${p.id}_${st.id}`).get()).data();
-  if (scritto?.daApp === false) return { meta, cambiato: true }; // modifica già vista e non ancora letta (passo 3)
+  const noto = (await db.collection(FILE).doc(`${p.id}_${st.id}`).get()).data();
+  if (noto?.modifiedTime === meta.modifiedTime) return { meta, cambiato: false };
   const ora = await testoDoc(token, st.id);
-  return { meta, cambiato: normalizzaTesto(ora) !== normalizzaTesto(scritto?.testo || "") };
+  return { meta, cambiato: normalizzaTesto(ora) !== normalizzaTesto(noto?.testo || "") };
 }
 
 // ───────────── Copia leggibile e foto ─────────────

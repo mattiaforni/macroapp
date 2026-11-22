@@ -1302,6 +1302,42 @@ with sync_playwright() as p:
         pg.click(".schede a[href='#/diario']")
         pg.click("button.pillola >> text=Tutte")
 
+        # ── Proposte da Drive (22/11, passo 3): un file della cartella di Tennis cambiato → nella pagina del progetto ──
+        step[0] = "proposte da drive"
+        pg.evaluate(f"""() => {{
+          const F = window.__finto, hid = [...F.coll('households').keys()][0], pid = '{tennis_id}';
+          const base = {{ ownerUid: 'uid-test', householdId: hid, visibility: 'private', source: 'drive', status: 'pending', sourceEntryId: null,
+            projectId: pid, driveFile: {{ id: 'f9', nome: 'Programma allenamenti', link: 'https://docs.google.com/document/d/f9' }}, createdAt: new Date() }};
+          F.coll('proposals').set('drive1', {{ ...base, kind: 'journal_entry', summary: 'Avanzamento da Drive: Programma aggiornato',
+            payload: {{ projectId: pid, titolo: 'Programma aggiornato', text: 'Aggiunto il lavoro sul servizio in kick.', giorno: '2026-11-20', analizza: false,
+              fonte: {{ tipo: 'drive', fileId: 'f9', nome: 'Programma allenamenti', link: 'https://docs.google.com/document/d/f9' }} }} }});
+          F.coll('proposals').set('drive2', {{ ...base, kind: 'task', summary: 'Provare il servizio in kick',
+            payload: {{ text: 'Provare il servizio in kick', due: '', project: 'Tennis', people: '', visibilita: 'private' }} }});
+          F.notify();
+        }}""")
+        menu(pg, "Tennis")
+        pg.wait_for_selector("#page-title >> text=Tennis")
+        pg.wait_for_selector("#view .fascia >> text=Da confermare")
+        da_drive = pg.locator("#view .azione", has_text="Programma aggiornato")
+        assert "Nota · da Drive" in da_drive.locator(".testo > small").text_content(), da_drive.inner_text()
+        assert "da «Programma allenamenti»" in da_drive.inner_text()
+        assert "da «Programma allenamenti»" in pg.locator("#view .azione", has_text="Provare il servizio").inner_text()
+        da_drive.locator("button.nota__apri").click()
+        pg.wait_for_selector("#view .sintesi-proposta >> text=Aggiunto il lavoro sul servizio")
+        pg.wait_for_timeout(150)
+        shot(pg, "17k-progetto-da-drive")
+        da_drive.locator("button[aria-label='Conferma']").click()
+        pg.wait_for_selector("#toast >> text=Nota aggiunta a Tennis")
+        nuova_nota = pg.evaluate("[...window.__finto.coll('journal_entries')].map(([id, n]) => ({ id, ...n })).find((n) => n.titolo === 'Programma aggiornato')")
+        assert nuova_nota and nuova_nota["projectId"] == tennis_id and nuova_nota["analyzed"] and nuova_nota["titoloAMano"], nuova_nota
+        assert nuova_nota["fonte"]["tipo"] == "drive" and str(nuova_nota["createdAt"]).startswith("2026-11-20"), nuova_nota
+        pg.locator("#view .azione", has_text="Provare il servizio").locator("button[aria-label='Scarta']").click()
+        pg.wait_for_function("!document.querySelector('#view .fascia') || ![...document.querySelectorAll('#view .fascia')].some((f) => f.textContent.includes('Da confermare'))", timeout=4000)
+        # La nota confermata non resta per il resto della prova (i conteggi delle note di Tennis)
+        pg.evaluate(f"window.__finto.coll('journal_entries').delete('{nuova_nota['id']}'); window.__finto.notify()")
+        pg.click(".schede a[href='#/diario']")
+        pg.click("button.pillola >> text=Tutte")
+
         # ── Pillole dei progetti tornando al Diario filtrato (2/11, dal video di Mattia): un progetto senza
         # istruzioni ma con note (là LAMA) spariva riaprendo il Diario con il filtro su un altro progetto ──
         step[0] = "pillole del diario filtrato"

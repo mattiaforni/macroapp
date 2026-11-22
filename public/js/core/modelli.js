@@ -40,7 +40,7 @@ export function scegliModello(tipo, id) {
 export const CREDITI_MESE = 100; // $: crediti API inclusi nel piano Max (CLAUDE.md)
 export const VOCI_CONSUMO = [
   ["note", "Note semplici"], ["progetti", "Note dei progetti"], ["chiedi", "Chiedi"], ["settimana", "Revisione della settimana"],
-  ["pdf", "PDF dei progetti"], ["trascrizione", "Trascrizione (Gemini)"],
+  ["pdf", "PDF dei progetti"], ["drive", "Novità da Drive"], ["trascrizione", "Trascrizione (Gemini)"],
 ];
 export async function leggiConsumi(d = new Date()) {
   const mese = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;

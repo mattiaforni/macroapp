@@ -626,3 +626,18 @@ fila su sua richiesta, un passo per commit.
       prova.py (copia chiesta dopo la nota di Tennis, «Apri come documento» della sintesi e della nota con la finestra che
       riceve il documento).
 
+- [x] **Passo 3: Drive → app.** In `giroAvvisi` (ogni 5 minuti; ora fino a 300 s e con la chiave di Claude), per ogni
+      progetto con la cartella: elenco dei file con `modifiedTime` (cartella, «Copia dall'app», documenti collegati), nessun
+      token. Un file nuovo o cambiato e fermo da 30 minuti si legge una volta: l'agente riceve solo le differenze con la
+      versione precedente (`drive_file.testo`; un file nuovo tutto, un documento collegato visto la prima volta fa solo da
+      punto di partenza) e propone nota «Avanzamento da Drive», sintesi, task nuovi, task fatti (`src/google/novita.js`,
+      output strutturato, Haiku per le differenze piccole, voce `drive` nei consumi). Proposte `source: "drive"` con
+      `projectId` e il file, con la visibilità del progetto, senza doppioni; in cima alla pagina del progetto («Da
+      confermare») e in Proposte; tipo nuovo `journal_entry` (la nota entra nel suo giorno, già letta). Le scritture
+      dell'app non tornano (stesso `modifiedTime`); una correzione a mano della copia torna come proposta e poi la copia
+      si riscrive. Chiedi: strumenti `documenti` e `leggi_documento` (`src/google/documenti.js`), con il permesso del
+      proprietario del progetto o di chi chiede; la fonte apre il file. Prove: prova-drive.mjs (differenze, 30 minuti,
+      file nuovo intero, copia corretta a mano, una riga aggiunta → solo quella, la riscrittura dell'app non torna,
+      collegato come punto di partenza, permesso mancante, tre tentativi, doppioni, Chiedi) e prova.py (proposte da Drive
+      in cima a Tennis, nota confermata nel suo giorno, task scartato).
+

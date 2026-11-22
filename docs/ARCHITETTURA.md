@@ -315,6 +315,34 @@ dice al server dove scrivere con il permesso del proprietario. Prova senza rete:
 Stato in `drive_cartelle/{progetto}` (sottocartelle, documenti della copia con hash e `modifiedTime`, foto, documenti
 aperti, `copiaAt`, `copiaInCorso`, `copiaAncora`) e `drive_file`, solo server.
 
+**Drive → app (passo 3, `src/google/novita.js`).** In `giroAvvisi`, ogni 5 minuti, per ogni progetto con la cartella e con
+il permesso del proprietario: una chiamata a Drive elenca i file della cartella e della «Copia dall'app» con
+`modifiedTime` (niente token), più i documenti collegati a mano (`projects.documenti`, valgono come quelli della cartella).
+Per ogni file leggibile (Documenti, Fogli, Presentazioni, testo, PDF con Haiku) si confronta con `drive_file`:
+- stesso `modifiedTime` → niente (così le scritture dell'app non tornano: **niente cicli**);
+- nessuna traccia: un documento collegato fa solo da punto di partenza (lo legge già l'agente come contesto delle note); un
+  file nuovo nella cartella si legge tutto;
+- diverso → cambiato. Si legge quando è **fermo da 30 minuti** (`FERMO_MS`: Google Docs salva da solo mentre scrivi), una
+  volta per versione (transazione su `drive_file.analisi.inCorso`), al più 3 file per giro, al più 3 tentativi per versione
+  se l'AI non risponde.
+L'agente riceve **solo la parte nuova**: le differenze per righe con il testo della versione precedente (`differenze`, LCS;
+«+» righe nuove, «-» tolte, una riga di contesto), più sintesi, istruzioni e task aperti del progetto (codici [t1], tradotti
+nell'id dal server). Risponde con output strutturato: nota «Avanzamento da Drive» (titolo, testo; vuota se non c'è niente
+da ricordare), sintesi aggiornata (solo per i progetti con istruzioni o sintesi), task nuovi, task fatti. Se il file è un
+documento della copia cambiato a mano, il prompt lo dice: le correzioni tornano come proposte. Proposte in `proposals`
+con `source: "drive"`, `projectId`, `driveFile`, del proprietario del progetto e con la sua visibilità (un progetto
+condiviso: le vedono e le confermano tutti e due); niente doppioni con quelle in attesa dello stesso progetto, una sola
+sintesi in attesa. La versione letta diventa la «precedente» (`drive_file.testo`), così anche la copia si può di nuovo
+riscrivere. Modello: quello dell'agente per il progetto (`modelloPer` del proprietario), Haiku sotto 1.500 caratteri di
+differenze; costi in `consumi`, voce `drive`. Le proposte si vedono in cima alla pagina del progetto («Da confermare») e in
+Proposte; una nota confermata entra nel Diario del progetto con il suo giorno, già letta (`analyzed`), con `fonte`.
+
+**Chiedi legge Drive** (passo 3): strumenti `documenti` (i file della cartella di un progetto, senza la copia e le foto, e
+quelli collegati, con un codice [d1]) e `leggi_documento` (testo fino a 20.000 caratteri; i PDF solo se già letti, da
+`drive_file` o `drive_testi`), in `src/google/documenti.js`. Il progetto deve essere uno di quelli che la persona vede; si
+legge con il permesso del proprietario del progetto e, se non basta, con quello di chi chiede. Nella risposta la fonte
+«documento» apre il file su Drive.
+
 ## Integrazioni previste
 
 - **Note vocali** del diario (27/10): il telefono registra (components/registratore.js), la function `trascrivi` manda l'audio

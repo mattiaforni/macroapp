@@ -8,8 +8,13 @@
 //               ("note", l'appunto, non viene più proposto dall'agente; la conferma resta per quelle vecchie)
 //               | "event_update" (14/11, da Chiedi: payload { eventId, calId, serie, calendario, prima: { titolo, giorno,
 //               ora, luogo, tuttoIlGiorno }, nuovo: { titolo?, giorno?, ora?, luogo? } }: modifica o sposta un evento che c'è)
+//               | "journal_entry" (22/11: una nota del diario da aggiungere: payload { projectId, titolo, text, giorno, analizza,
+//               fonte? } — «Avanzamento da Drive», o una nota proposta dalla chat di claude.ai)
 //   source      "agent" | "bank" | "share" | "chiedi" (14/11: dalla risposta a una domanda, con domandaId e turno;
 //               sempre private come la domanda; payload.visibilita = visibilità della cosa da creare, task e manuale)
+//               | "drive" (22/11: un file della cartella del progetto cambiato, functions/src/google/novita.js; con
+//               `projectId` e `driveFile`, visibilità del progetto) | "mcp" (dalla chat di claude.ai, col connettore)
+//   projectId   (22/11) il progetto a cui si riferisce: la proposta compare nella sua pagina
 //   status      "pending" | "accepted" | "rejected"
 //   payload     i dati dell'azione (diversi per tipo, vedi APPLICA)
 //   summary     una riga che descrive l'azione
@@ -41,6 +46,7 @@ export const TIPI = {
   task_done: { nome: "Task fatto", icona: "spunta" },
   task_due: { nome: "Nuova scadenza", icona: "calendario" },
   event_update: { nome: "Evento modificato", icona: "calendario" },
+  journal_entry: { nome: "Nota", icona: "diario" },
 };
 
 /** Una proposta di Chiedi porta in `payload.visibilita` la visibilità della cosa da creare (la proposta è privata). */
@@ -147,6 +153,23 @@ const APPLICA = {
     await aggiornaEvento(ev, d);
     return n.giorno || n.ora ? "Evento spostato" : "Evento aggiornato";
   },
+  // Una nota del diario (22/11): «Avanzamento da Drive», o una nota (una lezione passata) proposta dalla chat di claude.ai.
+  // Entra con la visibilità del suo progetto e con il suo giorno; con `analizza` la legge poi l'agente come le altre.
+  async journal_entry(p) {
+    const x = p.payload || {};
+    const progetti = await readVisible("projects");
+    const pr = x.projectId ? progetti.find((q) => q.id === x.projectId) || null : null;
+    const { visibilitaNota } = await import("../core/note.js");
+    const vis = visibilitaNota(pr?.id || null, progetti);
+    const quando = /^\d{4}-\d{2}-\d{2}$/.test(x.giorno || "") ? new Date(`${x.giorno}T12:00:00`) : new Date();
+    const titolo = String(x.titolo || "").trim();
+    const r = create("journal_entries", {
+      text: x.text || "", ...(titolo ? { titolo, titoloAMano: true } : {}), projectId: pr?.id || null, createdAt: quando,
+      analyzed: !x.analizza, ...(x.analizza ? {} : { analyzedAt: new Date() }), ...(x.fonte ? { fonte: x.fonte } : {}),
+    }, vis);
+    if (x.analizza) import("../modules/diario/index.js").then(({ analizzaNota }) => analizzaNota(r.id, r.saved));
+    return pr ? `Nota aggiunta a ${pr.name}` : "Nota aggiunta al diario";
+  },
   // La sintesi proposta sostituisce quella del progetto (si legge e si corregge dal progetto).
   async project_summary(p) {
     const x = p.payload || {};
@@ -225,11 +248,23 @@ function sintesiProposta(x) {
   return el("div", {}, apri, corpo);
 }
 
+/** Il testo di una nota proposta, ripiegato come la sintesi. */
+function testoProposto(testo) {
+  const corpo = el("div.sintesi-proposta.nota__testo", { hidden: true }, testo || "");
+  const apri = el("button.nota__apri", { type: "button", "aria-expanded": "false", onclick: () => {
+    corpo.hidden = !corpo.hidden;
+    apri.setAttribute("aria-expanded", corpo.hidden ? "false" : "true");
+    apri.lastChild.textContent = corpo.hidden ? "Leggi" : "Nascondi";
+  } }, icon("giu"), "Leggi");
+  return el("div", {}, apri, corpo);
+}
+
 /** Il giorno di una proposta, se ne ha uno: la spesa (giorno del movimento), l'evento, la scadenza del task. */
 export function giornoDi(p) {
   const x = p.payload || {};
   if (p.kind === "expense") return toDate(x.date);
   if ((p.kind === "event" || p.kind === "task" || p.kind === "task_due") && /^\d{4}-\d{2}-\d{2}$/.test(x.due || "")) return new Date(`${x.due}T12:00:00`);
+  if (p.kind === "journal_entry" && /^\d{4}-\d{2}-\d{2}$/.test(x.giorno || "")) return new Date(`${x.giorno}T12:00:00`);
   const g = p.kind === "event_update" ? x.nuovo?.giorno || x.prima?.giorno : "";
   if (/^\d{4}-\d{2}-\d{2}$/.test(g || "")) return new Date(`${g}T12:00:00`);
   return null;
@@ -241,6 +276,7 @@ export function titoloDi(p) {
   if (p.kind === "expense") return x.description || x.text || String(p.summary || "").replace(/\s*·\s*[\d.,]+\s*€\s*$/, "") || "Spesa";
   if (p.kind === "event" || p.kind === "task" || p.kind === "task_done" || p.kind === "task_due") return x.text || p.summary || "";
   if (p.kind === "event_update") return x.nuovo?.titolo || x.prima?.titolo || p.summary || "";
+  if (p.kind === "journal_entry") return x.titolo || p.summary || "Nota";
   return p.summary || x.text || x.name || "";
 }
 
@@ -259,7 +295,10 @@ export function renderAzione(p) {
   if (p.kind === "task") dettagli = [x.project && `progetto ${x.project}`, x.people];
   if (p.kind === "event") dettagli = [x.time || "tutto il giorno", x.place];
   if (p.kind === "task_due") dettagli = [x.prima ? `era per il ${fmtDate(x.prima)}` : "era senza scadenza"];
-  if (p.kind === "task_done") dettagli = [p.source === "chiedi" ? "da segnare fatto" : "la nota dice che è fatto"];
+  if (p.kind === "task_done") dettagli = [p.source === "chiedi" || p.source === "mcp" ? "da segnare fatto" : p.source === "drive" ? "il documento dice che è fatto" : "la nota dice che è fatto"];
+  if (p.kind === "journal_entry") dettagli = [x.fonte?.nome ? `da «${x.fonte.nome}»` : "", x.analizza ? "l'agente la legge dopo" : ""];
+  // Da Drive (22/11): il file da cui nasce la proposta.
+  if (p.source === "drive" && p.driveFile?.nome && p.kind !== "journal_entry") dettagli.push(`da «${p.driveFile.nome}»`);
   if (p.kind === "event_update") {
     // L'orario nuovo (o quello che resta), il luogo, poi com'era: «era il 20 novembre alle 20:00», «era «Cena»».
     const pr = x.prima || {}, n = x.nuovo || {};
@@ -275,11 +314,12 @@ export function renderAzione(p) {
   return el("div.azione", { class: giorno ? "azione--giorno" : "" },
     giorno ? colonnaGiorno(giorno) : el("div.azione__icona", {}, icon(tipo.icona)),
     el("div.testo", {},
-      el("small", {}, tipo.nome, p.source === "bank" ? " · dalla banca" : "", p.visibility === VIS.SHARED ? " · condiviso" : ""),
+      el("small", {}, tipo.nome, p.source === "bank" ? " · dalla banca" : p.source === "drive" ? " · da Drive" : p.source === "mcp" ? " · dalla chat" : "", p.visibility === VIS.SHARED ? " · condiviso" : ""),
       el("b.azione__titolo", {}, titoloDi(p)),
       dettagli.length ? el("span.meta.azione__dettagli", {}, dettagli.join(" · ")) : null,
       p.kind === "draft" ? bozza(x) : null,
       p.kind === "project_summary" ? sintesiProposta(x) : null,
+      p.kind === "journal_entry" ? testoProposto(x.text) : null,
     ),
     importo,
     el("div.azione__scelte", {},

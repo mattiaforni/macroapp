@@ -77,6 +77,11 @@ const STRUMENTI = [
     input_schema: { type: "object", properties: { testo: { type: "string", description: "Parole da cercare (nome, categoria, note)." } }, required: ["testo"] } },
   { name: "lista", description: "La lista della spesa: cosa c'è da comprare e cosa si è comprato di recente.",
     input_schema: { type: "object", properties: {}, required: [] } },
+  // 22/11 (docs/PIANO-DRIVE-MCP.md): i documenti di Drive di un progetto, quelli della sua cartella e quelli collegati.
+  { name: "documenti", description: "I documenti di Google Drive di un progetto: quelli nella cartella del progetto (D&D/<progetto>) e quelli collegati a mano. Ritorna codice, nome, tipo e data di modifica; per leggerne uno usa leggi_documento.",
+    input_schema: { type: "object", properties: { progetto: { type: "string", description: "Nome del progetto." } }, required: ["progetto"] } },
+  { name: "leggi_documento", description: "Il testo di un documento di Drive di un progetto, dal suo codice (es. d2), trovato con lo strumento documenti.",
+    input_schema: { type: "object", properties: { codice: { type: "string" } }, required: ["codice"] } },
 ];
 
 // Lo strumento che propone (non nella revisione della settimana). Un'azione per chiamata; i campi che non servono a
@@ -103,6 +108,23 @@ const PROPONI = {
   }, required: ["tipo", "riassunto"] },
 };
 
+/**
+ * `proponi` per il connettore MCP di claude.ai (22/11): in più il tipo «nota», una nota del diario da aggiungere (anche
+ * una lezione passata, con il suo giorno: l'import dello storico dalle chat), che confermata l'agente legge come le altre.
+ */
+export const PROPONI_MCP = {
+  ...PROPONI,
+  description: "Propone un'azione nell'app «Debiti e Doveri»: compare tra le cose da confermare (pagina Proposte e, per un progetto, la sua pagina) e la persona la conferma con la spunta o la scarta: niente cambia senza di lei. Una chiamata per azione. Per un task da segnare fatto o da spostare e per un evento da modificare usa il codice trovato con gli strumenti task o eventi. Per una nota del diario (anche una lezione passata da importare) usa tipo «nota» con il testo, il giorno e il progetto.",
+  input_schema: { ...PROPONI.input_schema, properties: {
+    ...PROPONI.input_schema.properties,
+    tipo: { ...PROPONI.input_schema.properties.tipo, enum: [...PROPONI.input_schema.properties.tipo.enum, "nota"],
+      description: `${PROPONI.input_schema.properties.tipo.description} nota: una nota del diario (testo, titolo, giorno AAAA-MM-GG in cui è successo, progetto).` },
+    titolo: { type: "string", description: "nota: il titolo, una riga (facoltativo)." },
+    testo: { ...PROPONI.input_schema.properties.testo, description: `${PROPONI.input_schema.properties.testo.description} nota: il testo intero della nota.` },
+    progetto: { ...PROPONI.input_schema.properties.progetto, description: "task e nota: il nome di un progetto che c'è (facoltativo)." },
+  } },
+};
+
 /** Etichetta del passo, mostrata nell'app mentre si cerca. */
 function passoDi(nome, x = {}) {
   const tra = x.da && x.a ? ` dal ${x.da} al ${x.a}` : "";
@@ -115,6 +137,8 @@ function passoDi(nome, x = {}) {
     case "progetti": return x.progetto ? `Leggo la sintesi di ${x.progetto}` : "Guardo i progetti";
     case "manuale": return "Cerco nel manuale";
     case "lista": return "Guardo la lista della spesa";
+    case "documenti": return x.progetto ? `Guardo i documenti di ${x.progetto}` : "Guardo i documenti";
+    case "leggi_documento": return "Leggo un documento";
     case "proponi": return "Preparo un'azione da confermare";
     default: return "Cerco";
   }
@@ -123,14 +147,19 @@ function passoDi(nome, x = {}) {
 /**
  * Gli strumenti di una persona: ciascuno legge solo ciò che lei vede nell'app. `fonti` raccoglie i codici dati al
  * modello (n1, s2, t3…) → { tipo, id, titolo, sotto, link? }, per le fonti della risposta.
+ * `stabili` (connettore MCP, 22/11): ogni chiamata è a sé, quindi i codici portano l'id («n:<id>», «e:<calendario>|<id>»,
+ * «d:<progetto>|<file>») e un codice non visto in questa chiamata si ritrova dal database, sempre tra le cose che la
+ * persona vede. `conNota`: `proponi` accetta anche il tipo «nota».
  */
-export function strumentiDi(db, { uid, hid, nomi = {}, tokenGoogle = null, casa = {}, utente = {} }) {
+export function strumentiDi(db, { uid, hid, nomi = {}, tokenGoogle = null, tokenPer = null, casa = {}, utente = {}, stabili = false, conNota = false }) {
   const fonti = new Map();
   const conta = {};
+  const documentiVisti = new Map(); // codice → { f, p } (per leggi_documento)
   const taskVisti = new Map();   // id → task mostrato al modello (per task_fatto / task_scadenza)
   const eventiVisti = new Map(); // codice → evento mostrato al modello (per evento_modifica)
   const proposte = [];
   const codice = (lettera, fonte) => {
+    if (stabili) { const c = `${lettera}:${fonte.chiave || fonte.id}`; fonti.set(c, fonte); return c; }
     const gia = [...fonti.entries()].find(([, f]) => f.tipo === fonte.tipo && f.id === fonte.id);
     if (gia) return gia[0];
     conta[lettera] = (conta[lettera] || 0) + 1;
@@ -139,6 +168,14 @@ export function strumentiDi(db, { uid, hid, nomi = {}, tokenGoogle = null, casa 
     return c;
   };
   const chi = (u) => (u === uid ? "tu" : s(nomi[u]).split(" ")[0] || "l'altra persona");
+  const TIPO_CODICE = { n: "nota", t: "task", e: "evento", d: "documento", s: "spesa", v: "voce", p: "progetto" };
+  /** La fonte di un codice: vista in questa chiamata o, con i codici stabili, ricostruita dal codice stesso. */
+  const fonteDi = (c) => {
+    const k = s(c).replace(/[[\]\s]/g, "");
+    if (fonti.has(k)) return fonti.get(k);
+    const m = stabili ? /^([a-z]):(.+)$/.exec(k) : null;
+    return m && TIPO_CODICE[m[1]] ? { tipo: TIPO_CODICE[m[1]], id: m[2], chiave: m[2] } : null;
+  };
   /** Documenti propri e condivisi della casa, uniti per id. */
   async function visibili(coll, ordine, quanti = 500) {
     const [mie, casaQ] = await Promise.all([
@@ -184,7 +221,7 @@ export function strumentiDi(db, { uid, hid, nomi = {}, tokenGoogle = null, casa 
       return { trovate: out.length, su: candidate.length, note: out };
     },
     async leggi_nota({ codice: c }) {
-      const f = fonti.get(s(c));
+      const f = fonteDi(c);
       if (!f || f.tipo !== "nota") return { errore: "Codice sconosciuto: cerca prima la nota con cerca_note." };
       const n = (await note()).find((x) => x.id === f.id);
       if (!n) return { errore: "Nota non trovata." };
@@ -238,7 +275,7 @@ export function strumentiDi(db, { uid, hid, nomi = {}, tokenGoogle = null, casa 
       const lista = (await eventiTra(t.accessToken, calendariDi(casa, utente), inizio, fine)).filter((e) => !ps.length || punteggio(`${e.titolo} ${e.luogo}`, ps) > 0);
       oraDi = oraRoma;
       return { numero: lista.length, eventi: lista.slice(0, 60).map((e) => {
-        const c = codice("e", { tipo: "evento", id: e.id, titolo: e.titolo, sotto: `${e.giornoInizio}${e.tuttoIlGiorno ? "" : ` ${oraRoma(e.inizio).ora}`}`, calId: e.calId });
+        const c = codice("e", { tipo: "evento", id: e.id, chiave: `${e.calId}|${e.id}`, titolo: e.titolo, sotto: `${e.giornoInizio}${e.tuttoIlGiorno ? "" : ` ${oraRoma(e.inizio).ora}`}`, calId: e.calId });
         eventiVisti.set(c, e);
         return { codice: c, giorno: e.giornoInizio, ora: e.tuttoIlGiorno ? "tutto il giorno" : oraRoma(e.inizio).ora, titolo: e.titolo, luogo: e.luogo || "",
           calendario: e.casa ? "casa" : e.calNome, ...(e.modificabile ? {} : { si_modifica: "solo da Google Calendar" }) };
@@ -277,13 +314,13 @@ export function strumentiDi(db, { uid, hid, nomi = {}, tokenGoogle = null, casa 
           if (s(x.progetto) && !prog) return { errore: `Nessun progetto si chiama «${s(x.progetto)}»: lascialo vuoto o usa uno di quelli che ci sono.` };
           // Il task nasce con la visibilità del progetto; senza progetto, condiviso solo se riguarda la casa.
           const visibilita = prog ? (prog.visibility === "shared" ? "shared" : "private") : x.condivisa && hid ? "shared" : "private";
-          p = { kind: "task", payload: { text: testo.slice(0, 200), due: g, project: prog?.name || "", people: s(x.persone).slice(0, 200), note: s(x.note).slice(0, 1000), visibilita } };
+          p = { kind: "task", projectId: prog?.id || null, payload: { text: testo.slice(0, 200), due: g, project: prog?.name || "", people: s(x.persone).slice(0, 200), note: s(x.note).slice(0, 1000), visibilita } };
           break;
         }
         case "task_fatto":
         case "task_scadenza": {
-          const f = fonti.get(s(x.codice).replace(/[[\]\s]/g, ""));
-          const t = f?.tipo === "task" ? taskVisti.get(f.id) : null;
+          const f = fonteDi(x.codice);
+          const t = f?.tipo === "task" ? taskVisti.get(f.id) || (stabili ? (await visibili("tasks", "createdAt", 800)).find((y) => y.id === f.id) : null) : null;
           if (!t) return { errore: "Codice del task sconosciuto: cerca prima il task con lo strumento task e usa il suo codice." };
           if (t.done) return { errore: "Il task è già fatto." };
           if (tipo === "task_scadenza" && !g) return { errore: "task_scadenza: serve il giorno nuovo." };
@@ -318,7 +355,17 @@ export function strumentiDi(db, { uid, hid, nomi = {}, tokenGoogle = null, casa 
           break;
         case "evento_modifica": {
           const c = s(x.codice).replace(/[[\]\s]/g, "");
-          const e = fonti.get(c)?.tipo === "evento" ? eventiVisti.get(c) : null;
+          let e = fonti.get(c)?.tipo === "evento" ? eventiVisti.get(c) : null;
+          // Codice stabile (connettore): l'evento si rilegge da Google, solo se è di un calendario che la persona vede.
+          if (!e && stabili && fonteDi(c)?.tipo === "evento" && tokenGoogle) {
+            const [calId, eventId] = fonteDi(c).id.split("|");
+            try {
+              const t = await tokenGoogle();
+              const { calendariDi, eventoUno } = await import("./avvisi-calendario.js");
+              const cal = calendariDi(casa, utente).find((y) => y.id === calId);
+              if (cal && eventId) { e = await eventoUno(t.accessToken, cal, eventId); oraDi ||= (await import("./avvisi.js")).oraRoma; }
+            } catch (err) { e = null; }
+          }
           if (!e) return { errore: "Codice dell'evento sconosciuto: cerca prima l'evento con lo strumento eventi e usa il suo codice." };
           if (!e.modificabile) return { errore: `«${e.titolo}» non si modifica dall'app (${e.casa ? "è un invito o è bloccato" : `calendario ${e.calNome || "di un altro"}, in sola lettura`}): di' alla persona di cambiarlo da Google Calendar.` };
           const prima = { titolo: e.titolo, giorno: e.giornoInizio, ora: e.tuttoIlGiorno ? "" : oraDi(e.inizio).ora, luogo: e.luogo || "", tuttoIlGiorno: !!e.tuttoIlGiorno };
@@ -331,6 +378,16 @@ export function strumentiDi(db, { uid, hid, nomi = {}, tokenGoogle = null, casa 
           p = { kind: "event_update", payload: { eventId: e.id, calId: e.calId, serie: e.serie || "", calendario: e.casa ? "casa" : e.calNome || "", prima, nuovo } };
           break;
         }
+        case "nota": {
+          if (!conNota) return { errore: `Tipo sconosciuto: ${tipo}.` };
+          if (!testo) return { errore: "nota: manca il testo." };
+          const prog = s(x.progetto) ? await trovaProgetto(x.progetto) : null;
+          if (s(x.progetto) && !prog) return { errore: `Nessun progetto si chiama «${s(x.progetto)}»: lascialo vuoto o usa uno di quelli che ci sono.` };
+          // Confermata, la nota entra nel suo giorno con la visibilità del progetto, e la legge l'agente (riepilogo, sintesi).
+          p = { kind: "journal_entry", projectId: prog?.id || null, payload: { projectId: prog?.id || null, titolo: s(x.titolo).slice(0, 80), text: testo.slice(0, 20000),
+            giorno: g || giorno(new Date()), analizza: true, fonte: { tipo: "chat" } } };
+          break;
+        }
         default:
           return { errore: `Tipo sconosciuto: ${tipo}.` };
       }
@@ -338,6 +395,38 @@ export function strumentiDi(db, { uid, hid, nomi = {}, tokenGoogle = null, casa 
       if (proposte.some((q) => JSON.stringify([q.kind, q.payload]) === chiave)) return { ok: true, nota: "Già proposta." };
       proposte.push({ ...p, summary: riassunto });
       return { ok: true, nota: "Comparirà sotto la risposta: la persona la conferma o la scarta." };
+    },
+    // Documenti di Drive di un progetto che la persona vede (22/11): letti con il permesso Google del proprietario del
+    // progetto (la cartella sta nel suo Drive), o con quello di chi chiede se il proprietario non l'ha.
+    async documenti({ progetto = "" }) {
+      const p = await trovaProgetto(progetto);
+      if (!p) return { errore: `Nessun progetto si chiama «${progetto}».` };
+      const { elencoDocumenti } = await import("./google/documenti.js");
+      const r = await elencoDocumenti(db, p, { uid, tokenPer: tokenPer || (tokenGoogle ? () => tokenGoogle() : null) });
+      if (r.errore) return { errore: r.errore };
+      return { progetto: p.name, cartella: !!p.cartella?.id, documenti: r.documenti.slice(0, 40).map((f) => {
+        const c = codice("d", { tipo: "documento", id: f.id, chiave: `${p.id}|${f.id}`, titolo: f.nome, sotto: `${f.dove === "collegato" ? "collegato" : "cartella"} di ${p.name}`, link: f.link });
+        documentiVisti.set(c, { f, p });
+        return { codice: c, nome: f.nome, tipo: f.tipo, modificato: f.modificato, dove: f.dove };
+      }) };
+    },
+    async leggi_documento({ codice: c }) {
+      const k = s(c).replace(/[[\]\s]/g, "");
+      let v = documentiVisti.get(k);
+      // Codice stabile (connettore): progetto e file dal codice, e il file deve essere ancora tra quelli del progetto.
+      if (!v && stabili && fonteDi(k)?.tipo === "documento") {
+        const [pid, fid] = fonteDi(k).id.split("|");
+        const p = (await progetti()).find((y) => y.id === pid);
+        if (p) {
+          const { elencoDocumenti } = await import("./google/documenti.js");
+          const f = ((await elencoDocumenti(db, p, { uid, tokenPer: tokenPer || (tokenGoogle ? () => tokenGoogle() : null) })).documenti || []).find((y) => y.id === fid);
+          if (f) v = { f, p };
+        }
+      }
+      if (!v) return { errore: "Codice sconosciuto: cerca prima il documento con lo strumento documenti." };
+      const { testoDocumento } = await import("./google/documenti.js");
+      const r = await testoDocumento(db, v.p, v.f, { uid, tokenPer: tokenPer || (tokenGoogle ? () => tokenGoogle() : null) });
+      return r.errore ? { errore: r.errore } : { codice: k, nome: v.f.nome, testo: r.testo, ...(r.tagliato ? { nota: "Testo tagliato: il documento è più lungo." } : {}) };
     },
     async lista() {
       if (!hid) return { da_comprare: [], comprate_di_recente: [] };
@@ -368,7 +457,7 @@ Come scrivere:
 - In italiano, diretto, prima la risposta e poi il resto. Testo semplice: "- " per gli elenchi, "## " per i titoli solo
   se servono, **grassetto** di rado. Niente tabelle.
 - Date come «12 ottobre», importi in euro come «42,10 €».
-- Accanto a ogni affermazione che viene da una nota, una spesa, un task, un evento o una voce, il suo codice tra
+- Accanto a ogni affermazione che viene da una nota, una spesa, un task, un evento, una voce o un documento, il suo codice tra
   parentesi quadre, come appare nei risultati: [n3], [s12]. L'app li toglie dal testo e mostra le fonti sotto.
 - ${altro ? `Le note, le spese e i task condivisi possono essere di ${altro}: quando conta, dillo.` : "Le cose condivise possono essere dell'altra persona della casa."}${settimana ? `
 - Non cambi niente nell'app: è un resoconto.` : `
@@ -414,9 +503,9 @@ export function separaFonti(testo, fonti) {
  * strumento usato. Ritorna { risposta, fonti, proposte, modello, uso, giri }: `proposte` = [{ kind, payload, summary }]
  * (vuoto nella revisione della settimana, che non ha lo strumento proponi).
  */
-export async function rispondi({ db, uid, hid, key, modello = MODELLO_PREDEFINITO, domanda, prima = [], settimana = false, tokenGoogle = null, passo = () => {}, contesto }) {
+export async function rispondi({ db, uid, hid, key, modello = MODELLO_PREDEFINITO, domanda, prima = [], settimana = false, tokenGoogle = null, tokenPer = null, passo = () => {}, contesto }) {
   const model = MODELLI[modello] || MODELLI[MODELLO_PREDEFINITO];
-  const { fonti, esegui, proposte } = strumentiDi(db, { uid, hid, nomi: contesto.nomi, tokenGoogle, casa: contesto.casa, utente: contesto.utente });
+  const { fonti, esegui, proposte } = strumentiDi(db, { uid, hid, nomi: contesto.nomi, tokenGoogle, tokenPer, casa: contesto.casa, utente: contesto.utente });
   const tools = settimana ? STRUMENTI : [...STRUMENTI, PROPONI];
   const storia = prima.filter((t) => t.domanda && t.risposta).slice(-4)
     .map((t) => `<domanda>${t.domanda}</domanda>\n<risposta>${t.risposta}</risposta>`).join("\n");
@@ -497,10 +586,14 @@ export async function chiedi(db, uid, id, { key, clientGoogle = null, passo: reg
     const contesto = await contestoDi(db, uid);
     let permesso = null;
     const tokenGoogle = () => (permesso ||= import("./google/account.js").then(({ tokenServer }) => tokenServer(db, uid, clientGoogle)));
+    // Il permesso di un'altra persona della casa (il proprietario di un progetto condiviso: la cartella sta nel suo Drive).
+    const permessi = new Map();
+    const tokenPer = (u) => (u === uid ? tokenGoogle() : (permessi.has(u) ? permessi.get(u)
+      : permessi.set(u, import("./google/account.js").then(({ tokenServer }) => tokenServer(db, u, clientGoogle))).get(u)));
     const modello = modelloDomande(contesto.utente);
     const passo = (p) => { registro(p); ref.update({ passi: FieldValue.arrayUnion(p) }).catch(() => {}); };
     const r = await rispondi({ db, uid, hid: contesto.hid, key, modello, domanda: s(ultimo.domanda), prima: turni.slice(0, -1),
-      settimana: x.tipo === "settimana", tokenGoogle, passo, contesto });
+      settimana: x.tipo === "settimana", tokenGoogle, tokenPer, passo, contesto });
     const { usd } = await registraConsumo(db, uid, x.tipo === "settimana" ? "settimana" : "chiedi", { modello: r.modello, uso: r.uso, chiamate: r.giri });
     registro(`risposta in ${r.giri} giri, ${r.fonti.length} fonti, ${usd.toFixed(4)} $`);
     // Si riscrive l'ultimo turno: l'app intanto non tocca il documento (aspetta lo stato). Le azioni proposte vanno in

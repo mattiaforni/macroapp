@@ -122,6 +122,13 @@ export async function eventiTra(token, calendari, da, a) {
   return [...visti.values()].sort((x, y) => x.inizio - y.inizio);
 }
 
+/** Un evento solo, com'è adesso su Google, ridotto come in eventiTra (22/11: per il connettore MCP). `cal` da calendariDi. */
+export async function eventoUno(token, cal, eventId) {
+  const e = await chiama(token, `/calendars/${encodeURIComponent(cal.id)}/events/${encodeURIComponent(eventId)}`);
+  if (e.status === "cancelled") return null;
+  return evento(e, cal);
+}
+
 /** I calendari che questa persona vede nell'app: quello della casa, poi i suoi (come calendariVisti nell'app). */
 export function calendariDi(h, u) {
   const lista = h.calendario?.id ? [{ id: h.calendario.id, nome: h.calendario.nome || "Casa", casa: true, modificabile: true }] : [];

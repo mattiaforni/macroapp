@@ -23,14 +23,16 @@ Documenti: `docs/ARCHITETTURA.md` (come funziona e perché), `docs/MODELLO-DATI.
     modello scelto dall'utente (`modelloPer`), 300 s; costi in `consumi` (`src/consumi.js`);
   - `trascrivi`: nota vocale → testo con Gemini Flash e il vocabolario del progetto, la registrazione intera a «Ferma»
     (`src/trascrizione.js`, 300 s); l'audio non si salva sul server;
-  - `chiedi`: domande sui propri dati, Claude con strumenti di sola lettura più `proponi` (azioni da confermare sotto la
-    risposta, in `proposals` con `domandaId`; `src/chiedi.js`, stato su `domande/{id}`); `revisioneSettimana` (domenica
+  - `chiedi`: domande sui propri dati, Claude con strumenti di sola lettura (dal 22/11 anche i documenti di Drive dei
+    progetti, `src/google/documenti.js`) più `proponi` (azioni da confermare sotto la risposta, in `proposals` con
+    `domandaId`; `src/chiedi.js`, stato su `domande/{id}`); `revisioneSettimana` (domenica
     18:47, `src/settimana.js`, senza azioni);
   - `bank` (consenso, letture, `src/banking/enable.js`) e `syncBank` (ogni giorno alle 7:15);
   - `google`: collegamento una tantum con Contatti, Calendario e Drive, permessi di un'ora (`src/google/account.js`);
   - `cartella` (22/11, `docs/PIANO-DRIVE-MCP.md`): cartella `D&D/<progetto>` nel Drive del proprietario, col suo permesso
     (`drive.file`), condivisa se il progetto lo è (`src/google/cartelle.js`); copia leggibile, foto e «Apri come
-    documento» (`src/google/copia.js`); `giroAvvisi` riallinea cartelle e copie rimaste indietro;
+    documento» (`src/google/copia.js`); `giroAvvisi` riallinea cartelle e copie e legge i file cambiati e fermi da 30
+    minuti, proponendo sintesi, task, task fatti e nota «Avanzamento da Drive» (`src/google/novita.js`);
   - `avvisa` (notifiche push, `src/avvisi.js`) e `giroAvvisi` (ogni 5 minuti: eventi nuovi, promemoria, riepilogo delle
     7:30, `src/avvisi-calendario.js`);
   - `prodotto` (scheda da Open Food Facts / Open Beauty Facts con l'indice, cache `prodotti/{ean}`, `src/prodotti/`) e
@@ -219,10 +221,10 @@ Scelte di Mattia da non riproporre (il perché e il contesto in docs/STORIA.md, 
 ## Da verificare
 
 Dal telefono o con i dati veri (dettagli in docs/STORIA.md alla data):
-- **Cartelle su Drive** (22/11, piano Drive): dopo scope `drive.file` in console e Google ricollegato da tutti e due, la
+- **Cartelle su Drive** (22/11): dopo scope `drive.file` in console e Google ricollegato da tutti e due, la
   cartella in «D&D» di un progetto nuovo, condivisa o no secondo il progetto; la copia in «Copia dall'app» pochi secondi
-  dopo una nota; «Apri come documento» dal telefono; le foto in «Foto». Consenso OAuth «In produzione» (Google Auth
-  Platform → Pubblico), come pensa Mattia: allora niente scadenza dei 7 giorni.
+  dopo una nota; «Apri come documento»; le foto; un documento cambiato e fermo 30 minuti → proposte «da Drive» nella
+  pagina del progetto; Chiedi su un documento. Consenso OAuth «In produzione» (Google Auth Platform → Pubblico).
 - **Backup** (14/11): **prima Mattia** dà in console il ruolo di export ai due service account (docs/ARCHITETTURA.md,
   Backup, «Da fare una volta in console»: oggi il backup prende 403); poi Diagnosi con `backup` e `backupora`, un Ripristino
   di prova, il PITR attivo (Diagnosi), il primo backup del lunedì.

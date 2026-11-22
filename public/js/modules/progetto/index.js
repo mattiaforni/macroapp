@@ -7,6 +7,8 @@
 //   anteprima, persone e temi); toccandole si legge il riepilogo intero, con la trascrizione ripiegata
 //   (apriLettura, lo stesso foglio del Diario); da lì Modifica e Rianalizza.
 // - Da fare: i task del progetto.
+// Sopra le viste, «Da confermare» (22/11): le proposte del progetto che non nascono da una nota (da Drive: un file della
+// cartella cambiato, functions/src/google/novita.js; dalla chat di claude.ai col connettore).
 // In fondo alla Sintesi, i documenti di Drive collegati al progetto (si aprono in Drive; si scelgono
 // dal foglio del progetto). In testata «Drive» (22/11) apre la cartella del progetto su Drive (`projects.cartella`,
 // core/cartelle.js) o, se non c'è ancora, la crea.
@@ -17,7 +19,7 @@ import { el, icon, toast, fascia, vuoto, attesa, toDate, meseLungo, fab, testoRi
 import { remove, watchVisible, VIS, where } from "../../core/db.js";
 import { seguiNote, notaMia } from "../../core/note.js";
 import { getHousehold, nomeDi } from "../../core/household.js";
-import { watchPending } from "../../components/proposals.js";
+import { watchPending, renderAzione } from "../../components/proposals.js";
 import { sezioniSintesi, tonoStato, apriSintesi, apriVersioni } from "../../components/sintesi.js";
 import { apriNota, analizzaNota, analisiAutomatica, rigaNota, apriLettura, elencoNote, salvaNotaNuova, salvaModificaNota, ultimaModifica, scadenzaAnalisi } from "../diario/index.js";
 import { eliminaFotoDi } from "../../components/foto.js";
@@ -57,6 +59,7 @@ export function mount(container) {
   const dati = attesa(["progetto", "note", "task"], () => render());
 
   const testa = el("div");
+  const daConfermare = el("div"); // proposte del progetto che non nascono da una nota (22/11: da Drive, dalla chat)
   const pillole = el("div.segmenti", { style: "padding-top:4px" });
   const corpo = el("div");
   const piu = fab("Nuova nota", () => nuova());
@@ -153,8 +156,10 @@ export function mount(container) {
     nodi.push(el("div.segmenti", { style: "padding-top:12px;align-items:center" },
       el("button.btn.btn--piatto", { onclick: () => apriSintesi(progetto) }, icon("matita"), "Modifica la sintesi"),
       progetto.sintesiStorico?.length ? el("button.btn.btn--piatto", { onclick: () => apriVersioni(progetto) }, icon("orologio"), "Versioni") : null,
-      bottoneDocumento(progetto), // la sintesi come Documento Google nella cartella (22/11)
       quando ? el("span.meta", {}, `aggiornata il ${quando.toLocaleDateString("it-IT", { day: "numeric", month: "long" })}`) : null));
+    // La sintesi come Documento Google nella cartella del progetto (22/11), su una riga sua (accanto non ci sta).
+    const comeDocumento = bottoneDocumento(progetto);
+    if (comeDocumento) nodi.push(el("div.segmenti", { style: "padding-top:0" }, comeDocumento));
     nodi.push(...documenti());
     return nodi;
   }
@@ -210,11 +215,13 @@ export function mount(container) {
       el("button.tondo.tondo--piatto", { "aria-label": "Modifica progetto", onclick: () => apriProgetto(progetto) }, icon("matita")),
     ));
     const pillola = (v, testo) => el("button.pillola", { type: "button", class: vista === v ? "on" : "", onclick: () => scegli(v) }, testo);
+    const delProgetto = proposte.filter((x) => x.projectId === progetto.id && !x.sourceEntryId && !x.domandaId);
+    daConfermare.replaceChildren(...(delProgetto.length ? [fascia("Da confermare"), el("div.azioni-ai", {}, ...delProgetto.map(renderAzione))] : []));
     pillole.replaceChildren(pillola("sintesi", "Sintesi"), pillola("lezioni", "Note"), pillola("dafare", "Da fare"));
     corpo.replaceChildren(...(vista === "sintesi" ? vistaSintesi() : vista === "lezioni" ? vistaLezioni() : vistaDaFare()).filter(Boolean));
   }
 
-  container.append(testa, pillole, corpo, piu);
+  container.append(testa, daConfermare, pillole, corpo, piu);
 
   if (!progettoId) {
     container.replaceChildren(vuoto("Nessun progetto scelto", "Apri un progetto dal menu, dal Diario o dai Task."));

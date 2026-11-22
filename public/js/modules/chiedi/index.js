@@ -105,13 +105,14 @@ export function nuovaDomanda(testo = "") {
   });
 }
 
-const ICONE = { nota: "diario", spesa: "spese", task: "task", evento: "calendario", voce: "negozio", progetto: "cartella" };
+const ICONE = { nota: "diario", spesa: "spese", task: "task", evento: "calendario", voce: "negozio", progetto: "cartella", documento: "appunto" };
 
 /** Apre la cosa da cui viene un pezzo della risposta. */
 async function apriFonte(f) {
   if (f.tipo === "nota") { vaiA("diario", `nota:${f.id}`); return; }
   if (f.tipo === "progetto") { apriPaginaProgetto(f.id); return; }
   if (f.tipo === "evento") { vaiA("calendario"); return; }
+  if (f.tipo === "documento") { if (f.link) window.open(f.link, "_blank", "noopener"); else toast("Documento senza link"); return; } // da Drive (22/11)
   const coll = { spesa: "expenses", task: "tasks", voce: "manual_entries" }[f.tipo];
   const x = coll ? await leggiUno(coll, f.id) : null;
   if (!x) { toast("Non c'è più"); return; }
