@@ -245,6 +245,13 @@ await caso("la richiesta di copia su Drive (copiaRichiesta) la segnano tutti e d
   await si(updateDoc(doc(db(gA), "projects", "tennis"), { copiaRichiesta: serverTimestamp() }));
   await no(updateDoc(doc(db(bB), "projects", "tennis"), { copiaRichiesta: serverTimestamp() }));
 });
+await caso("mcp_clienti, mcp_codici, mcp_token: solo il server (connettore per claude.ai)", async () => {
+  for (const c of ["mcp_clienti", "mcp_codici", "mcp_token"]) {
+    await no(getDoc(doc(db(mA), c, "x")));
+    await no(setDoc(doc(db(mA), c, "x"), { uid: mA, tipo: "accesso", scade: Date.now() + 3600e3 }));
+    await no(getDocs(query(collection(db(mA), c), where("uid", "==", mA))));
+  }
+});
 await caso("una collezione non prevista è chiusa", async () => {
   await no(getDoc(doc(db(mA), "qualcosa", "x")));
   await no(setDoc(doc(db(mA), "qualcosa", "x"), base(mA, A, "shared")));

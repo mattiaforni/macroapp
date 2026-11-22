@@ -392,7 +392,7 @@ export function httpsCallable(_f, name) {
 export function signInWithPopup() { return Promise.resolve(); }
 export function signInWithRedirect() { return Promise.resolve(); }
 export function signOut() { return Promise.resolve(); }
-export function onAuthStateChanged(_a, cb) { setTimeout(() => cb({ uid: UID, displayName: "Test", email: "t@example.com", photoURL: "" }), 0); }
+export function onAuthStateChanged(_a, cb) { setTimeout(() => cb({ uid: UID, displayName: "Test", email: "t@example.com", photoURL: "", getIdToken: async () => "idtoken-finto" }), 0); }
 
 export function collection(_db, name) { return { coll: name }; }
 export function doc(_dbOrColl, a, b) {

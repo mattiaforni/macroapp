@@ -641,3 +641,17 @@ fila su sua richiesta, un passo per commit.
       collegato come punto di partenza, permesso mancante, tre tentativi, doppioni, Chiedi) e prova.py (proposte da Drive
       in cima a Tennis, nota confermata nel suo giorno, task scartato).
 
+- [x] **Passo 4: connettore MCP per claude.ai.** Requisiti di claude.ai controllati il 22/11 sulle pagine di Anthropic
+      (Streamable HTTP; registrazione automatica del client, sia dinamica sia con documento di metadati; callback
+      `https://claude.ai/api/mcp/auth_callback`; scoperta dai metadati con il 401; PKCE; chiamate dal cloud di Anthropic,
+      anche dal telefono). Function HTTP `mcp` dietro Hosting sull'origine dell'app (`/mcp`, `/oauth/*`, `/.well-known/*`),
+      server di autorizzazione con il login di Firebase e pagina «Collegare Claude» (`/collega-claude`), token di un'ora e
+      di rinnovo di 60 giorni ruotati, solo hash nel database (`mcp_clienti`, `mcp_codici`, `mcp_token`, regole chiuse).
+      Strumenti di Chiedi più `proponi` con il tipo «nota» (per importare le lezioni di tennis dalle chat del progetto
+      Claude: una proposta per lezione, col suo giorno), codici stabili tra una chiamata e l'altra, proposte `source:
+      "mcp"` private, con `projectId`. Prove: prova-mcp.mjs (metadati, 401, registrazione con ritorni sbagliati,
+      consenso con ID token falso, PKCE, codice una volta, token, rinnovo con rotazione, scadenza, CIMD, initialize,
+      strumenti e annotazioni, privacy, codici stabili, proposte e niente scritture nei moduli), regole (tre collezioni),
+      prova.py (pagina di consenso: Consenti, Annulla, richiesta non valida). Istruzioni per aggiungerlo: README,
+      «Connettore per la chat di claude.ai».
+

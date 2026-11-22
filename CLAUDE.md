@@ -23,22 +23,22 @@ Documenti: `docs/ARCHITETTURA.md` (come funziona e perché), `docs/MODELLO-DATI.
     modello scelto dall'utente (`modelloPer`), 300 s; costi in `consumi` (`src/consumi.js`);
   - `trascrivi`: nota vocale → testo con Gemini Flash e il vocabolario del progetto, la registrazione intera a «Ferma»
     (`src/trascrizione.js`, 300 s); l'audio non si salva sul server;
-  - `chiedi`: domande sui propri dati, Claude con strumenti di sola lettura (dal 22/11 anche i documenti di Drive dei
-    progetti, `src/google/documenti.js`) più `proponi` (azioni da confermare sotto la risposta, in `proposals` con
-    `domandaId`; `src/chiedi.js`, stato su `domande/{id}`); `revisioneSettimana` (domenica
+  - `chiedi`: domande sui propri dati, Claude con strumenti di sola lettura (dal 22/11 anche Drive, `src/google/documenti.js`)
+    più `proponi` (azioni da confermare, in `proposals` con `domandaId`; `src/chiedi.js`, stato su `domande/{id}`); `revisioneSettimana` (domenica
     18:47, `src/settimana.js`, senza azioni);
   - `bank` (consenso, letture, `src/banking/enable.js`) e `syncBank` (ogni giorno alle 7:15);
   - `google`: collegamento una tantum con Contatti, Calendario e Drive, permessi di un'ora (`src/google/account.js`);
-  - `cartella` (22/11, `docs/PIANO-DRIVE-MCP.md`): cartella `D&D/<progetto>` nel Drive del proprietario, col suo permesso
-    (`drive.file`), condivisa se il progetto lo è (`src/google/cartelle.js`); copia leggibile, foto e «Apri come
-    documento» (`src/google/copia.js`); `giroAvvisi` riallinea cartelle e copie e legge i file cambiati e fermi da 30
-    minuti, proponendo sintesi, task, task fatti e nota «Avanzamento da Drive» (`src/google/novita.js`);
+  - `cartella` (22/11, `docs/PIANO-DRIVE-MCP.md`): cartella `D&D/<progetto>` nel Drive del proprietario (`drive.file`),
+    condivisa se il progetto lo è (`src/google/cartelle.js`); copia leggibile, foto, «Apri come documento» (`copia.js`);
+    `giroAvvisi` riallinea cartelle e copie e legge i file cambiati e fermi da 30 minuti → proposte (`novita.js`);
   - `avvisa` (notifiche push, `src/avvisi.js`) e `giroAvvisi` (ogni 5 minuti: eventi nuovi, promemoria, riepilogo delle
     7:30, `src/avvisi-calendario.js`);
   - `prodotto` (scheda da Open Food Facts / Open Beauty Facts con l'indice, cache `prodotti/{ean}`, `src/prodotti/`) e
     `contribuisci` («Completa» su OFF con l'account dell'utente in `off_account/{uid}`, `src/prodotti/contributo.js`);
   - `backupSettimanale` (lunedì 3:17: export di Firestore nel bucket `macroapp-b9bd0-backup`, `src/backup.js`;
-    ripristino con il flusso Ripristino, docs/ARCHITETTURA.md, Backup).
+    ripristino con il flusso Ripristino, docs/ARCHITETTURA.md, Backup);
+  - `mcp` (22/11): connettore per claude.ai su `/mcp` (Hosting), OAuth col login di Firebase (`/collega-claude`),
+    strumenti di Chiedi e `proponi` (anche «nota»): solo proposte (`src/mcp.js`; README).
 - **Pubblicazione**: push su `main` → `.github/workflows/deploy.yml` fa girare le prove (`prove.yml`: functions,
   regole di Firestore sull'emulatore, flusso dell'app in Chromium) e, solo se passano, pubblica hosting, regole, indici e
   functions (secret `FIREBASE_SERVICE_ACCOUNT`) e prepara il bucket dei backup. Prove non passate → niente pubblicazione,
@@ -73,7 +73,8 @@ Una riga per file, per orientarsi; i dettagli di ciascuno sono in `docs/MAPPA.md
 | `core/google.js` · `core/contatti-google.js` | account Google (stato, permesso di un'ora, `chiamaGoogle`) · Contatti in memoria |
 | `core/calendario.js` | calendari (casa + altri per persona), eventi dei prossimi 60 giorni, scrittura su Google, ripetizioni |
 | `core/drive.js` · `core/archivio.js` | ricerca in Drive · archivio sul telefono (IndexedDB) delle note vocali |
-| `core/cartelle.js` | cartella del progetto su Drive (22/11): crea e allinea con la function `cartella`, pulsante «Drive» |
+| `core/cartelle.js` | cartella del progetto su Drive (22/11), copia, «Drive» e «Apri come documento» |
+| `collega-claude.js` | consenso del connettore per claude.ai (22/11) |
 | `components/sheet.js` | foglio a tutta altezza: azioni in basso, tastiera solo su campo vuoto, `scriviDa` |
 | `components/menu.js` · `components/onboarding.js` | menu a sinistra a gruppi · primo accesso (crea casa o entra col codice) |
 | `components/proposals.js` | azioni proposte (Diario, banca, Chiedi): `APPLICA` per tipo, `renderAzione`, `segnaAccettata` |
@@ -147,24 +148,20 @@ Una riga per file, per orientarsi; i dettagli di ciascuno sono in `docs/MAPPA.md
 
 ## Diagnosi delle functions
 
-Le sessioni non leggono i log di GitHub né di Google Cloud. Il flusso «Diagnosi»
-(`.github/workflows/diagnosi.yml`, da lanciare con `gh workflow run diagnosi.yml -f funzione=analyzeEntry`)
-mette nelle annotazioni del job la risposta della funzione a una chiamata senza accesso, gli
-invocatori del servizio Cloud Run e gli ultimi errori; con `-f ripara=true` rende la funzione
-invocabile dall'app. Si leggono con `gh api repos/mattiaforni/macroapp/check-runs/<id del job>/annotations`.
-Anche il deploy, se fallisce, scrive la coda del registro in un'annotazione.
+Le sessioni non leggono i log di GitHub né di Google Cloud. Il flusso «Diagnosi» (`.github/workflows/diagnosi.yml`,
+input `funzione=analyzeEntry`) mette nelle annotazioni del job la risposta della funzione a una chiamata senza accesso, gli
+invocatori Cloud Run e gli ultimi errori; con `ripara=true` rende la funzione invocabile dall'app. Annotazioni:
+`gh api repos/mattiaforni/macroapp/check-runs/<id del job>/annotations`; anche il deploy fallito scrive lì il registro.
 Con `-f note=true` (7/11) il flusso conta le note per progetto, autore («membro 1/2») e visibilità, mostra le ultime di
 ciascuno e lo stato degli indici di `journal_entries` (niente testi, nomi né uid: le annotazioni sono pubbliche); con anche
 `-f allinea=true` porta sul server le note e le foto alla visibilità del loro progetto (`functions/strumenti/diagnosi-note.mjs`).
 Con `backup=true` (14/11) la data dell'ultimo backup riuscito, i backup nel bucket, la conservazione e le ultime operazioni
 di export e import; con anche `backupora=true` fa un backup subito. Il ripristino è un flusso a parte,
 `.github/workflows/ripristino.yml` (prova su un database temporaneo, o sui dati veri con `conferma` = RIPRISTINA).
-`gh workflow run` qui non va (GraphQL bloccato): `gh api -X POST repos/mattiaforni/macroapp/actions/workflows/diagnosi.yml/dispatches -f ref=main -f 'inputs[note]=true'`,
-oppure gli strumenti `mcp__github__actions_*` (lancio, esecuzioni, job).
+Si lancia con gli strumenti `mcp__github__actions_*` (`gh workflow run` qui non va: GraphQL bloccato).
 
-Se l'app riceve «internal» da una funzione chiamata con `httpsCallable`, la prima cosa da
-guardare sono gli invocatori: senza `allUsers` il preflight CORS prende 403. Il deploy lo reimposta
-per le funzioni elencate nell'ultimo passo di `deploy.yml`: una nuova funzione onCall va aggiunta lì.
+Se l'app riceve «internal» da una funzione `httpsCallable`, guardare gli invocatori: senza `allUsers` il preflight CORS
+prende 403. Il deploy lo reimposta per le funzioni nell'ultimo passo di `deploy.yml`: una onCall nuova va aggiunta lì.
 
 ## Prove
 
@@ -181,6 +178,8 @@ node functions/strumenti/prova-prodotti.mjs # indice dei prodotti su schede OFF 
 node functions/strumenti/prova-chiedi.mjs   # Chiedi senza rete: strumenti, privacy, fonti, giro con un Claude finto; revisione e costi
 node functions/strumenti/prova-contributo.mjs # «Completa» su Open Food Facts senza rete
 node functions/strumenti/prova-backup.mjs   # backup settimanale con l'API di export finta
+node functions/strumenti/prova-drive.mjs    # cartelle, copia, novità da Drive (finti in strumenti/finti.mjs)
+node functions/strumenti/prova-mcp.mjs      # connettore per claude.ai
 python3 prove/additivi.py                   # rigenera la tabella degli additivi dalla tassonomia OFF
 ```
 Il Firebase finto di `prova.py` non applica le regole: per quelle c'è `prove/regole/prova-regole.mjs` (emulatore vero, due
@@ -221,10 +220,10 @@ Scelte di Mattia da non riproporre (il perché e il contesto in docs/STORIA.md, 
 ## Da verificare
 
 Dal telefono o con i dati veri (dettagli in docs/STORIA.md alla data):
-- **Cartelle su Drive** (22/11): dopo scope `drive.file` in console e Google ricollegato da tutti e due, la
-  cartella in «D&D» di un progetto nuovo, condivisa o no secondo il progetto; la copia in «Copia dall'app» pochi secondi
-  dopo una nota; «Apri come documento»; le foto; un documento cambiato e fermo 30 minuti → proposte «da Drive» nella
-  pagina del progetto; Chiedi su un documento. Consenso OAuth «In produzione» (Google Auth Platform → Pubblico).
+- **Cartelle su Drive** (22/11): dopo scope `drive.file` in console e Google ricollegato da tutti e due: cartella in «D&D»
+  condivisa o no; copia dopo una nota; «Apri come documento»; foto; documento cambiato e fermo 30 minuti → proposte;
+  Chiedi su un documento. Consenso OAuth «In produzione» (Google Auth Platform → Pubblico).
+- **Connettore claude.ai** (22/11): aggiunto (README); in chat dal telefono; una lezione importata come nota proposta.
 - **Backup** (14/11): **prima Mattia** dà in console il ruolo di export ai due service account (docs/ARCHITETTURA.md,
   Backup, «Da fare una volta in console»: oggi il backup prende 403); poi Diagnosi con `backup` e `backupora`, un Ripristino
   di prova, il PITR attivo (Diagnosi), il primo backup del lunedì.
@@ -239,9 +238,8 @@ Dal telefono o con i dati veri (dettagli in docs/STORIA.md alla data):
 - **Foto** (4/11): «Scatta» torna alla nota col testo già scritto; tempi con foto da 12 MP; foto senza rete.
 - **Barra** (3/11): nome di un progetto in barra alla prima apertura su un telefono nuovo; scorrimento verso un progetto.
 - **Notifiche** (25/10, 1/11): attivazione su entrambi i telefoni; `silent` di notte; il riepilogo delle 7:30; un evento
-  aggiunto dall'altra persona da Google Calendar; promemoria saltati quando avvisa già Google. Mattia: schermata di
-  consenso OAuth «In produzione» (in test il permesso scade ogni 7 giorni).
-- **Google** (27/10, 1/11): ricollegamento con le tre spunte; lo scope di Drive accettato; PATCH tra evento con orario e di
+  aggiunto dall'altra persona da Google Calendar; promemoria saltati quando avvisa già Google.
+- **Google** (27/10, 1/11): PATCH tra evento con orario e di
   tutto il giorno; `move` tra la casa e il personale; inviti senza `organizer.self`.
 - **Note vocali e modelli** (27/10): qualità rispetto all'app Claude; iPhone (`audio/mp4`); durata di Opus e sintesi
   migliore di Sonnet; nomi dei temi stabili tra le lezioni (26/10); nomi dettati male collegati al contatto giusto (29/10).
@@ -256,7 +254,8 @@ Dal telefono o con i dati veri (dettagli in docs/STORIA.md alla data):
 - Bozze confermate: finiscono in `notes`, che nessuna pagina mostra: una pagina, togliere la conferma o bozze vere in Gmail.
 - Riga di contesto per pagina, stile Leghe Fantacalcio (Task «2 in ritardo · 3 oggi», Spese «Ottobre · X ti deve…»).
 - Identità visiva definitiva (resto dell'app): da decidere con Mattia.
-- Diario per progetto: importare lo storico delle lezioni dalle chat del progetto Claude; quante note precedenti servono;
+- Diario per progetto: lo storico delle lezioni dalle chat del progetto Claude si importa col connettore (22/11, una nota
+  proposta per lezione), da fare; quante note precedenti servono;
   se la sintesi proposta rispetta le correzioni a mano. Da valutare: Fable 5.1 o Opus con `effort` alto per i progetti.
 - Lista: ordine dei reparti da adattare al supermercato di Mattia; cronologia delle scansioni condivisa o solo sua.
 - Note vocali: salvare e analizzare subito dopo la trascrizione, se Mattia lo vuole.
@@ -265,3 +264,4 @@ Dal telefono o con i dati veri (dettagli in docs/STORIA.md alla data):
 - Note condivise, casi scoperti (7/11): un progetto condiviso reso privato rende private le note dell'altra persona solo al
   suo prossimo allineamento; foto aggiunte da una versione vecchia a una nota già condivisa restano private.
 - Account di accesso (Firebase Authentication) non coperti dal backup.
+- Connettore: scollegarlo dall'app (oggi da Claude; un token di rinnovo vale 60 giorni).

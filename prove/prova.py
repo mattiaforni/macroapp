@@ -2513,6 +2513,42 @@ with sync_playwright() as p:
         pg.wait_for_timeout(1500)
         assert pg.evaluate("window.__segno") == 2, "stessa versione: niente ricarica"
         open(versione, "w").write('export const VERSION = "dev";\n')
+
+        # ── Connettore per claude.ai (22/11, passo 4): la pagina di consenso a cui manda Claude ──
+        step[0] = "collega claude"
+        sfida = "a" * 43
+        q = f"response_type=code&client_id=dd_prova&redirect_uri=https%3A%2F%2Fclaude.ai%2Fapi%2Fmcp%2Fauth_callback&state=st1&code_challenge={sfida}&code_challenge_method=S256&scope=dati&resource=https%3A%2F%2Fmacroapp-b9bd0.web.app%2Fmcp"
+        def oauth(r):
+            corpo = json.loads(r.request.post_data or "{}")
+            if r.request.url.endswith("/oauth/verifica"):
+                assert corpo.get("client_id") == "dd_prova" and corpo.get("redirect_uri") == "https://claude.ai/api/mcp/auth_callback", corpo
+                r.fulfill(status=200, content_type="application/json", body=json.dumps({"cliente": "Claude", "ritorno": "claude.ai"}))
+            else:
+                assert corpo.get("idToken") == "idtoken-finto" and corpo.get("state") == "st1" and corpo.get("code_challenge") == sfida, corpo
+                r.fulfill(status=200, content_type="application/json", body=json.dumps({"redirect": "https://claude.ai/api/mcp/auth_callback?code=c1&state=st1&iss=x"}))
+        pg.route("**/oauth/**", oauth)
+        ctx.route("https://claude.ai/**", lambda r: r.fulfill(status=200, content_type="text/html", body="<p>Claude</p>"))
+        pg.goto(f"http://127.0.0.1:8766/collega-claude.html?{q}")
+        pg.wait_for_selector("h3 >> text=Claude chiede di usare Debiti e Doveri")
+        pg.wait_for_selector("button.fab >> text=Consenti")
+        assert "t@example.com" in pg.inner_text("#view"), "l'account con cui si collega"
+        assert "niente cambia finché non le confermi" in pg.inner_text("#view")
+        assert pg.evaluate("document.documentElement.scrollWidth") <= 390
+        pg.wait_for_timeout(200)
+        shot(pg, "30-collega-claude")
+        pg.click("button.fab >> text=Consenti")
+        pg.wait_for_url("https://claude.ai/api/mcp/auth_callback?code=c1&state=st1&iss=x", timeout=5000)
+        # «Annulla» torna a Claude con access_denied
+        pg.goto(f"http://127.0.0.1:8766/collega-claude.html?{q}")
+        pg.click("button.btn >> text=Annulla")
+        pg.wait_for_url("https://claude.ai/api/mcp/auth_callback?error=access_denied&state=st1", timeout=5000)
+        # Una richiesta che il server rifiuta: il messaggio, e nessun ritorno
+        pg.unroute("**/oauth/**")
+        pg.route("**/oauth/**", lambda r: r.fulfill(status=200, content_type="application/json", body=json.dumps({"error": "invalid_request", "error_description": "Indirizzo di ritorno non registrato per questo client"})))
+        pg.goto("http://127.0.0.1:8766/collega-claude.html?response_type=code&client_id=x&redirect_uri=https%3A%2F%2Fcattivo.example%2Fcb")
+        pg.wait_for_selector("text=Richiesta non valida")
+        assert "Indirizzo di ritorno non registrato" in pg.inner_text("#view")
+        assert pg.locator("button.fab").count() == 0, "niente Consenti"
         print("FLUSSO COMPLETO")
         completo = True
     except Exception as e:

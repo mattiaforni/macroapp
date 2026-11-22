@@ -61,6 +61,20 @@ Niente da configurare: il deploy attiva le API di Cloud Messaging. Ognuno le att
 menu → Notifiche. Su iPhone servono iOS 16.4 o successivo e l'app aggiunta alla schermata Home (da Safari:
 Condividi → Aggiungi alla schermata Home), aperta da lì.
 
+## Connettore per la chat di claude.ai (22/11)
+
+La chat su claude.ai (anche dall'app del telefono) può leggere i dati di D&D e proporre azioni, che si confermano
+nell'app. Si aggiunge una volta, dal computer o dal browser:
+1. claude.ai → Impostazioni → Connettori → **Aggiungi connettore personalizzato**.
+2. Nome: `Debiti e Doveri`; URL: `https://macroapp-b9bd0.web.app/mcp` (proprio questo indirizzo). Le impostazioni
+   avanzate (ID e secret del client) restano vuote: Claude si registra da solo.
+3. **Collega**: si apre la pagina «Collegare Claude» di D&D; se serve si entra con Google (lo stesso account dell'app),
+   poi **Consenti** in basso a destra; si torna su Claude.
+4. In una chat, dal menu degli strumenti, si accende «Debiti e Doveri». Sul telefono il connettore compare dopo averlo
+   aggiunto dal web.
+Ognuno dei due lo aggiunge sul proprio account Claude: la chat vede ciò che quella persona vede nell'app. Per toglierlo:
+rimuoverlo dai connettori di Claude. Come funziona: docs/ARCHITETTURA.md, «Connettore MCP».
+
 ## Deploy automatico
 
 1. Console Google Cloud → IAM e amministrazione → Account di servizio → crea `github-deploy` con i ruoli *Editor*, *Amministratore Firebase*, *Utente account di servizio*, *Amministratore Secret Manager*.

@@ -152,7 +152,7 @@ parte): se diventano tante, la strada è Storage con gli stessi campi.
 confermati prima del 26/10, quando l'agente proponeva ancora il tipo `note`). Nessuna pagina li mostra.
 
 ## `proposals`
-`kind: "task"|"shopping_item"|"expense"|"manual_entry"|"event"|"event_update"|"draft"|"project_summary"|"task_done"|"task_due"|"journal_entry"|"note", source: "agent"|"bank"|"share"|"chiedi"|"drive"|"mcp", status: "pending"|"accepted"|"rejected"|"discarded", payload, summary, decidedBy, sourceEntryId, domandaId?, turno?, projectId?, driveFile?`
+`kind: "task"|"shopping_item"|"expense"|"manual_entry"|"event"|"event_update"|"draft"|"project_summary"|"task_done"|"task_due"|"journal_entry"|"note", source: "agent"|"bank"|"share"|"chiedi"|"drive"|"mcp" (dalla chat di claude.ai col connettore, private, con `projectId` se di un progetto), status: "pending"|"accepted"|"rejected"|"discarded", payload, summary, decidedBy, sourceEntryId, domandaId?, turno?, projectId?, driveFile?`
 Da Drive (22/11, `source: "drive"`, functions/src/google/novita.js): `projectId` (la proposta compare in cima alla pagina del
 progetto), `driveFile: { id, nome, link }` (il file cambiato), `ownerUid` = proprietario del progetto, visibilità del progetto.
 `journal_entry` (22/11; payload `projectId, titolo, text, giorno "AAAA-MM-GG", analizza, fonte?: { tipo, fileId?, nome?, link? }`):
@@ -207,6 +207,13 @@ subito dopo una scrittura dell'app (`daApp: true`) o dopo che il controllo delle
 le scritture dell'app non tornano come novità). `analisi`: lettura in corso (una alla volta per file), esito, tentativi
 falliti sulla stessa versione (al più 3). Solo server.
 
+## `mcp_clienti/{client_id}`, `mcp_codici/{sha256}`, `mcp_token/{sha256}` (22/11)
+Connettore MCP per claude.ai (functions/src/mcp.js), solo server. `mcp_clienti`: `nome, ritorni: [url], creato` — i client
+registrati da Claude (registrazione dinamica). `mcp_codici`: `uid, clientId, ritorno, sfida (PKCE), scope, resource,
+scade` — codice di autorizzazione dopo il consenso, 5 minuti, si cancella appena usato. `mcp_token`: `tipo: "accesso" |
+"rinnovo", uid, clientId, scope, resource, scade, creato` — accesso un'ora, rinnovo 60 giorni (ruotato a ogni uso). L'id è
+l'hash SHA-256 del codice o del token: il valore non sta nel database.
+
 ## `bank_connections/{uid}`
 `ownerUid, householdId, active, aspsp: { name, country }, sessionId, accounts: [{ uid, name, product, details, currency, type, ibanMask, idMask }], accountIds, consentExpiresAt, linkedAt, unlinkedAt, lastSyncAt, lastAttemptAt, lastSyncCreated, lastError, needsRenewal, sessionStatus, sessionEndedAt?, scartati: [{ key, giorno, descrizione, importo, conto, motivo }], lettura: { conti: [{ uid, conto, tipo, letti, stati, ultimo, ultimi: [{ key, giorno, contabilizzato, verso, stato, importo, descrizione, esito }] }], inAttesa: [{ giorno, descrizione, importo, conto, stato }] }, pending?: { state, authorizationId, aspsp, startedAt }`
 Scritta solo dalla function `bank` e da `syncBank`. Il client legge solo la propria (la pagina Banca la segue in tempo reale). `pending` c'è tra l'avvio del consenso e il ritorno dalla banca: lo `state` serve a riconoscere il ritorno. `ibanMask` = prime due e ultime quattro cifre dell'IBAN; `idMask` = ultime quattro dell'altro identificativo (carte senza IBAN). `name` con alcune banche (Intesa) è l'intestatario: la pagina nomina il conto da `product`, `details` o `type` (`cash_account_type`). `lastSyncAt` = ultima lettura riuscita, `lastAttemptAt` = ultimo tentativo. `needsRenewal`: la banca ha chiuso il consenso prima di `consentExpiresAt` (Enable Banking risponde `EXPIRED_SESSION`); `syncBank` salta il collegamento finché `concludi` non lo rinnova; `sessionStatus` è lo stato della sessione secondo `GET /sessions/{id}` (`EXPIRED`, `REVOKED`, …), `sessionEndedAt` quando ce ne siamo accorti. `appId`/`privateKey` (credenziali proprie del collegamento) sono previsti ma non usati.
@@ -233,6 +240,7 @@ in che giorno è partito l'ultimo riepilogo del mattino.
 - `avvisi_stato`, `google_tokens`, `off_account`, `drive_testi`: solo il server
 - `projects.cartella`: solo il server (l'app non la mette in un progetto nuovo né la cambia)
 - `drive_cartelle`, `drive_file`: solo il server
+- `mcp_clienti`, `mcp_codici`, `mcp_token`: solo il server
 - `domande`: solo del proprietario; `consumi`: lettura del proprietario, scrittura solo dal server
 
 ## Eventi di Google Calendar (non su Firestore)

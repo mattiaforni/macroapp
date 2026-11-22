@@ -84,6 +84,9 @@ const STRUMENTI = [
     input_schema: { type: "object", properties: { codice: { type: "string" } }, required: ["codice"] } },
 ];
 
+/** Gli strumenti di sola lettura, anche per il connettore MCP (src/mcp.js). */
+export const STRUMENTI_LETTURA = STRUMENTI;
+
 // Lo strumento che propone (non nella revisione della settimana). Un'azione per chiamata; i campi che non servono a
 // quel tipo restano vuoti.
 const PROPONI = {

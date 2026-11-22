@@ -6,12 +6,13 @@
 // Contatti, Calendario, Drive),
 // cartella (cartelle dei progetti su Drive, 22/11), avvisa (notifiche push sulle cose condivise), trascrivi (nota vocale → testo, con Gemini), prodotto (scheda di un
 // prodotto da Open Food Facts), syncBank (lettura quotidiana), giroAvvisi (ogni 5 minuti: calendario, promemoria,
-// riepilogo del mattino), backupSettimanale (export di Firestore nel bucket del progetto, il lunedì).
+// riepilogo del mattino), backupSettimanale (export di Firestore nel bucket del progetto, il lunedì), mcp (22/11:
+// connettore per la chat di claude.ai, HTTP dietro Firebase Hosting).
 // All'avvio del container si caricano solo le dichiarazioni delle funzioni.
 // firebase-admin, l'agente e il client bancario vengono importati alla prima richiesta (import dinamico):
 // avvio più rapido e nessun lavoro a livello di modulo che possa bloccare il container.
 import { setGlobalOptions } from "firebase-functions/v2";
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { onCall, onRequest, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret } from "firebase-functions/params";
 
@@ -694,3 +695,26 @@ export const backupSettimanale = onSchedule(
     });
   },
 );
+
+// ───────────── Connettore MCP per claude.ai (22/11) ─────────────
+
+/**
+ * Connettore MCP per la chat su claude.ai (docs/PIANO-DRIVE-MCP.md, passo 4): Streamable HTTP senza stato su /mcp e
+ * OAuth con il login di Firebase (/.well-known, /oauth/registra, /oauth/verifica, /oauth/consenti, /oauth/token), tutto
+ * sull'origine dell'app grazie alle riscritture di Firebase Hosting (firebase.json). Gli strumenti sono quelli di Chiedi;
+ * scrive solo proposte. Pubblica («invoker: public»): chi può fare cosa lo decidono il token e il codice. Vedi src/mcp.js.
+ */
+export const mcp = onRequest(
+  { secrets: [GOOGLE_OAUTH_CLIENT], timeoutSeconds: 60, invoker: "public", memory: "512MiB" },
+  async (req, res) => {
+    const db = await getDb();
+    const { gestisciHttp } = await import("./src/mcp.js");
+    const { tokenServer } = await import("./src/google/account.js");
+    const verificaIdToken = async (t) => {
+      const { getAuth } = await import("firebase-admin/auth");
+      return getAuth().verifyIdToken(t, true);
+    };
+    await gestisciHttp(req, res, { db, verificaIdToken, clientGoogle: clientGoogle(), tokenServer });
+  },
+);
+

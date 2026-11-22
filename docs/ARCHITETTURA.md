@@ -343,6 +343,38 @@ quelli collegati, con un codice [d1]) e `leggi_documento` (testo fino a 20.000 c
 legge con il permesso del proprietario del progetto e, se non basta, con quello di chi chiede. Nella risposta la fonte
 «documento» apre il file su Drive.
 
+## Connettore MCP per claude.ai (22/11, passo 4 del piano, `src/mcp.js`)
+
+La chat su claude.ai (web e telefono) usa D&D come connettore personalizzato: legge con gli strumenti di Chiedi e scrive
+solo proposte. Requisiti di claude.ai verificati il 22/11 (claude.com/docs/connectors/building e …/authentication):
+Streamable HTTP, OAuth con scoperta dai metadati, registrazione del client automatica, PKCE, callback
+`https://claude.ai/api/mcp/auth_callback`; le chiamate arrivano dai server di Anthropic, anche quando si usa il telefono.
+- **Dove**: function HTTP `mcp` (onRequest, pubblica) dietro Firebase Hosting, sull'origine dell'app (riscritture in
+  firebase.json): `/mcp`, `/oauth/*`, `/.well-known/oauth-protected-resource`, `/.well-known/oauth-authorization-server`.
+  Indirizzo da dare a Claude: `https://macroapp-b9bd0.web.app/mcp`. Hosting chiude una richiesta dopo 60 s: gli strumenti
+  sono letture brevi.
+- **Accesso**: il server di autorizzazione è la function stessa, con il login di Firebase. Metadati della risorsa (RFC
+  9728) e del server (RFC 8414); client registrati da Claude con la registrazione dinamica (RFC 7591, `mcp_clienti`) o
+  descritti da un documento di metadati (CIMD, solo da claude.ai, claude.com, anthropic.com); indirizzi di ritorno ammessi:
+  il callback di claude.ai o claude.com e i loopback (Claude Code); solo client pubblici, PKCE S256 obbligatorio, `resource`
+  = `…/mcp`. La pagina `/collega-claude` (public/collega-claude.html, js/collega-claude.js) controlla la richiesta
+  (`/oauth/verifica`), fa entrare con Google come l'app e, a «Consenti», manda l'ID token di Firebase a `/oauth/consenti`,
+  che lo verifica (anche se revocato) e rimanda a Claude con un codice (5 minuti, una volta). `/oauth/token` dà un token di
+  accesso di un'ora e uno di rinnovo di 60 giorni, ruotato a ogni rinnovo. Nel database solo gli hash di codici e token.
+  Senza token valido `/mcp` risponde 401 con `WWW-Authenticate: Bearer resource_metadata=…`: è il segnale per Claude.
+- **MCP**: senza stato; ogni POST un messaggio JSON-RPC, risposta `application/json`; `initialize` (versioni 2025-11-25,
+  2025-06-18, 2025-03-26), `tools/list`, `tools/call`, `ping`; notifiche → 202; GET → 405. Istruzioni per la chat in
+  `initialize`.
+- **Strumenti**: quelli di Chiedi (`cerca_note`, `leggi_nota`, `spese`, `task`, `eventi`, `progetti`, `manuale`, `lista`,
+  `documenti`, `leggi_documento`, con `readOnlyHint`) e `proponi`, con in più il tipo «nota» (una nota del diario con il
+  suo giorno e il progetto: così si importano le lezioni passate dalle chat). Siccome ogni chiamata è a sé, i codici
+  portano l'id (`n:<id>`, `t:<id>`, `e:<calendario>|<id>`, `d:<progetto>|<file>`) e si ritrovano dal database, sempre tra
+  le cose che la persona vede (`strumentiDi` con `stabili`). Le proposte vanno in `proposals` con `source: "mcp"`, private,
+  con `projectId` se sono di un progetto (compaiono in Proposte e nella pagina del progetto); al più 200 in attesa per
+  persona. Una nota confermata entra nel suo giorno e la legge l'agente (riepilogo, sintesi), come le altre.
+- Il connettore non usa l'AI dell'app: il ragionamento è della chat (abbonamento Claude), non dei crediti API.
+Prova senza rete: `node functions/strumenti/prova-mcp.mjs`; la pagina di consenso è nel flusso di prova.py.
+
 ## Integrazioni previste
 
 - **Note vocali** del diario (27/10): il telefono registra (components/registratore.js), la function `trascrivi` manda l'audio

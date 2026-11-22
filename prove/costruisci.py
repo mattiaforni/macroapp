@@ -23,9 +23,6 @@ for st in ("normal", "italic"):
     faces.append(f'@font-face{{font-family:"Instrument Serif";font-style:{st};src:url(/fonts/{n})}}')
 open(os.path.join(fdir, "fonts.css"), "w").write("\n".join(faces))
 
-html = open(os.path.join(SITE, "index.html")).read()
-html = re.sub(r'<link rel="stylesheet" media="print"[^>]*>', '<link rel="stylesheet" href="/fonts/fonts.css">', html)
-html = html.replace('<link rel="preconnect" href="https://fonts.googleapis.com">', "").replace('<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>', "")
 im = '''<script type="importmap">{"imports":{
 "https://www.gstatic.com/firebasejs/11.3.0/firebase-app.js":"/firebase-stub.js",
 "https://www.gstatic.com/firebasejs/11.3.0/firebase-auth.js":"/firebase-stub.js",
@@ -33,7 +30,12 @@ im = '''<script type="importmap">{"imports":{
 "https://www.gstatic.com/firebasejs/11.3.0/firebase-functions.js":"/firebase-stub.js",
 "https://www.gstatic.com/firebasejs/11.3.0/firebase-messaging.js":"/firebase-stub.js"}}</script>
 '''
-html = html.replace('<script type="module" src="/js/app.js"></script>', im + '<script type="module" src="/js/app.js"></script>')
-open(os.path.join(SITE, "index.html"), "w").write(html)
+# L'app e la pagina di consenso del connettore per claude.ai (22/11): font locali e Firebase finto.
+for pagina, script in (("index.html", "/js/app.js"), ("collega-claude.html", "/js/collega-claude.js")):
+    html = open(os.path.join(SITE, pagina)).read()
+    html = re.sub(r'<link rel="stylesheet" media="print"[^>]*>', '<link rel="stylesheet" href="/fonts/fonts.css">', html)
+    html = html.replace('<link rel="preconnect" href="https://fonts.googleapis.com">', "").replace('<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>', "")
+    html = html.replace(f'<script type="module" src="{script}"></script>', im + f'<script type="module" src="{script}"></script>')
+    open(os.path.join(SITE, pagina), "w").write(html)
 open(os.path.join(SITE, "sw.js"), "w").write("// disattivato nella prova\n")
 print("site pronto")

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Collegare Claude · Debiti e Doveri</title>
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#EEEDE8">
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" media="print" onload="this.media='all'"
+        href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap">
+  <link rel="stylesheet" href="/css/base.css">
+  <script>
+  (function () {
+    try {
+      var t = localStorage.getItem("macroapp.tema");
+      if (t !== "giorno" && t !== "notte") t = window.matchMedia("(prefers-color-scheme: dark)").matches ? "notte" : "giorno";
+      document.documentElement.setAttribute("data-tema", t);
+    } catch (e) {}
+  })();
+  </script>
+</head>
+<body>
+  <!-- Pagina di consenso del connettore MCP per claude.ai (22/11, functions/src/mcp.js): ci arriva Claude con la
+       richiesta OAuth; si entra con Google come nell'app e si consente. La logica sta in js/collega-claude.js. -->
+  <div id="app">
+    <header class="testata">
+      <h1 class="display testata__titolo">Collegare Claude</h1>
+    </header>
+    <main id="view" class="vista" aria-live="polite"></main>
+  </div>
+  <div id="toast" class="toast" hidden></div>
+  <script type="module" src="/js/collega-claude.js"></script>
+</body>
+</html>

@@ -210,6 +210,18 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Connettore MCP per claude.ai (22/11): client registrati, codici di autorizzazione e token (solo l'hash). Solo la
+    // function `mcp`.
+    match /mcp_clienti/{id} {
+      allow read, write: if false;
+    }
+    match /mcp_codici/{id} {
+      allow read, write: if false;
+    }
+    match /mcp_token/{id} {
+      allow read, write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
