@@ -1,7 +1,7 @@
 // Google: il collegamento dell'account (una volta sola) e cosa ne fa l'app: Contatti (cerca tra i
 // contatti mentre scrivi un nome), Calendario (il calendario «Casa», condiviso tra i due, e gli altri tuoi
 // calendari da vedere accanto: foglio «Calendari» in modules/calendario), Drive
-// (documenti collegati ai progetti e al manuale, letti dall'agente). Il permesso si dà sulla pagina
+// (documenti collegati ai progetti e al manuale, letti dall'agente; dal 22/11 le cartelle dei progetti, core/cartelle.js). Il permesso si dà sulla pagina
 // di Google; al ritorno (/google-contatti?code=…, messo da parte in core/google.js) si conclude qui.
 import { el, icon, toast, vuoto, toDate, giornoRelativo } from "../../core/ui.js";
 import {
@@ -64,8 +64,9 @@ export function mount(container) {
           el("h3", {}, "Cosa fa l'app"),
           el("p", {}, el("b", {}, "Contatti"), ": mentre scrivi un nome in un task o in rubrica compaiono i tuoi contatti; in rubrica entra solo chi colleghi, con telefono, mail e indirizzo aggiornati da Google. Solo lettura."),
           el("p", {}, el("b", {}, "Calendario"), ": un tuo calendario diventa quello della casa, condiviso con l'altra persona; l'app lo legge, ci scrive gli eventi che aggiungi e quelli che l'agente ricava dalle note, dopo la tua conferma. Accanto puoi vedere anche gli altri tuoi calendari."),
-          el("p", {}, el("b", {}, "Drive"), ": puoi collegare documenti del tuo Drive a un progetto o a una voce del manuale; l'agente li legge come contesto quando analizza una nota del progetto. Solo lettura."),
-          el("p.meta", {}, "Si passa dalla pagina di Google e si torna qui. Se compare l'avviso «app non verificata», si prosegue con «Avanzate». Le tre spunte sono separate: puoi dare solo quelle che vuoi."),
+          el("p", {}, el("b", {}, "Drive"), ": puoi collegare documenti del tuo Drive a un progetto o a una voce del manuale; l'agente li legge come contesto quando analizza una nota del progetto."),
+          el("p", {}, el("b", {}, "Cartelle dei progetti"), ": ogni progetto ha una cartella in «D&D» sul tuo Drive, condivisa con l'altra persona se il progetto è condiviso. L'app tocca solo i file che crea lei."),
+          el("p.meta", {}, "Si passa dalla pagina di Google e si torna qui. Se compare l'avviso «app non verificata», si prosegue con «Avanzate». Le spunte sono separate: puoi dare solo quelle che vuoi."),
         ),
       );
       return;
@@ -89,6 +90,8 @@ export function mount(container) {
           rigaPermesso("contatto", "Contatti", "contatti", "Cerchi tra i contatti scrivendo un nome", manca("contatti") ? null : () => vaiA("manuale", "contatti")),
           rigaPermesso("calendario", "Calendario", "calendario", calendario, manca("calendario") ? null : () => apriSceltaCalendari(leggiCasa)),
           rigaPermesso("cartella", "Drive", "drive", "Documenti collegabili ai progetti e al manuale", null),
+          // 22/11: i file creati dall'app (drive.file). Chi ha collegato prima non l'ha mai vista: va ricollegato.
+          rigaPermesso("cartella", "Cartelle dei progetti", "cartelle", "Una cartella per progetto in «D&D» sul tuo Drive", null),
         ),
       ),
       casa || manca("calendario") || altri ? null : el("p.meta", {}, "Senza un calendario della casa la pagina Calendario resta vuota: tocca Calendario qui sopra per sceglierlo."),
@@ -114,7 +117,7 @@ export function mount(container) {
     concludendo = true; render();
     try {
       const r = await inCorso;
-      const date = Object.entries(r.permessi || {}).filter(([, v]) => v).map(([k]) => ({ contatti: "contatti", calendario: "calendario", drive: "Drive" }[k]));
+      const date = Object.entries(r.permessi || {}).filter(([, v]) => v).map(([k]) => ({ contatti: "contatti", calendario: "calendario", drive: "Drive", cartelle: "cartelle dei progetti" }[k])).filter(Boolean);
       toast(`Google collegato: ${date.join(", ") || "nessun permesso"}`, { ms: 5000 });
       errore = null;
     } catch (err) {

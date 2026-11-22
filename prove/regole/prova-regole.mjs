@@ -62,6 +62,7 @@ async function semina() {
     await setDoc(doc(f, "tasks", "taskCondiviso"), base(mA, A, "shared", { text: "Bolletta", done: false }));
     await setDoc(doc(f, "shopping_items", "latteB"), base(bB, B, "shared", { text: "Latte", done: false }));
     await setDoc(doc(f, "manual_entries", "voceB"), base(bB, B, "shared", { type: "info", name: "Wi-Fi" }));
+    await setDoc(doc(f, "projects", "tennis"), base(mA, A, "shared", { name: "Tennis", cartella: { id: "cartellaTennis", link: "https://drive.google.com/drive/folders/cartellaTennis", condivisaCon: "giulia@example.com" } }));
 
     for (const coll of ["journal_entries", "journal_photos"]) {
       const extra = coll === "journal_entries" ? { text: "Lezione di tennis", projectId: "tennis" } : { entryId: "notaCondivisa", ordine: 0, mime: "image/jpeg", dati: "AAAA" };
@@ -178,6 +179,20 @@ for (const coll of ["journal_entries", "journal_photos"]) {
     await si(deleteDoc(doc(db(gA), coll, "condivisa")));
   });
 }
+
+console.log("Cartella del progetto su Drive (22/11)");
+await semina();
+await caso("il progetto condiviso lo modificano tutti e due, ma la cartella su Drive no", async () => {
+  await si(updateDoc(doc(db(gA), "projects", "tennis"), { name: "Tennis e padel" }));
+  await si(updateDoc(doc(db(mA), "projects", "tennis"), { sintesi: "## Dritto" }));
+  await no(updateDoc(doc(db(mA), "projects", "tennis"), { "cartella.id": "unAltraCartella" }));
+  await no(updateDoc(doc(db(gA), "projects", "tennis"), { cartella: { id: "unAltraCartella" } }));
+  await no(updateDoc(doc(db(mA), "projects", "tennis"), { cartella: null }));
+});
+await caso("un progetto nuovo nasce senza cartella (la crea il server)", async () => {
+  await si(setDoc(doc(db(mA), "projects", "nuovo"), base(mA, A, "private", { name: "Nuovo", archived: false })));
+  await no(setDoc(doc(db(mA), "projects", "conCartella"), base(mA, A, "private", { name: "Furbo", cartella: { id: "x" } })));
+});
 
 console.log("Collezioni del server");
 await semina();

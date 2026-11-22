@@ -753,6 +753,7 @@ with sync_playwright() as p:
         pg.wait_for_selector(".blocco h3 >> text=mattia@example.com", timeout=8000)
         assert pg.url.endswith("/#/google"), pg.url
         pg.wait_for_selector("text=Scegli il calendario della casa")
+        assert pg.locator(".riga", has_text="Cartelle dei progetti").locator("text=Una cartella per progetto").count() == 1, "permesso dei file dell'app (22/11)"
         pg.wait_for_timeout(200)
         shot(pg, "5b2-google")
         pg.click(".riga >> text=Contatti")
@@ -1050,6 +1051,8 @@ with sync_playwright() as p:
         shot(pg, "15-progetto-istruzioni")
         conferma(pg)
         pg.wait_for_selector("button.pillola.on >> text=Tennis")
+        # La cartella su Drive del progetto nuovo (22/11): chiesta da sola, perché Google è collegato con la spunta dei file dell'app
+        pg.wait_for_function("JSON.parse(sessionStorage.getItem('finto.cartelle') || '[]').some((c) => c.azione === 'crea')", timeout=4000)
         pg.click("button.btn--piatto >> text=Diario")
         pg.wait_for_selector(".schede a[aria-current='page'][href='#/diario']")
         pg.wait_for_selector("button.pillola.on >> text=Tennis")
@@ -1110,6 +1113,11 @@ with sync_playwright() as p:
         step[0] = "pagina del progetto"
         pg.click("button.btn--piatto >> text=Pagina del progetto")
         pg.wait_for_selector("#page-title >> text=Tennis")
+        # In testata «Drive» apre la cartella del progetto (22/11)
+        drive = pg.locator(".progetto__riga a[aria-label='Apri la cartella su Drive']")
+        drive.wait_for(timeout=4000)
+        assert drive.get_attribute("href") == "https://drive.google.com/drive/folders/cartella-" + pg.evaluate("[...window.__finto.coll('projects')].find(([, p]) => p.name === 'Tennis')[0]"), drive.get_attribute("href")
+        assert drive.get_attribute("target") == "_blank"
         pg.wait_for_selector("html[data-colore='giallo'] .pagina-progetto")
         pg.wait_for_selector(".tema__nome >> text=Dritto")
         assert pg.locator(".tema", has_text="Dritto").locator(".tema__stato--bene >> text=migliora").count() == 1, "stato del tema"
@@ -1251,6 +1259,29 @@ with sync_playwright() as p:
         assert pg.locator("button.pillola", has_text="Tennis").count() == 1, "il progetto non deve duplicarsi"
         assert pg.locator("button.btn--piatto", has_text="Progetto").filter(has_not_text="Modifica").count() == 1, "dai Task si va alla pagina del progetto"
         # Il filtro del Diario torna su Tutte per il resto della prova
+        pg.click(".schede a[href='#/diario']")
+        pg.click("button.pillola >> text=Tutte")
+
+        # ── Cartella su Drive di un progetto nato prima del collegamento (22/11): un tocco su «Drive» la crea. Circolo non ha
+        # istruzioni, quindi niente pagina del progetto: «Drive» sta nei Task, accanto a «Modifica progetto» ──
+        step[0] = "cartella di un progetto che c'era"
+        pg.click(".schede a[href='#/task']")
+        pg.click("button.pillola >> text=Circolo")
+        crea = pg.locator("#view .segmenti button[aria-label='Crea la cartella su Drive']")
+        crea.wait_for(timeout=4000)
+        assert pg.evaluate("document.documentElement.scrollWidth") <= 390, "la pagina sta nello schermo"
+        pg.wait_for_timeout(150)
+        shot(pg, "17i-progetto-senza-cartella")
+        # Un rifiuto del server (spunta dei file dell'app non data): il messaggio, e la cartella resta da creare
+        pg.evaluate("sessionStorage.setItem('finto.cartelle.errore', 'cartelle')")
+        crea.click()
+        pg.wait_for_selector("#toast >> text=Ricollega Google e lascia la spunta per i file creati dall'app")
+        assert crea.count() == 1
+        crea.click()
+        pg.wait_for_selector("#toast >> text=Cartella su Drive: D&D/Circolo")
+        pg.wait_for_selector("#view .segmenti a[aria-label='Apri la cartella su Drive']")
+        pg.wait_for_timeout(150)
+        shot(pg, "17j-progetto-cartella")
         pg.click(".schede a[href='#/diario']")
         pg.click("button.pillola >> text=Tutte")
 
@@ -2015,6 +2046,9 @@ with sync_playwright() as p:
         pg.click("#foglio .colore[data-colore='terra']")
         conferma(pg)
         pg.wait_for_function(f"window.__finto.coll('journal_entries').get('{direttivo}').visibility === 'shared'", timeout=4000)
+        # La cartella su Drive del progetto lo segue (22/11): condivisa con l'altra persona
+        pg.wait_for_function("[...window.__finto.coll('projects').values()].some((p) => p.name === 'Circolo' && p.cartella?.condivisaCon === 'giulia@example.com')", timeout=4000)
+        assert any(c["azione"] == "allinea" for c in pg.evaluate("JSON.parse(sessionStorage.getItem('finto.cartelle'))")), "visibilità cambiata: la cartella si allinea"
         # Filtrato sul progetto, il Diario ne prende il colore: pillola piena, +, giorno delle note (terra: #9C6A4E, testo #7A4D33)
         pg.wait_for_selector("button.pillola--progetto.on[data-colore='terra']")
         sfondo = pg.locator("button.pillola.on >> text=Circolo").evaluate("e => getComputedStyle(e).backgroundColor")

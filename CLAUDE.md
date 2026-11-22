@@ -28,6 +28,9 @@ Documenti: `docs/ARCHITETTURA.md` (come funziona e perché), `docs/MODELLO-DATI.
     18:47, `src/settimana.js`, senza azioni);
   - `bank` (consenso, letture, `src/banking/enable.js`) e `syncBank` (ogni giorno alle 7:15);
   - `google`: collegamento una tantum con Contatti, Calendario e Drive, permessi di un'ora (`src/google/account.js`);
+  - `cartella` (22/11): cartella `D&D/<progetto>` su Drive per ogni progetto, nel Drive del proprietario e col suo permesso
+    (`drive.file`), condivisa con l'altra persona se il progetto è condiviso (`src/google/cartelle.js`, piano in
+    `docs/PIANO-DRIVE-MCP.md`); `giroAvvisi` riallinea quelle rimaste indietro;
   - `avvisa` (notifiche push, `src/avvisi.js`) e `giroAvvisi` (ogni 5 minuti: eventi nuovi, promemoria, riepilogo delle
     7:30, `src/avvisi-calendario.js`);
   - `prodotto` (scheda da Open Food Facts / Open Beauty Facts con l'indice, cache `prodotti/{ean}`, `src/prodotti/`) e
@@ -68,6 +71,7 @@ Una riga per file, per orientarsi; i dettagli di ciascuno sono in `docs/MAPPA.md
 | `core/google.js` · `core/contatti-google.js` | account Google (stato, permesso di un'ora, `chiamaGoogle`) · Contatti in memoria |
 | `core/calendario.js` | calendari (casa + altri per persona), eventi dei prossimi 60 giorni, scrittura su Google, ripetizioni |
 | `core/drive.js` · `core/archivio.js` | ricerca in Drive · archivio sul telefono (IndexedDB) delle note vocali |
+| `core/cartelle.js` | cartella del progetto su Drive (22/11): crea e allinea con la function `cartella`, pulsante «Drive» |
 | `components/sheet.js` | foglio a tutta altezza: azioni in basso, tastiera solo su campo vuoto, `scriviDa` |
 | `components/menu.js` · `components/onboarding.js` | menu a sinistra a gruppi · primo accesso (crea casa o entra col codice) |
 | `components/proposals.js` | azioni proposte (Diario, banca, Chiedi): `APPLICA` per tipo, `renderAzione`, `segnaAccettata` |
@@ -215,6 +219,12 @@ Scelte di Mattia da non riproporre (il perché e il contesto in docs/STORIA.md, 
 ## Da verificare
 
 Dal telefono o con i dati veri (dettagli in docs/STORIA.md alla data):
+- **Cartelle su Drive** (22/11, passo 1 del piano): Mattia aggiunge lo scope `drive.file` nella schermata di consenso OAuth
+  e ricollega Google (anche la compagna); poi un progetto nuovo ha la sua cartella in «D&D», «Drive» la apre, un progetto
+  condiviso la condivide con l'altra (lei la vede in «Condivisi con me»), tornando privato la condivisione sparisce.
+  Schermata di consenso «In produzione» come pensa Mattia (allora niente scadenza dei 7 giorni): da guardare in Google
+  Cloud → Google Auth Platform → Pubblico (Audience), o nella pagina Google dell'app prima di ricollegare (collegato da
+  più di 7 giorni e ancora attivo = in produzione).
 - **Backup** (14/11): **prima Mattia** dà in console il ruolo di export ai due service account (docs/ARCHITETTURA.md,
   Backup, «Da fare una volta in console»: oggi il backup prende 403); poi Diagnosi con `backup` e `backupora`, un Ripristino
   di prova, il PITR attivo (Diagnosi), il primo backup del lunedì.

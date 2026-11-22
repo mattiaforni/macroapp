@@ -10,9 +10,11 @@ Campi comuni a tutte le collezioni di contenuto, compilati da `core/db.js`:
 | `createdAt`, `updatedAt` | timestamp | server |
 
 ## `users/{uid}`
-`displayName, email, photoURL, householdId, createdAt, google?: { collegato, scaduto, email, dal, permessi: { contatti, calendario, drive } }, dispositivi?: { <id>: { token, nome, aggiornato } }, notifiche?: { spese, task, lista, calendario, promemoria, riepilogo, diario, banca, settimana, anticipo, silenzio }, modelli?: { note, progetti, domande }, calendari?: [{ id, nome, colore, modificabile }], barra?: [id]`
+`displayName, email, photoURL, householdId, createdAt, google?: { collegato, scaduto, email, dal, permessi: { contatti, calendario, drive, cartelle } }, cartelleDrive?: { radice: { id, link } }, dispositivi?: { <id>: { token, nome, aggiornato } }, notifiche?: { spese, task, lista, calendario, promemoria, riepilogo, diario, banca, settimana, anticipo, silenzio }, modelli?: { note, progetti, domande }, calendari?: [{ id, nome, colore, modificabile }], barra?: [id]`
 `google` lo scrive la funzione `google`: dice all'app se l'account Google è collegato, con quale account e quali
-delle tre spunte (contatti, calendario, Drive) sono state date. Il vecchio campo `contattiGoogle` (collegamento ai
+delle spunte (contatti, calendario, Drive e, dal 22/11, `cartelle` = i file creati dall'app su Drive, scope `drive.file`)
+sono state date. `cartelleDrive.radice` (22/11): la cartella «D&D» nel Drive della persona, dove stanno le cartelle dei suoi
+progetti; la scrive la function `cartella`. Il vecchio campo `contattiGoogle` (collegamento ai
 soli contatti, prima del 27/10) vale come `google` con il solo permesso dei contatti finché non si ricollega.
 `dispositivi`: i telefoni con le notifiche attive (id casuale tenuto nel telefono, token di Cloud Messaging);
 la funzione `avvisa` toglie quelli il cui token non vale più. `notifiche`: categorie per la persona, su tutti
@@ -88,6 +90,11 @@ diario; con queste, ogni nota del progetto riceve un riepilogo (vedi `journal_en
 `sintesi` aggiornata (proposta `project_summary`: lo stato del progetto, ciò che è emerso finora, per temi).
 Convenzione del testo: una sezione «## Tema» per tema, prima riga facoltativa «Stato: …». La sintesi si legge
 per temi e si corregge dalla pagina del progetto (`modules/progetto`, `components/sintesi.js`).
+`cartella?` (22/11): `{ id, link, nome, ownerUid, condivisaCon, visibilita, creataAt, allineataAt, persa? }` — la cartella
+`D&D/<nome>` del progetto su Drive, nel Drive del proprietario (`ownerUid`), condivisa con l'email Google dell'altra persona
+(`condivisaCon`) se il progetto è condiviso; `visibilita` = quella a cui è allineata (il giro di `giroAvvisi` riallinea le
+altre), `persa` = nel cestino o tolta (un tocco su «Drive» la ricrea). La scrive solo la function `cartella` (le regole
+vietano all'app di crearla o cambiarla: il suo id dice al server dove scrivere con il permesso del proprietario).
 `documenti`: file di Google Drive collegati al progetto (`components/documenti.js`, dal foglio del progetto). Con le
 istruzioni, l'agente ne legge il testo come contesto quando analizza una nota (Documenti, Fogli e Presentazioni di Google
 esportati come testo, file di testo così come sono, PDF letti da Claude dal 14/11 (`drive_testi`); gli altri formati solo per
@@ -201,6 +208,7 @@ in che giorno è partito l'ultimo riepilogo del mattino.
 - `households`: un non membro può solo aggiungersi, fino a 2 membri
 - `prodotti`: lettura per chi è autenticato, scrittura solo dal server
 - `avvisi_stato`, `google_tokens`, `off_account`, `drive_testi`: solo il server
+- `projects.cartella`: solo il server (l'app non la mette in un progetto nuovo né la cambia)
 - `domande`: solo del proprietario; `consumi`: lettura del proprietario, scrittura solo dal server
 
 ## Eventi di Google Calendar (non su Firestore)

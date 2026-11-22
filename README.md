@@ -34,7 +34,8 @@ Dettagli in [docs/ARCHITETTURA.md](docs/ARCHITETTURA.md) e [docs/MODELLO-DATI.md
 8. **Google (Contatti, Calendario, Drive)**: Google Cloud → API e servizi → Credenziali → «Web client (auto created by Google Service)»
    → URI di reindirizzamento autorizzati → aggiungi `https://<dominio>/google-contatti` (il percorso vale per tutti e
    tre i permessi). Nella schermata di consenso OAuth vanno dichiarati gli scope usati (`contacts.readonly`,
-   `calendar.readonly`, `calendar.events`, `drive.readonly`) e, in modalità di test, i due account come utenti di prova:
+   `calendar.readonly`, `calendar.events`, `drive.readonly` e, dal 22/11, `drive.file` per le cartelle dei progetti) e,
+   in modalità di test, i due account come utenti di prova:
    in modalità di test il permesso scade dopo 7 giorni e si ricollega dalla pagina Google; pubblicarla con lo scope di
    Drive richiede la verifica di sicurezza di Google.
 7. **Primo deploy**: `firebase deploy`.

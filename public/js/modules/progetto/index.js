@@ -8,7 +8,8 @@
 //   (apriLettura, lo stesso foglio del Diario); da lì Modifica e Rianalizza.
 // - Da fare: i task del progetto.
 // In fondo alla Sintesi, i documenti di Drive collegati al progetto (si aprono in Drive; si scelgono
-// dal foglio del progetto).
+// dal foglio del progetto). In testata «Drive» (22/11) apre la cartella del progetto su Drive (`projects.cartella`,
+// core/cartelle.js) o, se non c'è ancora, la crea.
 // Il + scrive una nota nel progetto, come nel Diario. Le note restano note del diario: cambia solo
 // dove le guardi. In un progetto condiviso le note sono della casa (7/11, core/note.js): ci sono anche quelle
 // dell'altra persona, col suo nome, e le modificate tutti e due.
@@ -23,6 +24,7 @@ import { eliminaFotoDi } from "../../components/foto.js";
 import { apriProgetto, rigaTask } from "../task/index.js";
 import { elencoDocumenti } from "../../components/documenti.js";
 import { vaiA } from "../../core/router.js";
+import { bottoneDrive } from "../../core/cartelle.js";
 
 export const id = "progetto";
 export const title = "Progetto";
@@ -202,6 +204,7 @@ export function mount(container) {
       el("span.meta", {}, riga),
       el("span.spazio"),
       el("button.btn.btn--piatto", { onclick: () => { scrivi(CHIAVE_DIARIO, progetto.id); vaiA("diario"); } }, icon("diario"), "Diario"),
+      bottoneDrive(progetto, render),
       el("button.tondo.tondo--piatto", { "aria-label": "Modifica progetto", onclick: () => apriProgetto(progetto) }, icon("matita")),
     ));
     const pillola = (v, testo) => el("button.pillola", { type: "button", class: vista === v ? "on" : "", onclick: () => scegli(v) }, testo);

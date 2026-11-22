@@ -50,7 +50,7 @@ function google(data) {
   const utenti = coll("users");
   const u = utenti.get(UID) || {};
   const errore = (motivo) => Object.assign(new Error(motivo), { code: "functions/failed-precondition", details: { motivo } });
-  const permessi = { contatti: true, calendario: true, drive: true };
+  const permessi = { contatti: true, calendario: true, drive: true, cartelle: true };
   const token = { email: "mattia@example.com", accessToken: "token-finto", scade: Date.now() + 3600 * 1000, permessi };
   if (data.azione === "avvio") return { url: `${location.origin}/google-contatti?code=codice-finto&state=s1` };
   if (data.azione === "collega") {
@@ -166,6 +166,28 @@ async function contribuisciFinto(data = {}) {
   return { data: { scheda: { ...scheda, ean: data.ean, letto: Date.now() }, campi: Object.keys(c), avvisi: [], aggiornata: true } };
 }
 
+// Function `cartella` finta (22/11): come il server (functions/src/google/cartelle.js), scrive projects/{id}.cartella; la
+// cartella è condivisa con «giulia@example.com» se il progetto è condiviso. Tiene le chiamate (sessionStorage
+// «finto.cartelle») per la prova; `finto.cartelle.errore` = un motivo da restituire una volta (es. «cartelle»).
+async function cartellaFinta(data = {}) {
+  await new Promise((ok) => setTimeout(ok, 150));
+  const chiamate = JSON.parse(sessionStorage.getItem("finto.cartelle") || "[]");
+  chiamate.push({ azione: data.azione, projectId: data.projectId });
+  sessionStorage.setItem("finto.cartelle", JSON.stringify(chiamate));
+  const sbaglio = sessionStorage.getItem("finto.cartelle.errore");
+  if (sbaglio) {
+    sessionStorage.removeItem("finto.cartelle.errore");
+    throw Object.assign(new Error("Ricollega Google e lascia la spunta per i file creati dall'app"), { code: "functions/failed-precondition", details: { motivo: sbaglio } });
+  }
+  const p = coll("projects").get(data.projectId);
+  if (!p) throw Object.assign(new Error("Progetto non trovato"), { code: "functions/not-found", details: { motivo: "progetto" } });
+  if (data.azione === "allinea" && !p.cartella?.id) return { data: { cartella: null } };
+  const id = p.cartella?.id || `cartella-${data.projectId}`;
+  p.cartella = { id, link: `https://drive.google.com/drive/folders/${id}`, nome: p.name, ownerUid: p.ownerUid, condivisaCon: p.visibility === "shared" ? "giulia@example.com" : null };
+  notify();
+  return { data: { cartella: { id, link: p.cartella.link, nome: p.cartella.nome, condivisaCon: p.cartella.condivisaCon }, inCorso: false } };
+}
+
 async function prodottoFinto(data = {}) {
   // Ritardo come sul telefono (function fredda + Open Food Facts): la prova lo alza per guardare l'attesa.
   const ritardo = Number(sessionStorage.getItem("finto.prodotto.ritardo") || 80);
@@ -202,6 +224,7 @@ export function httpsCallable(_f, name) {
   if (name === "avvisa") return async (data) => ({ data: avvisaFinto(data) });
   if (name === "prodotto") return prodottoFinto;
   if (name === "contribuisci") return contribuisciFinto;
+  if (name === "cartella") return cartellaFinta;
   // Trascrizione finta: segna cosa ha ricevuto (formato, dimensione, progetto) per le asserzioni della prova.
   // La prima registrazione di un foglio dà la frase della lezione, le successive (`pezzo` > 0) un seguito numerato. Per le prove:
   // `finto.trascrivi.cade` = quante chiamate perdono la risposta (telefono bloccato, rete), poi riescono;

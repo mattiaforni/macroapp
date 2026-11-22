@@ -5,8 +5,8 @@
 // (percorso del primo collegamento, già autorizzato nel client OAuth), e il server conserva il
 // refresh token (functions/src/google/account.js). L'app riceve solo permessi di un'ora, che tiene
 // in localStorage per non chiederli a ogni apertura, e con quelli chiama direttamente le API di
-// Google (`chiamaGoogle`). I tre permessi sono facoltativi nella pagina di Google: `statoGoogle().permessi`
-// dice quali ci sono. I contatti stanno in contatti-google.js, il calendario in calendario.js, Drive in drive.js.
+// Google (`chiamaGoogle`). I permessi sono facoltativi nella pagina di Google: `statoGoogle().permessi`
+// dice quali ci sono (dal 22/11 anche `cartelle`, i file creati dall'app su Drive: core/cartelle.js). I contatti stanno in contatti-google.js, il calendario in calendario.js, Drive in drive.js.
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-functions.js";
 import { functions } from "./firebase.js";
 import { session } from "./auth.js";
@@ -26,7 +26,7 @@ const chiama = (dati) => httpsCallable(functions, "google")(dati).then((r) => r.
 
 // ───────────── Stato del collegamento ─────────────
 
-const NESSUNO = { contatti: false, calendario: false, drive: false };
+const NESSUNO = { contatti: false, calendario: false, drive: false, cartelle: false };
 
 /**
  * { collegato, scaduto, email, permessi: { contatti, calendario, drive } } dal profilo (users/{uid}.google,
@@ -43,7 +43,7 @@ export function statoGoogle() {
   };
 }
 export const googleCollegato = () => statoGoogle().collegato;
-/** Se c'è il permesso per quella parte: "contatti" | "calendario" | "drive". */
+/** Se c'è il permesso per quella parte: "contatti" | "calendario" | "drive" | "cartelle" (i file creati dall'app, 22/11). */
 export const permessoGoogle = (parte) => statoGoogle().permessi[parte];
 
 const ascoltatori = new Set();

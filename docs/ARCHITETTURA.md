@@ -224,7 +224,8 @@ Un solo collegamento dell'account Google per persona, dato una volta (pagina Goo
 pagina di Google chiede tre spunte facoltative e torna su `/google-contatti` (percorso del primo collegamento, già
 autorizzato nel client OAuth). Il refresh token resta sul server (`google_tokens/{uid}`, `functions/src/google/account.js`);
 l'app riceve permessi di un'ora (`core/google.js` → `chiamaGoogle`) e con quelli chiama direttamente le API di Google.
-Scope: `contacts.readonly`, `calendar.readonly` + `calendar.events`, `drive.readonly`. Google considera i primi due
+Scope: `contacts.readonly`, `calendar.readonly` + `calendar.events`, `drive.readonly` e, dal 22/11, `drive.file` (i file che
+l'app crea: cartelle dei progetti, `permessi.cartelle`; va ricollegato una volta). Google considera i primi due
 «sensibili» e Drive «ristretto»: finché la schermata di consenso OAuth è in modalità di test il permesso scade dopo
 7 giorni (per entrambi gli utenti) e l'app mostra «Collegamento scaduto»; pubblicarla per Drive richiederebbe la
 verifica di sicurezza di Google, che per un'app di due persone non ha senso. Il deploy attiva le tre API e scrive
@@ -263,6 +264,28 @@ il segreto GOOGLE_OAUTH_CLIENT.
   formati si elencano solo per nome. Nel manuale i documenti servono a ritrovare contratti e
   garanzie con un tocco. Una ricerca libera dell'agente su tutto il Drive non c'è: su un Drive intero la rilevanza per
   parole chiave è troppo rumorosa per finire nel prompt senza una scelta dell'utente.
+
+## Cartelle dei progetti su Drive (22/11, piano in docs/PIANO-DRIVE-MCP.md)
+
+Firestore resta la fonte dei dati; Drive è il posto dei documenti di lavoro. Ogni progetto ha una cartella `D&D/<nome>`
+**nel Drive di chi ha creato il progetto**, creata dall'app: alla creazione del progetto (dal foglio del progetto o da una
+proposta che nomina un progetto nuovo, se chi lo crea ha la spunta dei file dell'app) o con un tocco su «Drive» (pagina del
+progetto e, per i progetti senza istruzioni, barra del progetto nei Task). La function `cartella` (`src/google/cartelle.js`):
+- controlla che chi chiama veda il progetto (suo, o condiviso nella sua casa) e scrive **con il permesso Google del
+  proprietario** (`tokenServer` del proprietario, scope `drive.file`): l'altra persona può creare la cartella di un progetto
+  condiviso, che finisce comunque nel Drive di chi l'ha creato. Se al proprietario manca la spunta, il messaggio lo dice
+  per nome («deve ricollegare Google»);
+- crea «D&D» una volta per persona (`users.cartelleDrive.radice`), poi la cartella del progetto; tutte portano
+  `appProperties.dd` (`radice`, `progetto` + `progetto` = id), così si ritrovano anche se l'id si perde; due richieste
+  insieme non creano due cartelle (transazione con `cartella.creando`, 60 s);
+- allinea: nome della cartella = nome del progetto; progetto condiviso → permesso di **modifica** all'email Google
+  dell'altra persona (o a quella del suo accesso), senza mail di invito (con la mail solo se l'indirizzo non è un account
+  Google, perché Drive lo richiede); privato → quel permesso si toglie. Lo chiama l'app quando cambiano visibilità o nome,
+  e `giroAvvisi` ogni 5 minuti riallinea le cartelle la cui `visibilita` o il cui nome non corrispondono più al progetto
+  (una chiamata persa senza rete). Una cartella nel cestino si segna `persa` e un tocco la ricrea.
+`projects.cartella` la scrive solo il server: le regole vietano all'app di mettere o cambiare il campo, perché il suo id
+dice al server dove scrivere con il permesso del proprietario. Prova senza rete: `node functions/strumenti/prova-drive.mjs`
+(Firestore e Drive finti in `functions/strumenti/finti.mjs`).
 
 ## Integrazioni previste
 

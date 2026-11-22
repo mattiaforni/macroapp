@@ -2,15 +2,17 @@
 // prese dalla rubrica del manuale. Personali per impostazione predefinita; un progetto
 // condiviso rende condivisi i suoi task.
 //
-// projects { name, archived, istruzioni, sintesi, sintesiAt, colore, documenti }
+// projects { name, archived, istruzioni, sintesi, sintesiAt, colore, documenti, cartella }
 //          istruzioni = per l'agente del diario: con queste, ogni nota del progetto riceve un riepilogo
 //          sintesi = lo stato del progetto, proposto dall'agente e confermato; si legge in modules/progetto
 //          documenti = file di Google Drive [{ id, nome, mime, link }] che l'agente legge come contesto
+//          cartella = la cartella del progetto su Drive (22/11, core/cartelle.js): la scrive solo il server
 // tasks    { text, done, doneAt, due ("AAAA-MM-GG" o null), projectId, peopleIds[], people, note }
 //          people = nomi delle persone in chiaro, copia di peopleIds per chi non vede la voce in rubrica
 import { el, icon, toast, fascia, vuoto, attesa, sceltaVisibilita, sceltaColore, fmtDate, meseBreve, isoGiorno, toDate, fab, pillolaProgetto } from "../../core/ui.js";
 import { create, update, remove, watchVisible, readVisible, VIS } from "../../core/db.js";
 import { allineaProgetto } from "../../core/note.js";
+import { cartellaPerNuovo, allineaCartella, bottoneDrive } from "../../core/cartelle.js";
 import { session } from "../../core/auth.js";
 import { openSheet, campo } from "../../components/sheet.js";
 import { sceltaPersone } from "../../components/persone.js";
@@ -39,7 +41,9 @@ export async function risolviProgetto(nome, visibility = VIS.PRIVATE) {
   const progetti = await readVisible(PROJ);
   const trovato = progetti.find((p) => norm(p.name) === norm(nome));
   if (trovato) return trovato.id;
-  return create(PROJ, { name: cap(nome.trim()), archived: false }, visibility).id;
+  const nuovo = create(PROJ, { name: cap(nome.trim()), archived: false }, visibility);
+  cartellaPerNuovo(nuovo); // la sua cartella su Drive (22/11), se c'è il permesso
+  return nuovo.id;
 }
 
 /**
@@ -211,8 +215,14 @@ export function apriProgetto(esistente = null, onCreato) {
         // chi ha creato il progetto può cambiarla (regole): per l'altra persona la modifica non passa, e le note restano.
         const cambiata = visibility !== (esistente.visibility || VIS.PRIVATE);
         if (cambiata && esistente.ownerUid === session.user.uid) allineaProgetto(esistente.id, visibility).catch((e) => console.warn("note del progetto", e));
+        // La cartella su Drive segue visibilità e nome (22/11): condivisa con l'altra persona o no, rinominata.
+        if (esistente.cartella?.id && (cambiata || name !== esistente.name)) allineaCartella(esistente.id).catch((e) => console.warn("cartella del progetto", e.motivo || e.message));
       }
-      else onCreato?.(create(PROJ, { ...dati, name: cap(name), archived: false }, visibility).id);
+      else {
+        const nuovo = create(PROJ, { ...dati, name: cap(name), archived: false }, visibility);
+        cartellaPerNuovo(nuovo); // la cartella su Drive del progetto nuovo (22/11), se c'è il permesso
+        onCreato?.(nuovo.id);
+      }
     },
   });
 }
@@ -287,6 +297,7 @@ export function mount(container) {
         // Le note del diario di questo progetto: si aprono nel Diario, già filtrato.
         el("button.btn.btn--piatto", { onclick: () => { try { localStorage.setItem(CHIAVE_DIARIO, p.id); } catch (e) {} vaiA("diario"); } }, icon("diario"), "Diario"),
         p.istruzioni ? el("button.btn.btn--piatto", { onclick: () => apriPaginaProgetto(p.id) }, icon("cartella"), "Progetto") : null,
+        bottoneDrive(p, render), // la cartella del progetto su Drive (22/11)
         p.visibility === VIS.SHARED ? el("span.etichetta.etichetta--accento", { style: "align-self:center" }, "condiviso") : null));
     }
 

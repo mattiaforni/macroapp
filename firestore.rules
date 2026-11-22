@@ -93,10 +93,12 @@ service cloud.firestore {
       allow delete: if signedIn() && canDelete();
     }
 
+    // Progetti: come le altre cose della casa. La cartella su Drive (`cartella`, 22/11) la scrive solo il server (function
+    // `cartella`): il suo id dice al server dove scrivere con il permesso Google del proprietario, quindi l'app non la tocca.
     match /projects/{id} {
       allow read: if signedIn() && canRead();
-      allow create: if signedIn() && validNew();
-      allow update: if signedIn() && canWrite();
+      allow create: if signedIn() && validNew() && !('cartella' in request.resource.data);
+      allow update: if signedIn() && canWrite() && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['cartella']);
       allow delete: if signedIn() && canDelete();
     }
     match /recurring_expenses/{id} {

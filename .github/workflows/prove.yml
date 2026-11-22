@@ -2,7 +2,7 @@
 # sui push degli altri rami, così una modifica si può provare prima di portarla su main. Si lanciano anche a mano:
 # Actions → Prove → Run workflow.
 #
-# 1. prove delle functions (functions/strumenti, senza rete);
+# 1. prove delle functions (functions/strumenti, senza rete; prova-drive dal 22/11: cartelle dei progetti su Drive);
 # 2. regole di Firestore sull'emulatore (prove/regole, progetto «demo-»: non tocca quello vero);
 # 3. flusso dell'app in Chromium (prove/costruisci.py + prove/prova.py, Firebase finto).
 # Se qualcosa non va, le schermate di prove/_schermate restano come artifact dell'esecuzione per 7 giorni
@@ -31,7 +31,7 @@ jobs:
 
       - name: Prove delle functions
         run: |
-          for t in prova-banca prova-avvisi prova-prodotti prova-chiedi prova-contributo prova-backup; do
+          for t in prova-banca prova-avvisi prova-prodotti prova-chiedi prova-contributo prova-backup prova-drive; do
             echo "::group::$t"
             node functions/strumenti/$t.mjs || { echo "::error title=Prove delle functions::$t non passa"; exit 1; }
             echo "::endgroup::"

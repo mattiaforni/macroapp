@@ -1,5 +1,6 @@
 // Account Google collegato una volta sola: Contatti (sola lettura), Calendario (lettura e scrittura
-// degli eventi) e Drive (sola lettura).
+// degli eventi), Drive (sola lettura di tutto) e, dal 22/11, i file che l'app crea su Drive (`drive.file`: le cartelle dei
+// progetti, src/google/cartelle.js).
 //
 // Il permesso si dà una volta: l'app manda alla pagina di Google, che torna su /google-contatti
 // (il percorso è rimasto quello del primo collegamento, già autorizzato nel client OAuth) con un
@@ -15,8 +16,8 @@
 //   collega  { code, state, ritorno }  → { email, accessToken, scade, permessi }
 //   token    { rinnova? }              → { email, accessToken, scade, permessi }
 //   scollega {}                        → {}
-// permessi = { contatti, calendario, drive }: quali dei tre l'utente ha lasciato spuntati nella pagina
-// di Google (sono tutti facoltativi lì). Lo stesso sta in users/{uid}.google, che l'app legge.
+// permessi = { contatti, calendario, drive, cartelle }: quali l'utente ha lasciato spuntati nella pagina di Google (sono
+// tutti facoltativi lì; `cartelle` = drive.file, i file creati dall'app). Lo stesso sta in users/{uid}.google, che l'app legge.
 // Gli errori portano in details.motivo un codice per l'app: client, ritorno, state, scope,
 // refresh, non-collegato, scaduto, rete.
 import { HttpsError } from "firebase-functions/v2/https";
@@ -26,8 +27,11 @@ export const SCOPE = {
   contatti: "https://www.googleapis.com/auth/contacts.readonly",
   calendario: ["https://www.googleapis.com/auth/calendar.readonly", "https://www.googleapis.com/auth/calendar.events"],
   drive: "https://www.googleapis.com/auth/drive.readonly",
+  // 22/11 (docs/PIANO-DRIVE-MCP.md): creare e modificare i file dell'app (cartelle dei progetti, copie, documenti, foto).
+  // drive.readonly resta per leggere ciò che la persona o la chat mettono nella cartella.
+  cartelle: "https://www.googleapis.com/auth/drive.file",
 };
-const SCOPES = ["openid", "email", SCOPE.contatti, ...SCOPE.calendario, SCOPE.drive];
+const SCOPES = ["openid", "email", SCOPE.contatti, ...SCOPE.calendario, SCOPE.drive, SCOPE.cartelle];
 const PERCORSO = "/google-contatti";
 const ORIGINI = ["https://macroapp-b9bd0.web.app", "https://macroapp-b9bd0.firebaseapp.com", "http://localhost:5000"];
 const COLL = "google_tokens";
@@ -52,6 +56,7 @@ export function permessiDa(scope) {
     contatti: dati.includes(SCOPE.contatti),
     calendario: SCOPE.calendario.every((s) => dati.includes(s)),
     drive: dati.includes(SCOPE.drive),
+    cartelle: dati.includes(SCOPE.cartelle),
   };
 }
 
@@ -176,7 +181,7 @@ export async function gestisci(db, utente, data, client) {
         throw errore("failed-precondition", `Google non ha confermato il permesso (${e.message.slice(0, 140)})`, e.oauth || "oauth");
       }
       const permessi = permessiDa(j.scope);
-      if (!permessi.contatti && !permessi.calendario && !permessi.drive) {
+      if (!permessi.contatti && !permessi.calendario && !permessi.drive && !permessi.cartelle) {
         throw errore("permission-denied", "Nella pagina di Google non è stato spuntato nessun accesso", "scope");
       }
       const refreshToken = j.refresh_token || d.refreshToken;

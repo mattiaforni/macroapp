@@ -589,3 +589,23 @@ a percentuale.
       secondi con due pause: niente testo né richieste prima di Ferma, una richiesta sola con tutto l'audio, risposta persa
       riprovata, seconda registrazione a capo).
 
+## 22 novembre
+
+Piano «cartella Drive per progetto e connettore MCP» (`docs/PIANO-DRIVE-MCP.md`, decisioni di Mattia del 21/11), eseguito di
+fila su sua richiesta, un passo per commit.
+
+- [x] **Passo 1: cartella su Drive per ogni progetto.** Nuovo scope `drive.file` (i file creati dall'app; resta
+      `drive.readonly`), nuova spunta «Cartelle dei progetti» nella pagina Google: chi ha collegato prima va ricollegato.
+      Function `cartella` (`src/google/cartelle.js`): crea `D&D/<progetto>` nel Drive del proprietario del progetto, con il
+      suo permesso anche quando la chiede l'altra persona; progetto condiviso → cartella condivisa con l'email Google
+      dell'altra (modifica, senza mail), privato → condivisione tolta; nome allineato al progetto. Si crea da sola alla
+      creazione del progetto (anche da una proposta), o con un tocco su «Drive»: in testata nella pagina del progetto e,
+      siccome solo i progetti con istruzioni hanno la pagina, anche accanto a «Modifica progetto» nei Task. Cambiando
+      visibilità o nome l'app chiede di allinearla; `giroAvvisi` riallinea quelle rimaste indietro. `projects.cartella` la
+      scrive solo il server (regola nuova e due casi in prova-regole). Prove: `prova-drive.mjs` (nuova, con Firestore e
+      Drive finti riusabili in `strumenti/finti.mjs`: radice una volta sola, niente doppioni, permesso del proprietario,
+      condivisione e revoca, rinomina, giro, chi non vede il progetto, spunta mancante, cartella nel cestino, creazione già
+      in corso) e prova.py (cartella chiesta alla creazione di Tennis, link in testata, Circolo creato prima del
+      collegamento: rifiuto e poi tocco che la crea, allineamento quando Circolo diventa condiviso, riga nella pagina
+      Google). Da fare a mano: scope nella schermata di consenso, ricollegare Google (vedi «Da verificare» in CLAUDE.md).
+

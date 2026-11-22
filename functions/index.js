@@ -4,7 +4,7 @@
 //
 // Funzioni: analyzeEntry (agente del diario), bank (collegamento e lettura della banca), google (account Google:
 // Contatti, Calendario, Drive),
-// avvisa (notifiche push sulle cose condivise), trascrivi (nota vocale → testo, con Gemini), prodotto (scheda di un
+// cartella (cartelle dei progetti su Drive, 22/11), avvisa (notifiche push sulle cose condivise), trascrivi (nota vocale → testo, con Gemini), prodotto (scheda di un
 // prodotto da Open Food Facts), syncBank (lettura quotidiana), giroAvvisi (ogni 5 minuti: calendario, promemoria,
 // riepilogo del mattino), backupSettimanale (export di Firestore nel bucket del progetto, il lunedì).
 // All'avvio del container si caricano solo le dichiarazioni delle funzioni.
@@ -293,6 +293,33 @@ export const google = onCall(
 );
 
 /**
+ * Cartella del progetto su Google Drive (22/11, docs/PIANO-DRIVE-MCP.md): { azione: "crea" | "allinea", projectId }.
+ * La cartella sta nel Drive del proprietario del progetto e si scrive con il suo permesso (drive.file); chi chiama deve
+ * vedere il progetto. Ritorna { cartella: { id, link, nome, condivisaCon } } (o { inCorso }). Vedi src/google/cartelle.js.
+ */
+export const cartella = onCall(
+  { secrets: [GOOGLE_OAUTH_CLIENT], timeoutSeconds: 60 },
+  async (req) => {
+    if (!req.auth) throw new HttpsError("unauthenticated", "Accesso richiesto");
+    try {
+      const db = await getDb();
+      const { gestisci } = await import("./src/google/cartelle.js");
+      const { tokenServer } = await import("./src/google/account.js");
+      const r = await gestisci(db, req.auth.uid, req.data || {}, { client: clientGoogle(), tokenServer });
+      // Nel registro solo l'esito: niente nomi di progetti (repository pubblico, la Diagnosi pubblica il registro).
+      console.log(`cartella ${req.data?.azione}: ${r.inCorso ? "in corso" : r.creata ? "creata" : r.cartella ? "allineata" : "nessuna"}`);
+      const c = r.cartella || null;
+      return { cartella: c ? { id: c.id || "", link: c.link || "", nome: c.nome || "", condivisaCon: c.condivisaCon || null } : null, inCorso: !!r.inCorso };
+    } catch (err) {
+      if (err instanceof HttpsError) throw err;
+      console.error("cartella", err.status || "", String(err.message).slice(0, 200));
+      if (err.status === 403) throw new HttpsError("permission-denied", `Drive non lo permette (${String(err.message).slice(0, 140)})`, { motivo: "drive-403" });
+      throw new HttpsError("internal", `Drive non raggiungibile (${String(err.message).slice(0, 160)})`, { motivo: "rete" });
+    }
+  },
+);
+
+/**
  * Notifiche push. L'app la chiama dopo una scrittura condivisa ({ coll, id, evento }) o per una
  * prova ({ prova: true }); il server rilegge il documento e avvisa gli altri membri della casa,
  * secondo le loro preferenze. Ritorna { inviati }. Vedi src/avvisi.js.
@@ -565,6 +592,7 @@ export const syncBank = onSchedule(
 /**
  * Avvisi a orario, ogni 5 minuti: eventi nuovi nel calendario della casa, promemoria degli eventi, riepilogo
  * del mattino alle 7:30. Legge Google Calendar con il permesso di ciascuno (GOOGLE_OAUTH_CLIENT per rinnovarlo).
+ * Dal 22/11 anche le cartelle dei progetti su Drive da riallineare (src/google/cartelle.js → giroCartelle).
  * Vedi src/avvisi-calendario.js.
  */
 export const giroAvvisi = onSchedule(
@@ -573,6 +601,13 @@ export const giroAvvisi = onSchedule(
     const db = await getDb();
     const { giroAvvisi: giro } = await import("./src/avvisi-calendario.js");
     await giro(db, clientGoogle());
+    // Cartelle dei progetti su Drive (22/11): quelle non allineate alla visibilità o al nome del progetto.
+    try {
+      const { giroCartelle } = await import("./src/google/cartelle.js");
+      const { tokenServer } = await import("./src/google/account.js");
+      const n = await giroCartelle(db, { client: clientGoogle(), tokenServer });
+      if (n) console.log(`giroAvvisi: ${n} cartelle allineate`);
+    } catch (err) { console.warn("giroAvvisi: cartelle", String(err.message).slice(0, 160)); }
   },
 );
 
