@@ -207,7 +207,18 @@ export async function rifaiCopia(db, p, token, stato) {
       if (c.perso) id = null;
       else if (c.cambiato) { esito.tenuti++; continue; } // modificato a mano: lo legge prima il controllo delle novità
     }
-    const f = await scriviDoc(token, { id, nome: d.nome, genitore: cartellaCopia, html: d.html, props: { dd: "copia", progetto: p.id, chiave: k } });
+    const props = { dd: "copia", progetto: p.id, chiave: k };
+    let f;
+    try {
+      f = await scriviDoc(token, { id, nome: d.nome, genitore: cartellaCopia, html: d.html, props });
+    } catch (e) {
+      // Se Google non accetta di sostituire il contenuto del documento, se ne scrive uno nuovo e il vecchio va nel cestino:
+      // la copia resta aggiornata (cambia solo il link a quel documento).
+      if (!id || ![400, 403].includes(e.status)) throw e;
+      console.warn("copia: documento non sostituito, ne scrivo uno nuovo", e.status, e.motivo || "");
+      f = await scriviDoc(token, { nome: d.nome, genitore: cartellaCopia, html: d.html, props });
+      await drive(token, "PATCH", `/files/${encodeURIComponent(id)}`, { body: { trashed: true }, query: { supportsAllDrives: "true" } }).catch(() => {});
+    }
     await ricordaScritto(db, p, f, { ruolo: "copia", chiave: k, testo: await testoDoc(token, f.id).catch(() => "") });
     copie[k] = { id: f.id, hash: h, modifiedTime: f.modifiedTime || "" };
     esito.scritti++;

@@ -291,7 +291,8 @@ dice al server dove scrivere con il permesso del proprietario. Prova senza rete:
 - *Copia leggibile*, sottocartella «Copia dall'app»: un Documento Google «Sintesi e da fare» (sintesi per temi e task
   aperti) e uno per mese con le note («Note 2026-11 (novembre)»: giorno, titolo, chi l'ha scritta, persone, temi, foto,
   riepilogo e trascrizione). Il server scrive HTML che Google converte in Documento (upload `multipart`, `mimeType` del
-  Documento); la seconda volta sostituisce il contenuto dello stesso file. Si riscrive solo un documento il cui HTML è
+  Documento); la seconda volta sostituisce il contenuto dello stesso file (se Google lo rifiutasse, ne scrive uno nuovo e
+  mette il vecchio nel cestino). Si riscrive solo un documento il cui HTML è
   cambiato (hash in `drive_cartelle`), quindi niente data di aggiornamento nel testo. **Quando**: `core/db.js` avvisa delle
   scritture (`suScrittura`) e `core/cartelle.js` capisce di quale progetto con cartella (note, task, il progetto stesso; per
   un'eliminazione dalla `copia` del documento, per uno spostamento anche il progetto di prima): segna subito

@@ -189,6 +189,16 @@ D.modificaAMano(docs["Sintesi e da fare"].id, "mattia@example.com", testo(docs["
 DATI.projects.casa.sintesi += "\n- Sdraio";
 assert.equal((await gestisci(db, "io", { azione: "copia", projectId: "casa" }, opz)).scritti, 1, "toccato senza cambiare il testo: si riscrive");
 
+// 3b. Se Google rifiuta di sostituire il contenuto, il documento si riscrive nuovo e il vecchio va nel cestino.
+D.rifiuti.aggiornamenti = 1;
+DATI.projects.casa.sintesi += "\n- Ombra";
+const vecchiaSintesi = docs["Sintesi e da fare"];
+assert.equal((await gestisci(db, "io", { azione: "copia", projectId: "casa" }, opz)).scritti, 1);
+assert.equal(vecchiaSintesi.trashed, true, "il vecchio nel cestino");
+const nuovaSintesi = figli(copia.id).find((f) => f.name === "Sintesi e da fare");
+assert.ok(nuovaSintesi && nuovaSintesi.id !== vecchiaSintesi.id && /Ombra/.test(testo(nuovaSintesi)));
+docs["Sintesi e da fare"] = nuovaSintesi;
+
 // 4. Una foto tolta dalla nota va nel cestino.
 DATI.journal_entries.n1.foto = [{ id: "f1" }];
 await gestisci(db, "io", { azione: "copia", projectId: "casa" }, opz);

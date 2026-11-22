@@ -127,6 +127,7 @@ export function driveFinto({ altro = null } = {}) {
   const tokens = new Map();  // token → { email, uid }
   let n = 0, orologio = Date.parse("2026-11-22T08:00:00Z");
   const chiamate = [];
+  const rifiuti = { aggiornamenti: 0 }; // per le prove: quante sostituzioni di contenuto rifiutare
   const adesso = () => new Date((orologio += 1000)).toISOString();
   const vede = (f, chi) => f.proprietario === chi.email || f.permessi.some((p) => p.emailAddress === chi.email)
     || f.parents.some((p) => files.has(p) && vede(files.get(p), chi));
@@ -234,6 +235,7 @@ export function driveFinto({ altro = null } = {}) {
     }
     if (metodo === "PATCH") {
       if (!scrive()) return errore(403, "insufficientFilePermissions");
+      if (upload && rifiuti.aggiornamenti > 0) { rifiuti.aggiornamenti--; return errore(400, "badRequest"); }
       if (upload) {
         const tipo = opts.headers["content-type"] || "";
         let dati = corpo, meta = {};
@@ -256,7 +258,7 @@ export function driveFinto({ altro = null } = {}) {
   }
 
   return {
-    files, chiamate,
+    files, chiamate, rifiuti,
     /** Un permesso di una persona: `permessi` = le spunte di Google (predefinite: Drive e cartelle). */
     token(nome, email, permessi = ["drive", "cartelle"]) { const t = `tok-${nome}`; tokens.set(t, { email, permessi }); return t; },
     /** Una modifica fatta da una persona su Drive (fuori dall'app): nuovo contenuto, nuova versione. */
